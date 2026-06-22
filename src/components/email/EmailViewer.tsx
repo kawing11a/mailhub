@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { Loader2, Reply, Forward, Trash2, ArrowLeft } from 'lucide-react';
 import { format } from 'date-fns';
+import { LabelPicker } from '@/components/labels/LabelPicker';
 
 interface EmailViewerProps {
   emailId: string;
@@ -58,6 +59,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
         
         <div className="flex items-center space-x-2">
+          <LabelPicker emailId={emailId} />
           <button className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
           </button>
