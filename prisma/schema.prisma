@@ -1,0 +1,214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String    @id @default(uuid()) @db.Uuid
+  email          String    @unique @db.VarChar(255)
+  name           String    @db.VarChar(255)
+  passwordHash   String    @map("password_hash")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  memberships    OrganizationMember[]
+  activityLogs   EmailActivityLog[]
+
+  @@map("users")
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(255)
+  slug      String   @unique @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  members       OrganizationMember[]
+  emailAccounts EmailAccount[]
+  labels        Label[]
+  activityLogs  EmailActivityLog[]
+
+  @@map("organizations")
+}
+
+model OrganizationMember {
+  organizationId String       @map("organization_id") @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  role           String       @default("member") @db.VarChar(20)
+  joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@map("organization_members")
+}
+
+model EmailAccount {
+  id              String    @id @default(uuid()) @db.Uuid
+  organizationId  String    @map("organization_id") @db.Uuid
+  label           String    @db.VarChar(100)
+  emailAddress    String    @map("email_address") @db.VarChar(255)
+  provider        String    @db.VarChar(50)
+  color           String?   @db.VarChar(7)
+  avatarInitials  String?   @map("avatar_initials") @db.VarChar(3)
+  isActive        Boolean   @default(true) @map("is_active")
+  lastSyncedAt    DateTime? @map("last_synced_at") @db.Timestamptz
+  workerPartition String?   @map("worker_partition") @db.VarChar(50)
+
+  // IMAP/SMTP credentials (encrypted)
+  imapHost           String?  @map("imap_host") @db.VarChar(255)
+  imapPort           Int?     @map("imap_port")
+  imapSecure         Boolean? @default(true) @map("imap_secure")
+  smtpHost           String?  @map("smtp_host") @db.VarChar(255)
+  smtpPort           Int?     @map("smtp_port")
+  smtpSecure         Boolean? @default(true) @map("smtp_secure")
+  username           String?  @db.VarChar(255)
+  passwordEncrypted  String?  @map("password_encrypted")
+
+  // OAuth credentials (encrypted)
+  oauthProvider     String?   @map("oauth_provider") @db.VarChar(50)
+  oauthAccessToken  String?   @map("oauth_access_token")
+  oauthRefreshToken String?   @map("oauth_refresh_token")
+  oauthTokenExpiry  DateTime? @map("oauth_token_expiry") @db.Timestamptz
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  emails         Email[]
+  accountLabels  AccountLabel[]
+  activityLogs   EmailActivityLog[]
+
+  @@unique([organizationId, emailAddress])
+  @@map("email_accounts")
+}
+
+model Email {
+  id               String    @id @default(uuid()) @db.Uuid
+  accountId        String    @map("account_id") @db.Uuid
+  messageId        String    @map("message_id") @db.VarChar(512)
+  uid              BigInt?
+  threadId         String?   @map("thread_id") @db.VarChar(512)
+  folder           String    @db.VarChar(100)
+  subject          String?
+  snippet          String?   @db.VarChar(300)
+  fromAddress      String?   @map("from_address") @db.VarChar(512)
+  fromName         String?   @map("from_name") @db.VarChar(255)
+  toAddresses      Json?     @map("to_addresses")
+  ccAddresses      Json?     @map("cc_addresses")
+  bccAddresses     Json?     @map("bcc_addresses")
+  replyTo          String?   @map("reply_to") @db.VarChar(512)
+  inReplyTo        String?   @map("in_reply_to") @db.VarChar(512)
+  referencesHeader String?   @map("references_header")
+  isRead           Boolean   @default(false) @map("is_read")
+  isStarred        Boolean   @default(false) @map("is_starred")
+  isDraft          Boolean   @default(false) @map("is_draft")
+  hasAttachments   Boolean   @default(false) @map("has_attachments")
+  sizeBytes        Int?      @map("size_bytes")
+  receivedAt       DateTime? @map("received_at") @db.Timestamptz
+  sentAt           DateTime? @map("sent_at") @db.Timestamptz
+  rawHeaders       Json?     @map("raw_headers")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  account      EmailAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  body         EmailBody?
+  attachments  Attachment[]
+  emailLabels  EmailLabel[]
+  activityLogs EmailActivityLog[]
+
+  @@unique([accountId, messageId])
+  @@index([accountId, folder, receivedAt(sort: Desc)])
+  @@index([receivedAt(sort: Desc)])
+  @@index([threadId])
+  @@index([messageId])
+  @@map("emails")
+}
+
+model EmailBody {
+  emailId  String @id @map("email_id") @db.Uuid
+  bodyHtml String? @map("body_html")
+  bodyText String? @map("body_text")
+
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@map("email_bodies")
+}
+
+model Attachment {
+  id          String   @id @default(uuid()) @db.Uuid
+  emailId     String   @map("email_id") @db.Uuid
+  filename    String?  @db.VarChar(512)
+  contentType String?  @map("content_type") @db.VarChar(255)
+  sizeBytes   Int?     @map("size_bytes")
+  storagePath String?  @map("storage_path")
+  cid         String?  @db.VarChar(255)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+
+  @@map("attachments")
+}
+
+model Label {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  name            String   @db.VarChar(100)
+  color           String   @default("#3B82F6") @db.VarChar(7)
+  description     String?
+  icon            String?  @db.VarChar(50)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountLabels AccountLabel[]
+  emailLabels   EmailLabel[]
+
+  @@unique([organizationId, name])
+  @@map("labels")
+}
+
+model AccountLabel {
+  accountId String @map("account_id") @db.Uuid
+  labelId   String @map("label_id") @db.Uuid
+
+  account EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  label   Label        @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, labelId])
+  @@map("account_labels")
+}
+
+model EmailLabel {
+  emailId String @map("email_id") @db.Uuid
+  labelId String @map("label_id") @db.Uuid
+
+  email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([emailId, labelId])
+  @@map("email_labels")
+}
+
+model EmailActivityLog {
+  id              String   @id @default(uuid()) @db.Uuid
+  organizationId  String   @map("organization_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  accountId       String?  @map("account_id") @db.Uuid
+  emailId         String?  @map("email_id") @db.Uuid
+  action          String   @db.VarChar(50)
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization  @relation(fields: [organizationId], references: [id])
+  user         User          @relation(fields: [userId], references: [id])
+  account      EmailAccount? @relation(fields: [accountId], references: [id])
+  email        Email?        @relation(fields: [emailId], references: [id])
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([accountId, createdAt(sort: Desc)])
+  @@map("email_activity_log")
+}

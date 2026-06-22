@@ -1,0 +1,54 @@
+import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/db/prisma';
+import { authenticate, apiResponse, apiError, requireAdmin } from '@/lib/auth/middleware';
+import { createAccountSchema } from '@/lib/validation';
+import { createAccount, sanitizeAccount } from '@/lib/accounts/service';
+
+export async function GET(req: NextRequest) {
+  const auth = await authenticate(req);
+  if (auth instanceof Response) return auth;
+
+  const accounts = await prisma.emailAccount.findMany({
+    where: { organizationId: auth.organizationId },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      label: true,
+      emailAddress: true,
+      provider: true,
+      color: true,
+      avatarInitials: true,
+      isActive: true,
+      lastSyncedAt: true,
+      createdAt: true,
+    },
+  });
+
+  return apiResponse(accounts);
+}
+
+export async function POST(req: NextRequest) {
+  const auth = await authenticate(req);
+  if (auth instanceof Response) return auth;
+
+  const adminCheck = requireAdmin(auth);
+  if (adminCheck) return adminCheck;
+
+  const body = await req.json();
+  const parsed = createAccountSchema.safeParse(body);
+  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+
+  try {
+    const account = await createAccount(auth.organizationId, parsed.data);
+    return apiResponse(sanitizeAccount(account), 201);
+  } catch (error: unknown) {
+    if (
+      error instanceof Error &&
+      error.message.includes('Unique constraint')
+    ) {
+      return apiError('An account with this email address already exists', 409);
+    }
+    console.error('Create account error:', error);
+    return apiError('Internal server error', 500);
+  }
+}
