@@ -25,7 +25,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const body = await req.json();
   const parsed = sendEmailSchema.safeParse(body);
-  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+  if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   try {
     const { messageId } = await sendEmail(accountId, parsed.data);

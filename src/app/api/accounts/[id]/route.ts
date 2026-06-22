@@ -38,7 +38,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   const body = await req.json();
   const parsed = updateAccountSchema.safeParse(body);
-  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+  if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   try {
     const account = await updateAccount(id, auth.organizationId, parsed.data);

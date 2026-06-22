@@ -6,11 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "next lint",
     "services:up": "docker-compose up -d",
     "services:down": "docker-compose down",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

@@ -32,6 +32,36 @@ services:
       - mailhub_meili_data:/meili_data
     restart: unless-stopped
 
+  worker-1:
+    build: .
+    environment:
+      - WORKER_PARTITION=worker-1
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailhub
+      - REDIS_URL=redis://redis:6379
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=masterKey123
+      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    command: npm run worker
+    depends_on:
+      - postgres
+      - redis
+      - meilisearch
+
+  worker-2:
+    build: .
+    environment:
+      - WORKER_PARTITION=worker-2
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailhub
+      - REDIS_URL=redis://redis:6379
+      - MEILISEARCH_HOST=http://meilisearch:7700
+      - MEILISEARCH_API_KEY=masterKey123
+      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    command: npm run worker
+    depends_on:
+      - postgres
+      - redis
+      - meilisearch
+
 volumes:
   mailhub_postgres_data:
   mailhub_redis_data:
