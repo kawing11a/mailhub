@@ -4,6 +4,7 @@ import { decrypt } from '@/lib/crypto';
 import { parseEmail } from './email-parser';
 import { resolveThreadId } from './threading';
 import { redis } from '@/lib/redis';
+import { searchQueue } from '@/lib/queue/client';
 import type { EmailAccount } from '@prisma/client';
 
 interface ConnectionEntry {
@@ -34,20 +35,30 @@ export class IMAPConnectionManager {
     const password = account.passwordEncrypted
       ? decrypt(account.passwordEncrypted)
       : null;
+      
+    const accessToken = account.oauthAccessToken
+      ? decrypt(account.oauthAccessToken)
+      : null;
 
-    if (!account.imapHost || !password) {
+    if (!account.imapHost || (!password && !accessToken)) {
       console.warn(`Account ${account.id} missing IMAP credentials, skipping`);
       return;
+    }
+
+    const auth: any = {
+      user: account.username || account.emailAddress,
+    };
+    if (accessToken) {
+      auth.accessToken = accessToken;
+    } else if (password) {
+      auth.pass = password;
     }
 
     const client = new ImapFlow({
       host: account.imapHost,
       port: account.imapPort || 993,
       secure: account.imapSecure ?? true,
-      auth: {
-        user: account.username || account.emailAddress,
-        pass: password,
-      },
+      auth,
       logger: false,
     });
 
@@ -159,6 +170,7 @@ export class IMAPConnectionManager {
   ): Promise<void> {
     try {
       const rawSource = message.source;
+      if (!rawSource) return;
       const parsed = await parseEmail(rawSource);
 
       // Resolve thread ID (cross-account)
@@ -170,7 +182,7 @@ export class IMAPConnectionManager {
       );
 
       // Persist email envelope + body in a transaction
-      await prisma.$transaction(async (tx) => {
+      const email = await prisma.$transaction(async (tx) => {
         const email = await tx.email.upsert({
           where: {
             accountId_messageId: {
@@ -212,7 +224,12 @@ export class IMAPConnectionManager {
           },
           update: {},
         });
+        
+        return email;
       });
+
+      // Add to search indexing queue
+      await searchQueue.add('index-email', { emailId: email.id });
 
       // Publish new email event via Redis for SSE
       await redis.publish(

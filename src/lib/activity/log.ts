@@ -11,14 +11,14 @@ interface LogParams {
 
 export async function logActivity(params: LogParams): Promise<void> {
   try {
-    await prisma.activityLog.create({
+    await prisma.emailActivityLog.create({
       data: {
         organizationId: params.organizationId,
         userId: params.userId,
         accountId: params.accountId,
         emailId: params.emailId,
         action: params.action,
-        metadata: params.metadata || {},
+        metadata: params.metadata ? (params.metadata as any) : {},
       },
     });
   } catch (error) {

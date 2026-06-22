@@ -40,7 +40,7 @@ export async function PUT(req: NextRequest) {
 
   const body = await req.json();
   const parsed = updateOrgSchema.safeParse(body);
-  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+  if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   const org = await prisma.organization.update({
     where: { id: auth.organizationId },

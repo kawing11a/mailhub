@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const query = emailListQuerySchema.safeParse(
     Object.fromEntries(searchParams.entries())
   );
-  if (!query.success) return apiError(query.error.errors[0].message, 422);
+  if (!query.success) return apiError(query.error.issues[0].message, 422);
 
   const { folder, page, limit, unreadOnly, labelId } = query.data;
   const skip = (page - 1) * limit;

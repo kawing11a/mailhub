@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const parsed = createAccountSchema.safeParse(body);
-  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+  if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   try {
     const account = await createAccount(auth.organizationId, parsed.data);

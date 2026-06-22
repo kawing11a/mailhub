@@ -23,7 +23,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   const body = await req.json();
   const parsed = updateMemberRoleSchema.safeParse(body);
-  if (!parsed.success) return apiError(parsed.error.errors[0].message, 422);
+  if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   // Prevent self-demotion
   if (userId === auth.userId && parsed.data.role !== 'admin') {
