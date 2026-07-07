@@ -1,18 +1,50 @@
 'use client';
 
 import { useAccountStore } from '@/stores/accountStore';
-import { X, Send, Paperclip, Trash2 } from 'lucide-react';
+import { X, Send, Paperclip, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import clsx from 'clsx';
 
 export function ComposeModal() {
-  const { isComposeModalOpen, setComposeModalOpen, selectedAccountId } = useAccountStore();
+  const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Placeholder.configure({ placeholder: 'Write your message...' }),
+    ],
+    content: '',
+    immediatelyRender: false,
+    editorProps: {
+      attributes: {
+        class: 'prose prose-sm sm:prose max-w-none focus:outline-none min-h-[200px] h-full px-4 py-3',
+      },
+    },
+  });
+
+  useEffect(() => {
+    if (isComposeModalOpen && composeDraft) {
+      setTo(composeDraft.to || '');
+      setSubject(composeDraft.subject || '');
+      // We can't use editor inside this useEffect directly if editor is initialized after.
+      // But editor is created with useEditor above, so it is available.
+    }
+  }, [isComposeModalOpen, composeDraft]);
+
+  // Sync editor content separately since editor might be null initially
+  useEffect(() => {
+    if (isComposeModalOpen && composeDraft && editor) {
+      editor.commands.setContent(composeDraft.bodyHtml || '');
+    }
+  }, [isComposeModalOpen, composeDraft, editor]);
 
   // Fetch accounts to select the "From" address if unified inbox is selected
   const { data: accounts } = useQuery({
@@ -27,18 +59,49 @@ export function ComposeModal() {
     ? accounts?.find((a: any) => a.id === selectedAccountId)
     : accounts?.[0]; // Default to first account if 'all' is selected
 
-  const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Placeholder.configure({ placeholder: 'Write your message...' }),
-    ],
-    content: '',
-    editorProps: {
-      attributes: {
-        class: 'prose prose-sm sm:prose max-w-none focus:outline-none min-h-[200px] px-4 py-3',
-      },
-    },
-  });
+  // Debounced auto-save
+  useEffect(() => {
+    if (!isComposeModalOpen || !activeAccount) return;
+
+    // Don't auto-save if completely empty to avoid spamming empty drafts
+    if (!to && !subject && (!editor || editor.isEmpty)) return;
+
+    const bodyHtml = editor?.getHTML() || '';
+    const bodyText = editor?.getText() || '';
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/accounts/${activeAccount.id}/drafts`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            draftId: composeDraft?.id,
+            to,
+            subject,
+            bodyHtml,
+            bodyText,
+          }),
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          // Update the draft id in the store if it's new, so we keep updating the same draft
+          if (data.draftId && data.draftId !== composeDraft?.id) {
+            setComposeDraft({ 
+              id: data.draftId, 
+              to, 
+              subject, 
+              bodyHtml 
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      }
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [to, subject, editor?.getHTML(), isComposeModalOpen, activeAccount?.id]);
 
   if (!isComposeModalOpen) return null;
 
@@ -51,7 +114,8 @@ export function ComposeModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to: [{ address: to }],
+          draftId: composeDraft?.id,
+          to: [to],
           subject,
           bodyHtml: editor?.getHTML(),
           bodyText: editor?.getText(),
@@ -61,6 +125,7 @@ export function ComposeModal() {
       if (!res.ok) throw new Error('Failed to send email');
       
       setComposeModalOpen(false);
+      setComposeDraft(null);
       setTo('');
       setSubject('');
       editor?.commands.clearContent();
@@ -72,29 +137,61 @@ export function ComposeModal() {
     }
   };
 
+  const handleClose = () => {
+    if (composeDraft?.id && activeAccount) {
+      // Sync final draft to IMAP asynchronously when closing
+      fetch(`/api/accounts/${activeAccount.id}/drafts/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draftId: composeDraft.id }),
+      }).catch(console.error);
+    }
+
+    setTo('');
+    setSubject('');
+    editor?.commands.clearContent();
+    setComposeDraft(null);
+    setComposeModalOpen(false);
+  };
+
   return (
-    <div className="fixed bottom-0 right-24 w-[500px] bg-white rounded-t-xl shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden max-h-[80vh]">
+    <div 
+      className={clsx(
+        "fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden transition-all duration-200",
+        isFullScreen 
+          ? "inset-4 sm:inset-8 md:inset-12 rounded-xl" 
+          : "bottom-0 right-4 sm:right-12 md:right-24 w-[500px] max-w-[calc(100vw-32px)] rounded-t-xl max-h-[80vh] h-[550px]"
+      )}
+    >
       {/* Header */}
       <div className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-medium text-sm">New Message</span>
-        <button 
-          onClick={() => setComposeModalOpen(false)}
-          className="text-gray-400 hover:text-white transition-colors"
-        >
-          <X className="w-4 h-4" />
-        </button>
+        <div className="flex items-center space-x-1">
+          <button 
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+          >
+            {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+          </button>
+          <button 
+            onClick={handleClose}
+            className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Form Fields */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm">
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-12">From:</span>
           <span className="font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-700">
             {activeAccount?.emailAddress || 'Loading...'}
           </span>
         </div>
         
-        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm">
+        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-12">To:</span>
           <input 
             type="email" 
@@ -105,7 +202,7 @@ export function ComposeModal() {
           />
         </div>
 
-        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm">
+        <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-12">Subject:</span>
           <input 
             type="text" 
@@ -117,18 +214,18 @@ export function ComposeModal() {
         </div>
 
         {/* TipTap Editor */}
-        <div className="flex-1 text-sm bg-white cursor-text">
-          <EditorContent editor={editor} />
+        <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto">
+          <EditorContent editor={editor} className="h-full" />
         </div>
       </div>
 
       {/* Footer Toolbar */}
-      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
+      <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSend}
             disabled={isSending || !to || !activeAccount}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-md font-medium text-sm flex items-center space-x-2 transition-colors shadow-sm"
+            className="bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-md font-medium text-sm flex items-center space-x-2 transition-colors shadow-sm"
           >
             <span>{isSending ? 'Sending...' : 'Send'}</span>
             {!isSending && <Send className="w-3.5 h-3.5" />}
@@ -138,12 +235,7 @@ export function ComposeModal() {
           </button>
         </div>
         <button 
-          onClick={() => {
-            setTo('');
-            setSubject('');
-            editor?.commands.clearContent();
-            setComposeModalOpen(false);
-          }}
+          onClick={handleClose}
           className="p-2 hover:bg-gray-200 rounded text-gray-500 transition-colors"
         >
           <Trash2 className="w-4 h-4" />

@@ -1,25 +1,74 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { EmailList } from '@/components/email/EmailList';
 import { EmailViewer } from '@/components/email/EmailViewer';
+import { useUIStore } from '@/stores/uiStore';
+import clsx from 'clsx';
 
-export default function InboxPage() {
-  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+function InboxContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const selectedEmailId = searchParams.get('emailId');
+  const { readingPane } = useUIStore();
+
+  const handleSelectEmail = (id: string | null) => {
+    const newParams = new URLSearchParams(searchParams.toString());
+    if (id) {
+      newParams.set('emailId', id);
+    } else {
+      newParams.delete('emailId');
+    }
+    router.push(`${pathname}?${newParams.toString()}`);
+  };
+
+  if (readingPane === 'off') {
+    return (
+      <div className="flex flex-1 h-full overflow-hidden relative">
+        {selectedEmailId ? (
+          <div className="absolute inset-0 z-10 bg-white flex flex-col">
+            <EmailViewer 
+              emailId={selectedEmailId} 
+              onBack={() => handleSelectEmail(null)}
+            />
+          </div>
+        ) : (
+          <div className="w-full h-full flex flex-col">
+            <EmailList
+              selectedEmailId={selectedEmailId}
+              onSelectEmail={handleSelectEmail}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const isBottomPane = readingPane === 'bottom';
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
-      <div className="w-1/3 min-w-[320px] max-w-[480px] h-full flex flex-col">
+    <div className={clsx("flex flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
+      <div className={clsx(
+        "flex flex-col",
+        isBottomPane 
+          ? (selectedEmailId ? "h-[45%] min-h-[300px]" : "h-full")
+          : "w-1/3 min-w-[320px] max-w-[480px] h-full"
+      )}>
         <EmailList
           selectedEmailId={selectedEmailId}
-          onSelectEmail={setSelectedEmailId}
+          onSelectEmail={handleSelectEmail}
         />
       </div>
-      <div className="flex-1 h-full bg-white relative border-l border-gray-200">
+      <div className={clsx(
+        "bg-white relative",
+        isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200"
+      )}>
         {selectedEmailId ? (
           <EmailViewer 
             emailId={selectedEmailId} 
-            onBack={() => setSelectedEmailId(null)}
+            onBack={() => handleSelectEmail(null)}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-gray-500 bg-gray-50/50">
@@ -33,5 +82,13 @@ export default function InboxPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function InboxPage() {
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center bg-gray-50/50"><div className="w-6 h-6 animate-spin text-accent-500 border-2 border-current border-t-transparent rounded-full" /></div>}>
+      <InboxContent />
+    </Suspense>
   );
 }

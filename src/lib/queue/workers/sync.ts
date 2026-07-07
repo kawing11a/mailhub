@@ -1,10 +1,15 @@
 import { Worker, Job } from 'bullmq';
-import { redis } from '@/lib/redis';
+import Redis from 'ioredis';
+import { redis as pubsubRedis } from '@/lib/redis';
+import { prisma } from '@/lib/db/prisma';
 import { imapManager } from '@/lib/imap/connection-manager';
+import { gmailSyncManager } from '@/lib/gmail/sync-manager';
+
+const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true });
 
 export interface SyncJobPayload {
   accountId: string;
-  folder: string; // 'SENT', 'DRAFTS', 'TRASH'
+  folder: string; // 'ALL', 'INBOX', 'SENT', 'DRAFTS', 'TRASH'
 }
 
 export const syncWorker = new Worker<SyncJobPayload>(
@@ -12,20 +17,61 @@ export const syncWorker = new Worker<SyncJobPayload>(
   async (job: Job<SyncJobPayload>) => {
     const { accountId, folder } = job.data;
     
-    // Sync logic will fetch emails from folder
-    // Since this is a background worker, it uses the IMAP connection manager's existing connection if available
-    // or creates a temporary connection to sync
     console.log(`Starting sync for account ${accountId}, folder: ${folder}`);
     
-    // NOTE: In a full production implementation, we would lock the mailbox, 
-    // fetch UIDs, and persist new ones.
-    // For now we just mock the sync process duration.
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (job.name === 'initial-sync' || folder === 'ALL') {
+      console.log('Fetching account from prisma...');
+      const account = await prisma.emailAccount.findUnique({
+        where: { id: accountId }
+      });
+      console.log('Fetched account from prisma.');
+      
+      if (!account) return;
+      
+      if (account.provider === 'gmail') {
+        // Use Gmail API manager
+        console.log(`Worker: Initializing Gmail polling for account ${accountId} before sync`);
+        await gmailSyncManager.initializeAccount(account as any);
+        
+        await gmailSyncManager.syncHistoricalEmails(accountId);
+      } else {
+        // Use standard IMAP manager
+        const status = imapManager.getStatus().find((s) => s.accountId === accountId);
+        if (!status || !status.isConnected) {
+          console.log(`Worker: Initializing IMAP connection for account ${accountId} before sync`);
+          await imapManager.initializeAccount(account as any);
+        }
+        
+        // Perform the real historical sync
+        await imapManager.syncHistoricalEmails(accountId);
+      }
+      
+      // Update account sync timestamp
+      await prisma.emailAccount.update({
+        where: { id: accountId },
+        data: { lastSyncedAt: new Date() }
+      });
+      
+      // Trigger SSE to refresh UI instantly
+      await pubsubRedis.publish(
+        `new_email:${account.organizationId}`,
+        JSON.stringify({
+          event: 'initial_sync_complete',
+          accountId,
+          folder: 'ALL',
+        })
+      );
+      
+      console.log(`Completed initial historical sync for account ${accountId}`);
+    } else {
+      // Future granular syncs logic
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
     
     console.log(`Completed sync for account ${accountId}, folder: ${folder}`);
   },
   {
-    connection: redis as any,
+    connection: workerRedis as any,
     concurrency: 5,
   }
 );

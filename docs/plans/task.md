@@ -1,19 +1,16 @@
-# MailHub Phase 5 Task Tracker
+# MailHub Phase 5 Part 2 Task Tracker
 
-- `[x]` **Task 1: Search Modal UI & Hook**
-  - Create `src/components/search/SearchModal.tsx`
-  - Create `src/hooks/useSearch.ts`
+- `[x]` **Task 1: Dockerfile Setup**
+  - Create `.dockerignore`
+  - Create `Dockerfile`
 
-- `[x]` **Task 2: Keyboard Shortcuts & Sidebar Trigger**
-  - Create `src/components/providers/ShortcutProvider.tsx`
-  - Create `src/stores/uiStore.ts`
-  - Modify `src/components/sidebar/Sidebar.tsx`
-  - Modify `src/app/(dashboard)/layout.tsx`
+- `[x]` **Task 2: Update Docker Compose**
+  - Modify `docker-compose.yml` to include `web` service and use Dockerfile for workers
 
-- `[x]` **Task 3: Mobile Responsiveness**
-  - Modify `src/components/sidebar/Sidebar.tsx`
-  - Modify `src/app/(dashboard)/layout.tsx`
+- `[x]` **Task 3: Performance Testing Seed Script**
+  - Create `scripts/seed.ts`
+  - Modify `package.json` to add `"db:seed"`
 
 - `[x]` **Task 4: Verification**
-  - Test search
-  - Test compose shortcut
+  - Build Docker image
+  - Run seed script

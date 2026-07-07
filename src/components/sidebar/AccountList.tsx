@@ -4,9 +4,19 @@ import { useQuery } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { Inbox, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
+import { usePathname, useRouter } from 'next/navigation';
 
 export function AccountList() {
   const { selectedAccountId, setSelectedAccountId } = useAccountStore();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const handleSelect = (id: string) => {
+    setSelectedAccountId(id);
+    if (!pathname.startsWith('/inbox') && !pathname.startsWith('/labels')) {
+      router.push('/inbox');
+    }
+  };
 
   const { data: accounts, isLoading } = useQuery({
     queryKey: ['accounts'],
@@ -28,11 +38,11 @@ export function AccountList() {
   return (
     <div className="flex flex-col space-y-1 p-2">
       <button
-        onClick={() => setSelectedAccountId('all')}
+        onClick={() => handleSelect('all')}
         className={clsx(
           'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium',
           selectedAccountId === 'all'
-            ? 'bg-blue-50 text-blue-700'
+            ? 'bg-accent-50 text-accent-700'
             : 'text-gray-700 hover:bg-gray-100'
         )}
       >
@@ -49,11 +59,11 @@ export function AccountList() {
       {accounts?.map((account: any) => (
         <button
           key={account.id}
-          onClick={() => setSelectedAccountId(account.id)}
+          onClick={() => handleSelect(account.id)}
           className={clsx(
             'flex items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium',
             selectedAccountId === account.id
-              ? 'bg-blue-50 text-blue-700'
+              ? 'bg-accent-50 text-accent-700'
               : 'text-gray-700 hover:bg-gray-100'
           )}
         >

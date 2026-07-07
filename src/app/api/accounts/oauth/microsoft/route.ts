@@ -59,12 +59,11 @@ export async function POST(req: NextRequest) {
         oauthAccessToken: encryptedAccessToken,
         oauthRefreshToken: encryptedRefreshToken,
         oauthTokenExpiry: expiry,
+        workerPartition: Math.random() < 0.5 ? 'worker-1' : 'worker-2',
       },
     });
 
-    // Start IDLE for this newly added account
-    await imapManager.initializeAccount(account);
-
+    // Connection initialization happens asynchronously inside the worker process
     // Enqueue initial sync job
     const { syncQueue } = await import('@/lib/queue/client');
     await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });

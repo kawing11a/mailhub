@@ -5,7 +5,7 @@ const MEILISEARCH_API_KEY = process.env.MEILISEARCH_API_KEY || 'masterKey123';
 
 export const meilisearch = new Meilisearch({
   host: MEILISEARCH_HOST,
-  apiKey: MEILISEARCH_API_KEY,
+  apiKey: MEILISEARCH_API_KEY.trim(),
 });
 
 export async function initMeilisearch() {
@@ -14,7 +14,6 @@ export async function initMeilisearch() {
   await index.updateSettings({
     searchableAttributes: [
       'subject',
-      'bodyText',
       'fromAddress',
       'fromName',
       'toAddresses',

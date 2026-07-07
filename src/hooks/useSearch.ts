@@ -1,9 +1,9 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 
-export function useSearch(initialQuery = '') {
+export function useSearch(initialQuery = '', accountId?: string, folder?: string) {
   const [query, setQuery] = useState(initialQuery);
   const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
 
@@ -15,14 +15,21 @@ export function useSearch(initialQuery = '') {
   }, [query]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['search', debouncedQuery],
+    queryKey: ['search', debouncedQuery, accountId, folder],
     queryFn: async () => {
       if (!debouncedQuery) return { hits: [], estimatedTotalHits: 0 };
-      const res = await fetch(`/api/emails/search?q=${encodeURIComponent(debouncedQuery)}`);
+      
+      const params = new URLSearchParams({ q: debouncedQuery });
+      if (accountId && accountId !== 'all') params.append('accountId', accountId);
+      if (folder && folder !== 'all') params.append('folder', folder);
+      
+      const res = await fetch(`/api/emails/search?${params.toString()}`);
       if (!res.ok) throw new Error('Search failed');
       return res.json();
     },
     enabled: debouncedQuery.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 60 * 1000, // Cache results for 1 minute to reduce API calls
   });
 
   return {

@@ -3,13 +3,25 @@ import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError, requireAdmin } from '@/lib/auth/middleware';
 import { createAccountSchema } from '@/lib/validation';
 import { createAccount, sanitizeAccount } from '@/lib/accounts/service';
+import { imapManager } from '@/lib/imap/connection-manager';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
 
   const accounts = await prisma.emailAccount.findMany({
-    where: { organizationId: auth.organizationId },
+    where: {
+      organizationId: auth.organizationId,
+      ...(auth.role !== 'admin'
+        ? {
+            memberAccess: {
+              some: {
+                userId: auth.userId,
+              },
+            },
+          }
+        : {}),
+    },
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
@@ -40,6 +52,10 @@ export async function POST(req: NextRequest) {
 
   try {
     const account = await createAccount(auth.organizationId, parsed.data);
+    // After creating the account, queue initial sync
+    // Connection initialization happens asynchronously inside the worker process
+    const { syncQueue } = await import('@/lib/queue/client');
+    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
     return apiResponse(sanitizeAccount(account), 201);
   } catch (error: unknown) {
     if (

@@ -20,8 +20,10 @@ export const updateOrgSchema = z.object({
   name: z.string().min(1).max(255).optional(),
 });
 
-export const inviteMemberSchema = z.object({
+export const createUserSchema = z.object({
   email: z.string().email(),
+  name: z.string().min(1, 'Name is required').max(255),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
   role: z.enum(['admin', 'member']).default('member'),
 });
 
@@ -68,12 +70,23 @@ export const updateAccountSchema = z.object({
     .optional(),
   avatarInitials: z.string().max(3).optional(),
   isActive: z.boolean().optional(),
+  
+  // allow updating IMAP credentials
+  imapHost: z.string().optional(),
+  imapPort: z.number().int().min(1).max(65535).optional(),
+  imapSecure: z.boolean().optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().min(1).max(65535).optional(),
+  smtpSecure: z.boolean().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
 });
 
 // --- Email operation schemas ---
 
 export const sendEmailSchema = z.object({
-  to: z.array(z.string().email()).min(1),
+  draftId: z.string().optional(),
+  to: z.array(z.string().email('Invalid email address')),
   cc: z.array(z.string().email()).optional(),
   bcc: z.array(z.string().email()).optional(),
   subject: z.string(),
@@ -128,6 +141,8 @@ export const emailListQuerySchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type CreateUserInput = z.input<typeof createUserSchema>;
+export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;

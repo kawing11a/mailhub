@@ -27,10 +27,11 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
-  members       OrganizationMember[]
-  emailAccounts EmailAccount[]
-  labels        Label[]
-  activityLogs  EmailActivityLog[]
+  members            OrganizationMember[]
+  emailAccounts      EmailAccount[]
+  labels             Label[]
+  activityLogs       EmailActivityLog[]
+  pushSubscriptions  PushSubscription[]
 
   @@map("organizations")
 }
@@ -43,6 +44,7 @@ model OrganizationMember {
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailAccountAccess MemberEmailAccountAccess[]
 
   @@id([organizationId, userId])
   @@map("organization_members")
@@ -83,6 +85,7 @@ model EmailAccount {
   emails         Email[]
   accountLabels  AccountLabel[]
   activityLogs   EmailActivityLog[]
+  memberAccess   MemberEmailAccountAccess[]
 
   @@unique([organizationId, emailAddress])
   @@map("email_accounts")
@@ -211,4 +214,32 @@ model EmailActivityLog {
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([accountId, createdAt(sort: Desc)])
   @@map("email_activity_log")
+}
+
+model PushSubscription {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  endpoint       String
+  p256dh         String
+  auth           String
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([endpoint])
+  @@index([organizationId])
+  @@map("push_subscriptions")
+}
+
+model MemberEmailAccountAccess {
+  userId         String @map("user_id") @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  accountId      String @map("account_id") @db.Uuid
+
+  member  OrganizationMember @relation(fields: [organizationId, userId], references: [organizationId, userId], onDelete: Cascade)
+  account EmailAccount       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId, accountId])
+  @@map("member_email_account_access")
 }

@@ -63,6 +63,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       metadata: { to: parsed.data.to, subject: parsed.data.subject },
     });
 
+    if (parsed.data.draftId) {
+      await prisma.email.deleteMany({
+        where: { id: parsed.data.draftId, accountId },
+      });
+      // (Optional: Also delete from IMAP Drafts if possible, but local is the main priority)
+    }
+
     return apiResponse({ success: true, messageId });
   } catch (error) {
     console.error('Send email error:', error);

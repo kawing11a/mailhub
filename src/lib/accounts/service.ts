@@ -28,6 +28,9 @@ export async function createAccount(
   });
   const color = input.color || ACCOUNT_COLORS[accountCount % ACCOUNT_COLORS.length];
   const avatarInitials = input.avatarInitials || getInitials(input.label);
+  
+  // Distribute accounts between worker-1 and worker-2
+  const workerPartition = accountCount % 2 === 0 ? 'worker-1' : 'worker-2';
 
   return prisma.emailAccount.create({
     data: {
@@ -45,6 +48,7 @@ export async function createAccount(
       smtpSecure: input.smtpSecure,
       username: input.username,
       passwordEncrypted: input.password ? encrypt(input.password) : null,
+      workerPartition,
     },
   });
 }
@@ -71,7 +75,6 @@ export function sanitizeAccount(account: EmailAccount) {
     passwordEncrypted,
     oauthAccessToken,
     oauthRefreshToken,
-    username,
     ...safe
   } = account;
   return safe;
@@ -82,10 +85,29 @@ export async function updateAccount(
   organizationId: string,
   input: UpdateAccountInput
 ): Promise<EmailAccount> {
-  return prisma.emailAccount.update({
+  const data: any = { ...input };
+  if (input.password) {
+    data.passwordEncrypted = encrypt(input.password);
+    delete data.password;
+  }
+  
+  // If we are updating connection settings, re-activate the account to trigger a sync
+  if (input.imapHost || input.smtpHost || input.password || input.username) {
+    data.isActive = true;
+  }
+
+  const account = await prisma.emailAccount.update({
     where: { id: accountId, organizationId },
-    data: input,
+    data,
   });
+
+  // If connection settings changed, queue a sync
+  if (data.isActive) {
+    const { syncQueue } = await import('@/lib/queue/client');
+    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
+  }
+
+  return account;
 }
 
 export async function deleteAccount(
@@ -97,16 +119,26 @@ export async function deleteAccount(
   });
 }
 
-export async function getAccountStats(accountId: string) {
+export async function getAccountStats(accountId: string, organizationId?: string) {
+  const where = accountId === 'all' && organizationId
+    ? { account: { organizationId } }
+    : { accountId };
+
   const [unreadCount, totalCount, lastSynced] = await Promise.all([
     prisma.email.count({
-      where: { accountId, folder: 'INBOX', isRead: false },
+      where: { ...where, folder: 'INBOX', isRead: false },
     }),
-    prisma.email.count({ where: { accountId } }),
-    prisma.emailAccount.findUnique({
-      where: { id: accountId },
-      select: { lastSyncedAt: true },
-    }),
+    prisma.email.count({ where }),
+    accountId === 'all' && organizationId
+      ? prisma.emailAccount.findFirst({
+          where: { organizationId },
+          orderBy: { lastSyncedAt: 'desc' },
+          select: { lastSyncedAt: true },
+        })
+      : prisma.emailAccount.findUnique({
+          where: { id: accountId }, // Valid UUID when accountId is not 'all'
+          select: { lastSyncedAt: true },
+        }),
   ]);
 
   return {

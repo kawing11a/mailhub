@@ -1,8 +1,10 @@
 import { Queue, QueueOptions } from 'bullmq';
-import { redis } from '@/lib/redis';
+import Redis from 'ioredis';
+
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const defaultOptions: QueueOptions = {
-  connection: redis as any,
+  connection: new Redis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true }) as any,
   defaultJobOptions: {
     attempts: 3,
     backoff: {
