@@ -1,7 +1,9 @@
 import { Worker, Job } from 'bullmq';
-import { redis } from '@/lib/redis';
+import Redis from 'ioredis';
 import { meilisearch } from '@/lib/search/meilisearch';
 import { prisma } from '@/lib/db/prisma';
+
+const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true });
 
 export interface SearchIndexPayload {
   emailId: string;
@@ -45,16 +47,15 @@ export const searchWorker = new Worker<SearchIndexPayload>(
       labelIds: email.emailLabels.map(l => l.labelId),
       receivedAt: email.receivedAt?.getTime() || 0,
       sentAt: email.sentAt?.getTime() || 0,
-      bodyText: email.body?.bodyText || '',
     };
 
     // Index into Meilisearch
-    await meilisearch.index('emails').addDocuments([document]);
+    await meilisearch.index('emails').addDocuments([document], { primaryKey: 'id' });
     
     console.log(`Indexed email ${emailId} in Meilisearch.`);
   },
   {
-    connection: redis as any,
+    connection: workerRedis as any,
     concurrency: 15, // Allow up to 15 parallel indexing jobs
   }
 );

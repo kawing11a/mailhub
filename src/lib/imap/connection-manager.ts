@@ -14,6 +14,7 @@ interface ConnectionEntry {
   isConnected: boolean;
   reconnectTimer?: NodeJS.Timeout;
   reconnectAttempts: number;
+  idleLock?: any;
 }
 
 const MAX_RECONNECT_DELAY_MS = 5 * 60 * 1000; // 5 minutes
@@ -76,6 +77,10 @@ export class IMAPConnectionManager {
     client.on('close', () => {
       console.log(`IMAP connection closed for account ${account.id}`);
       entry.isConnected = false;
+      if (entry.idleLock) {
+        try { entry.idleLock.release(); } catch (e) {}
+        entry.idleLock = undefined;
+      }
       this.scheduleReconnect(account.id);
     });
 
@@ -102,14 +107,16 @@ export class IMAPConnectionManager {
   /**
    * Enter IDLE mode on INBOX, listening for new emails.
    */
-  private async startIDLE(accountId: string): Promise<void> {
+  public async startIDLE(accountId: string): Promise<void> {
     const entry = this.connections.get(accountId);
     if (!entry || !entry.isConnected) return;
+    if (entry.idleLock) return; // Already in IDLE
 
     const { client } = entry;
 
     try {
       const lock = await client.getMailboxLock('INBOX');
+      entry.idleLock = lock;
 
       try {
         // Listen for new mail via EXISTS event
@@ -127,6 +134,7 @@ export class IMAPConnectionManager {
         console.log(`Entered IDLE for account ${accountId}`);
       } catch (idleError) {
         lock.release();
+        entry.idleLock = undefined;
         throw idleError;
       }
     } catch (error) {
@@ -139,8 +147,9 @@ export class IMAPConnectionManager {
    */
   private async fetchNewEmails(
     accountId: string,
-    startSeq: number,
-    endSeq: number
+    startSeqOrUid: number | number[],
+    endSeq?: number,
+    folder: string = 'INBOX'
   ): Promise<void> {
     const entry = this.connections.get(accountId);
     if (!entry || !entry.isConnected) return;
@@ -148,12 +157,29 @@ export class IMAPConnectionManager {
     const { client, organizationId } = entry;
 
     try {
-      const range = `${startSeq}:${endSeq}`;
+      const range = typeof startSeqOrUid === 'number' && endSeq !== undefined 
+        ? `${startSeqOrUid}:${endSeq}` 
+        : (startSeqOrUid as number[]).join(',');
+        
+      const fetchByUid = Array.isArray(startSeqOrUid);
+
+      const promises: Promise<void>[] = [];
+      const batchSize = 10;
+
       for await (const message of client.fetch(range, {
         source: true,
         uid: true,
-      })) {
-        await this.persistEmail(accountId, organizationId, message);
+      }, { uid: fetchByUid })) {
+        promises.push(this.persistEmail(accountId, organizationId, message, folder));
+        
+        if (promises.length >= batchSize) {
+          await Promise.all(promises);
+          promises.length = 0;
+        }
+      }
+      
+      if (promises.length > 0) {
+        await Promise.all(promises);
       }
     } catch (error) {
       console.error(`Failed to fetch new emails for account ${accountId}:`, error);
@@ -166,7 +192,8 @@ export class IMAPConnectionManager {
   private async persistEmail(
     accountId: string,
     organizationId: string,
-    message: FetchMessageObject
+    message: FetchMessageObject,
+    folder: string = 'INBOX'
   ): Promise<void> {
     try {
       const rawSource = message.source;
@@ -195,7 +222,7 @@ export class IMAPConnectionManager {
             messageId: parsed.messageId,
             uid: message.uid ? BigInt(message.uid) : null,
             threadId,
-            folder: 'INBOX',
+            folder: folder,
             subject: parsed.subject,
             snippet: parsed.snippet,
             fromAddress: parsed.fromAddress,
@@ -244,9 +271,123 @@ export class IMAPConnectionManager {
         })
       );
 
+      // Send Web Push to all devices subscribed to this organization
+      try {
+        const webpush = require('web-push');
+        
+        webpush.setVapidDetails(
+          process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
+          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
+          process.env.VAPID_PRIVATE_KEY as string
+        );
+
+        const subscriptions = await prisma.pushSubscription.findMany({
+          where: { organizationId },
+        });
+
+        const pushPayload = JSON.stringify({
+          title: `New email from ${parsed.fromAddress}`,
+          body: parsed.subject || 'No Subject',
+          url: '/inbox',
+        });
+
+        const pushPromises = subscriptions.map((sub: any) => 
+          webpush.sendNotification({
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            }
+          }, pushPayload).catch(async (err: any) => {
+            if (err.statusCode === 404 || err.statusCode === 410) {
+              console.log('Push subscription expired or removed, deleting from DB');
+              await prisma.pushSubscription.delete({ where: { id: sub.id } });
+            } else {
+              console.error('Push notification failed:', err);
+            }
+          })
+        );
+
+        await Promise.all(pushPromises);
+      } catch (err) {
+        console.error('Failed to send Web Push:', err);
+      }
+
       console.log(`Persisted email: ${parsed.subject} (${parsed.messageId})`);
     } catch (error) {
       console.error(`Failed to persist email for account ${accountId}:`, error);
+    }
+  }
+
+  /**
+   * Fetch historical emails across standard mailboxes.
+   */
+  async syncHistoricalEmails(accountId: string): Promise<void> {
+    const entry = this.connections.get(accountId);
+    if (!entry || !entry.isConnected) {
+      console.warn(`Cannot sync history: Account ${accountId} not connected.`);
+      return;
+    }
+
+    const { client, organizationId } = entry;
+
+    // Release IDLE lock so we can lock other mailboxes during sync
+    if (entry.idleLock) {
+      try { entry.idleLock.release(); } catch (e) {}
+      entry.idleLock = undefined;
+    }
+
+    try {
+      const mailboxes = await client.list();
+      
+      const mapSpecialUseToFolder = (mailbox: any): string | null => {
+        const use = (mailbox.specialUse || '').toLowerCase();
+        const path = mailbox.path.toLowerCase();
+        
+        if (use.includes('\\sent') || path.includes('sent')) return 'SENT';
+        if (use.includes('\\trash') || path.includes('trash') || path.includes('deleted')) return 'TRASH';
+        if (use.includes('\\drafts') || path.includes('draft')) return 'DRAFTS';
+        if (use.includes('\\junk') || path.includes('junk') || path.includes('spam')) return 'SPAM';
+        if (path === 'inbox') return 'INBOX';
+        
+        return null;
+      };
+
+      for (const mailbox of mailboxes) {
+        const mappedFolder = mapSpecialUseToFolder(mailbox);
+        if (!mappedFolder) continue;
+
+        console.log(`Syncing ${mailbox.path} -> ${mappedFolder} for account ${accountId}`);
+        try {
+          const lock = await client.getMailboxLock(mailbox.path);
+          try {
+            const total = client.mailbox ? client.mailbox.exists : 0;
+            if (total > 0) {
+              const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+              const uids = await client.search({ since: ninetyDaysAgo }, { uid: true });
+              
+              if (uids && uids.length > 0) {
+                // Fetch in chunks of 50 to prevent memory exhaustion
+                const CHUNK_SIZE = 50;
+                for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
+                  const chunk = uids.slice(i, i + CHUNK_SIZE);
+                  console.log(`Fetching UIDs chunk ${i} to ${i + chunk.length} from ${mailbox.path} (Total recent: ${uids.length})`);
+                  await this.fetchNewEmails(accountId, chunk, undefined, mappedFolder);
+                }
+              }
+            }
+          } finally {
+            lock.release();
+          }
+        } catch (err) {
+          console.error(`Failed to sync mailbox ${mailbox.path} for account ${accountId}:`, err);
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to list mailboxes for account ${accountId}:`, error);
+    } finally {
+      // Always resume IDLE on INBOX after syncing is done
+      await this.startIDLE(accountId);
     }
   }
 

@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSearch } from '@/hooks/useSearch';
 import { useUIStore } from '@/stores/uiStore';
+import { useAccountStore } from '@/stores/accountStore';
 import { Search, X, Mail, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -13,36 +15,77 @@ export function SearchModal() {
   const { query, setQuery, results, isLoading } = useSearch('');
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const { data: accounts } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      const res = await fetch('/api/accounts');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
   useEffect(() => {
     if (isSearchOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
+      setSelectedIndex(0);
     } else {
       setQuery('');
     }
   }, [isSearchOpen, setQuery]);
 
   useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isSearchOpen) {
+      if (!isSearchOpen) return;
+      
+      if (e.key === 'Escape') {
         setSearchOpen(false);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedIndex((prev) => {
+          const next = prev < results.length - 1 ? prev + 1 : prev;
+          document.getElementById(`search-result-${next}`)?.scrollIntoView({ block: 'nearest' });
+          return next;
+        });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedIndex((prev) => {
+          const next = prev > 0 ? prev - 1 : 0;
+          document.getElementById(`search-result-${next}`)?.scrollIntoView({ block: 'nearest' });
+          return next;
+        });
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (results.length > 0 && selectedIndex >= 0 && selectedIndex < results.length) {
+          const email = results[selectedIndex];
+          setSearchOpen(false);
+          useAccountStore.getState().setSelectedAccountId(email.accountId);
+          router.push(`/inbox?emailId=${email.id}`);
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchOpen, setSearchOpen]);
+  }, [isSearchOpen, setSearchOpen, results, selectedIndex, router]);
 
   if (!isSearchOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-16 sm:pt-24">
       {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" 
+      <div
+        className="fixed inset-0 bg-gray-900/30 backdrop-blur-md transition-opacity duration-300"
         onClick={() => setSearchOpen(false)}
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl transform overflow-hidden rounded-xl bg-white shadow-2xl transition-all border border-gray-200">
+      <div className="relative w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white/95 backdrop-blur-xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] transition-all border border-white/20 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center border-b border-gray-200 px-4 py-3">
           <Search className="h-5 w-5 text-gray-400" />
           <input
@@ -54,7 +97,7 @@ export function SearchModal() {
             onChange={(e) => setQuery(e.target.value)}
           />
           {isLoading && <Loader2 className="h-5 w-5 animate-spin text-gray-400 mr-2" />}
-          <button 
+          <button
             onClick={() => setSearchOpen(false)}
             className="rounded-md p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -66,29 +109,56 @@ export function SearchModal() {
         {query.length > 0 && (
           <div className="max-h-96 overflow-y-auto p-2">
             {results.length === 0 && !isLoading ? (
-              <div className="p-8 text-center text-sm text-gray-500">
-                No emails found for "{query}"
+              <div className="flex flex-col items-center justify-center p-12 text-center animate-in fade-in duration-300">
+                <div className="w-16 h-16 mb-4 rounded-full bg-gray-50/50 border border-gray-100 flex items-center justify-center">
+                  <Search className="w-8 h-8 text-gray-300" />
+                </div>
+                <h3 className="text-sm font-medium text-gray-900">No emails found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  We couldn't find anything matching "<span className="font-medium text-gray-700">{query}</span>". Try adjusting your search terms.
+                </p>
               </div>
             ) : (
               <ul className="space-y-1">
-                {results.map((email: any) => (
-                  <li key={email.id}>
+                {results.map((email: any, index: number) => {
+                  const account = accounts?.find((a: any) => a.id === email.accountId);
+                  const accountName = account ? (account.label || account.emailAddress) : 'Unknown Account';
+                  
+                  return (
+                  <li key={email.id} id={`search-result-${index}`}>
                     <button
-                      className="w-full flex flex-col items-start px-4 py-3 hover:bg-blue-50 rounded-lg transition-colors text-left group"
+                      className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-all duration-200 text-left group ${index === selectedIndex ? 'bg-gradient-to-r from-accent-50/80 to-transparent ring-1 ring-accent-200 shadow-sm transform scale-[1.01]' : 'hover:bg-gray-50/80 hover:scale-[1.005]'}`}
+                      onMouseEnter={() => setSelectedIndex(index)}
                       onClick={() => {
                         setSearchOpen(false);
-                        // Navigate to the email
-                        router.push(`/accounts/${email.accountId}/inbox?emailId=${email.id}`);
+                        useAccountStore.getState().setSelectedAccountId(email.accountId);
+                        router.push(`/inbox?emailId=${email.id}`);
                       }}
                     >
                       <div className="flex items-center justify-between w-full mb-1">
                         <div className="flex items-center space-x-2 truncate">
-                          <Mail className="h-4 w-4 text-gray-400 group-hover:text-blue-500 flex-shrink-0" />
-                          <span className="font-medium text-gray-900 truncate">{email.fromName || email.fromAddress}</span>
+                          <Mail className={`h-4 w-4 flex-shrink-0 ${index === selectedIndex ? 'text-accent-500' : 'text-gray-400 group-hover:text-accent-500'}`} />
+                          <span className="font-medium text-gray-900 truncate">
+                            {email.fromName || email.fromAddress}
+                            {email.fromName && <span className="ml-1 font-normal text-gray-500">&lt;{email.fromAddress}&gt;</span>}
+                          </span>
                         </div>
-                        <span className="text-xs text-gray-400 flex-shrink-0 ml-4">
-                          {email.receivedAt ? format(new Date(email.receivedAt), 'MMM d, yyyy') : ''}
-                        </span>
+                        <div className="flex flex-col items-end flex-shrink-0 ml-4 text-xs text-gray-400">
+                          <span>{email.receivedAt ? format(new Date(email.receivedAt), 'MMM d, yyyy') : ''}</span>
+                          {account && (
+                            <span 
+                              className="mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium truncate max-w-[120px]"
+                              style={{ 
+                                backgroundColor: account.color ? `${account.color}15` : '#F3F4F6', 
+                                color: account.color || '#4B5563',
+                                border: `1px solid ${account.color ? `${account.color}30` : '#E5E7EB'}`
+                              }}
+                              title={`Received by: ${accountName}`}
+                            >
+                              {accountName}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <div className="text-sm font-semibold text-gray-700 truncate w-full">
                         {email.subject || '(No Subject)'}
@@ -98,7 +168,7 @@ export function SearchModal() {
                       </div>
                     </button>
                   </li>
-                ))}
+                )})}
               </ul>
             )}
           </div>

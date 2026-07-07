@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Users, Shield, CreditCard } from 'lucide-react';
+import { Users, Shield, CreditCard, Mail, Settings } from 'lucide-react';
 
 export default function SettingsLayout({
   children,
@@ -12,10 +13,19 @@ export default function SettingsLayout({
 }) {
   const pathname = usePathname();
 
+  const { data: authData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
+
   const navItems = [
-    { name: 'Members', href: '/settings/members', icon: Users },
-    { name: 'Security', href: '/settings/security', icon: Shield },
-    { name: 'Billing', href: '/settings/billing', icon: CreditCard },
+    ...(authData?.role === 'admin' ? [{ name: 'Members', href: '/settings/members', icon: Users }] : []),
+    { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
+    { name: 'Preferences', href: '/settings/preferences', icon: Settings },
   ];
 
   return (
@@ -33,7 +43,7 @@ export default function SettingsLayout({
                 className={clsx(
                   'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium',
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
+                    ? 'bg-accent-50 text-accent-700'
                     : 'text-gray-700 hover:bg-gray-100'
                 )}
               >

@@ -21,7 +21,7 @@ export default function ActivityLogPage() {
     <div className="flex flex-col h-full bg-gray-50 overflow-hidden">
       <div className="p-8 border-b border-gray-200 bg-white shadow-sm z-10">
         <div className="max-w-4xl mx-auto flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+          <div className="w-10 h-10 bg-accent-100 rounded-lg flex items-center justify-center text-accent-600">
             <ActivityIcon className="w-5 h-5" />
           </div>
           <div>
@@ -48,9 +48,9 @@ export default function ActivityLogPage() {
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
               <ul className="divide-y divide-gray-200">
                 {activities.map((activity: any) => (
-                  <li key={activity.id} className="p-4 hover:bg-gray-50 transition-colors">
+                  <li key={activity.id} className="px-[var(--spacing-density-col)] py-[var(--spacing-density-row)] hover:bg-gray-50 transition-colors">
                     <div className="flex items-center space-x-4">
-                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-700 text-sm font-medium flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-accent-50 flex items-center justify-center text-accent-700 text-sm font-medium flex-shrink-0">
                         {activity.user?.name ? activity.user.name.charAt(0).toUpperCase() : '?'}
                       </div>
                       <div className="flex-1 min-w-0">

@@ -33,6 +33,14 @@ export async function GET(req: NextRequest) {
         // Listen for messages on the channel
         subscriber.on('message', (chan, message) => {
           if (chan === channel) {
+            try {
+              const parsed = JSON.parse(message);
+              if (parsed.event) {
+                controller.enqueue(`event: ${parsed.event}\n`);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
             // Push event to the client
             controller.enqueue(`data: ${message}\n\n`);
           }

@@ -14,15 +14,23 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId, emailId } = await params;
 
-  // Verify account belongs to user's org
-  const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
-    select: { id: true },
-  });
-  if (!account) return apiError('Account not found', 404);
+  let where: Record<string, unknown> = { id: emailId };
+
+  if (accountId !== 'all') {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: accountId, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!account) return apiError('Account not found', 404);
+    where.accountId = accountId;
+  } else {
+    where.account = {
+      organizationId: auth.organizationId,
+    };
+  }
 
   const email = await prisma.email.findFirst({
-    where: { id: emailId, accountId },
+    where,
     include: {
       body: true,
       attachments: {
@@ -63,16 +71,29 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const parsed = updateEmailSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
-  // Verify ownership chain
-  const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
-    select: { id: true },
-  });
-  if (!account) return apiError('Account not found', 404);
+  let where: Record<string, unknown> = { id: emailId };
+
+  if (accountId !== 'all') {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: accountId, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!account) return apiError('Account not found', 404);
+    where.accountId = accountId;
+  } else {
+    where.account = {
+      organizationId: auth.organizationId,
+    };
+  }
 
   try {
+    // Note: Prisma update doesn't support complex relation wheres easily in `where`, 
+    // so we verify existence first
+    const emailToUpdate = await prisma.email.findFirst({ where });
+    if (!emailToUpdate) return apiError('Email not found', 404);
+
     const updated = await prisma.email.update({
-      where: { id: emailId, accountId },
+      where: { id: emailId },
       data: parsed.data,
     });
     return apiResponse(updated);
@@ -87,15 +108,22 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId, emailId } = await params;
 
-  const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
-    select: { id: true },
-  });
-  if (!account) return apiError('Account not found', 404);
+  let where: Record<string, unknown> = { id: emailId };
 
-  const email = await prisma.email.findFirst({
-    where: { id: emailId, accountId },
-  });
+  if (accountId !== 'all') {
+    const account = await prisma.emailAccount.findFirst({
+      where: { id: accountId, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!account) return apiError('Account not found', 404);
+    where.accountId = accountId;
+  } else {
+    where.account = {
+      organizationId: auth.organizationId,
+    };
+  }
+
+  const email = await prisma.email.findFirst({ where });
   if (!email) return apiError('Email not found', 404);
 
   if (email.folder === 'TRASH') {

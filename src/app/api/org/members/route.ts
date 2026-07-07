@@ -7,7 +7,7 @@ import {
   apiResponse,
   apiError,
 } from '@/lib/auth/middleware';
-import { inviteMemberSchema } from '@/lib/validation';
+import { createUserSchema } from '@/lib/validation';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -43,21 +43,17 @@ export async function POST(req: NextRequest) {
   if (adminCheck) return adminCheck;
 
   const body = await req.json();
-  const parsed = inviteMemberSchema.safeParse(body);
+  const parsed = createUserSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
-  const { email, role } = parsed.data;
+  const { email, role, name, password } = parsed.data;
 
   // Find or create user
   let user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    // Create a placeholder user with a random password (they'll reset it)
-    const tempPasswordHash = await hash(
-      Math.random().toString(36).slice(2),
-      12
-    );
+    const passwordHash = await hash(password, 12);
     user = await prisma.user.create({
-      data: { email, name: email.split('@')[0], passwordHash: tempPasswordHash },
+      data: { email, name, passwordHash },
     });
   }
 

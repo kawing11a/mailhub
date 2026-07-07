@@ -8,6 +8,10 @@ import { SearchModal } from '@/components/search/SearchModal';
 import { ShortcutProvider } from '@/components/providers/ShortcutProvider';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
+import { Toaster, useToasterStore, toast } from 'react-hot-toast';
+import { useEffect } from 'react';
+
+import { ThemeProvider } from '@/components/providers/ThemeProvider';
 
 export default function DashboardLayout({
   children,
@@ -19,8 +23,9 @@ export default function DashboardLayout({
   const { setMobileSidebarOpen } = useUIStore();
 
   return (
-    <ShortcutProvider>
-      <div className="flex h-screen overflow-hidden bg-white">
+    <ThemeProvider>
+      <ShortcutProvider>
+        <div className="flex h-screen overflow-hidden bg-white">
         {/* Mobile header (only visible on small screens) */}
         <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 z-30 flex items-center px-4">
           <button 
@@ -29,7 +34,9 @@ export default function DashboardLayout({
           >
             <Menu className="h-6 w-6" />
           </button>
-          <span className="ml-2 font-bold text-gray-900">MailHub</span>
+          <div className="ml-2 flex items-center">
+            <img src="/logo-transparent.png" alt="MailHub Logo" className="h-10 w-auto object-contain -ml-2" />
+          </div>
         </div>
 
         <div className="hidden md:flex h-full">
@@ -45,8 +52,11 @@ export default function DashboardLayout({
         
         <ComposeModal />
         <SearchModal />
-      </div>
-    </ShortcutProvider>
+        <ToastLimit />
+        <Toaster position="bottom-right" />
+        </div>
+      </ShortcutProvider>
+    </ThemeProvider>
   );
 }
 
@@ -66,4 +76,17 @@ function MobileSidebarOverlay() {
       </div>
     </div>
   );
+}
+
+function ToastLimit() {
+  const { toasts } = useToasterStore();
+
+  useEffect(() => {
+    toasts
+      .filter((t) => t.visible)
+      .filter((_, i) => i >= 3)
+      .forEach((t) => toast.dismiss(t.id));
+  }, [toasts]);
+
+  return null;
 }

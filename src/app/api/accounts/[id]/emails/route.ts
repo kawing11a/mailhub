@@ -13,12 +13,32 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId } = await params;
 
-  // Verify account belongs to user's org
-  const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
-    select: { id: true },
-  });
-  if (!account) return apiError('Account not found', 404);
+  // Build where clause
+  const where: Record<string, unknown> = {};
+
+  if (accountId !== 'all') {
+    // Verify account belongs to user's org and member has access
+    const account = await prisma.emailAccount.findFirst({
+      where: { 
+        id: accountId, 
+        organizationId: auth.organizationId,
+        ...(auth.role !== 'admin' ? {
+          memberAccess: { some: { userId: auth.userId } }
+        } : {})
+      },
+      select: { id: true },
+    });
+    if (!account) return apiError('Account not found', 404);
+    where.accountId = accountId;
+  } else {
+    // Unified inbox logic: query emails from all accounts within the org
+    where.account = {
+      organizationId: auth.organizationId,
+      ...(auth.role !== 'admin' ? {
+        memberAccess: { some: { userId: auth.userId } }
+      } : {})
+    };
+  }
 
   // Parse query params
   const { searchParams } = req.nextUrl;
@@ -30,11 +50,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { folder, page, limit, unreadOnly, labelId } = query.data;
   const skip = (page - 1) * limit;
 
-  // Build where clause
-  const where: Record<string, unknown> = {
-    accountId,
-    folder,
-  };
+  if (folder) where.folder = folder;
   if (unreadOnly) where.isRead = false;
   if (labelId) {
     where.emailLabels = { some: { labelId } };
