@@ -4,13 +4,13 @@ import { encrypt } from '@/lib/crypto';
 import { verifyToken } from '@/lib/auth/jwt';
 
 export async function GET(req: NextRequest) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.url;
+
   try {
     const url = new URL(req.url);
     const code = url.searchParams.get('code');
     const stateStr = url.searchParams.get('state');
     const error = url.searchParams.get('error');
-
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.url;
 
     // First check if the user is authenticated via cookie
     const token = req.cookies.get('auth-token')?.value;
