@@ -32,57 +32,35 @@ services:
       - mailhub_meili_data:/meili_data
     restart: unless-stopped
 
-  # web:
-  #   build: .
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     - DATABASE_URL=postgresql://mailhub:mailhubpassword@postgres:5432/mailhub?schema=public
-  #     - REDIS_URL=redis://redis:6379
-  #     - MEILISEARCH_HOST=http://meilisearch:7700
-  #     - MEILISEARCH_API_KEY=meilisearch_dev_master_key_123
-  #     - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-  #     - NEXTAUTH_URL=http://localhost:3000
-  #     - NEXTAUTH_SECRET=supersecret123
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #     - meilisearch
-
-  worker-1:
+  email-manager-web:
     build: .
-    environment:
-      - WORKER_PARTITION=worker-1
-      - DATABASE_URL=postgresql://mailhub:mailhubpassword@postgres:5432/mailhub?schema=public
-      - REDIS_URL=redis://redis:6379
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - MEILISEARCH_API_KEY=meilisearch_dev_master_key_123
-      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      - NEXT_PUBLIC_VAPID_PUBLIC_KEY=BGxKMjQZ_DzJBEQc_aRzRR5L12k2vqySy3ahwq5LTKCzGWRF6aZLyIwvEuhelq6gCuMKwfjCsQzamAx8RUzLrlg
-      - VAPID_PRIVATE_KEY=XIOfcDqBilbPHiA91rvkSGm2jkTIDlRX179nH9CWw1c
-      - VAPID_SUBJECT=mailto:support@mailhub.local
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
-    command: npm run worker
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
     depends_on:
       - postgres
       - redis
       - meilisearch
 
-  worker-2:
+  email-manager-worker-1:
     build: .
+    command: npm run worker
+    env_file:
+      - .env
+    environment:
+      - WORKER_PARTITION=worker-1
+    depends_on:
+      - postgres
+      - redis
+      - meilisearch
+
+  email-manager-worker-2:
+    build: .
+    env_file:
+      - .env
     environment:
       - WORKER_PARTITION=worker-2
-      - DATABASE_URL=postgresql://mailhub:mailhubpassword@postgres:5432/mailhub?schema=public
-      - REDIS_URL=redis://redis:6379
-      - MEILISEARCH_HOST=http://meilisearch:7700
-      - MEILISEARCH_API_KEY=meilisearch_dev_master_key_123
-      - ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      - NEXT_PUBLIC_VAPID_PUBLIC_KEY=BGxKMjQZ_DzJBEQc_aRzRR5L12k2vqySy3ahwq5LTKCzGWRF6aZLyIwvEuhelq6gCuMKwfjCsQzamAx8RUzLrlg
-      - VAPID_PRIVATE_KEY=XIOfcDqBilbPHiA91rvkSGm2jkTIDlRX179nH9CWw1c
-      - VAPID_SUBJECT=mailto:support@mailhub.local
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     command: npm run worker
     depends_on:
       - postgres

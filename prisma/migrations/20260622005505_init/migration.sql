@@ -235,3 +235,41 @@ ALTER TABLE "email_activity_log" ADD CONSTRAINT "email_activity_log_account_id_f
 
 -- AddForeignKey
 ALTER TABLE "email_activity_log" ADD CONSTRAINT "email_activity_log_email_id_fkey" FOREIGN KEY ("email_id") REFERENCES "emails"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- CreateTable
+CREATE TABLE "push_subscriptions" (
+    "id" UUID NOT NULL,
+    "organization_id" UUID NOT NULL,
+    "endpoint" TEXT NOT NULL,
+    "p256dh" TEXT NOT NULL,
+    "auth" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMPTZ NOT NULL,
+
+    CONSTRAINT "push_subscriptions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "member_email_account_access" (
+    "user_id" UUID NOT NULL,
+    "organization_id" UUID NOT NULL,
+    "account_id" UUID NOT NULL,
+
+    CONSTRAINT "member_email_account_access_pkey" PRIMARY KEY ("organization_id","user_id","account_id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "push_subscriptions_endpoint_key" ON "push_subscriptions"("endpoint");
+
+-- CreateIndex
+CREATE INDEX "push_subscriptions_organization_id_idx" ON "push_subscriptions"("organization_id");
+
+-- AddForeignKey
+ALTER TABLE "push_subscriptions" ADD CONSTRAINT "push_subscriptions_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "member_email_account_access" ADD CONSTRAINT "member_email_account_access_organization_id_user_id_fkey" FOREIGN KEY ("organization_id", "user_id") REFERENCES "organization_members"("organization_id", "user_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "member_email_account_access" ADD CONSTRAINT "member_email_account_access_account_id_fkey" FOREIGN KEY ("account_id") REFERENCES "email_accounts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
