@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { authenticate, apiResponse } from '@/lib/auth/middleware';
+import { authenticate, apiResponse, requireAdmin } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 
 export async function GET(req: NextRequest) {
@@ -7,11 +7,27 @@ export async function GET(req: NextRequest) {
   if (auth instanceof Response) return auth;
 
   const { organizationId, role, userId } = auth;
+  const scope = req.nextUrl.searchParams.get('scope') === 'system' ? 'system' : 'user';
 
-  const accountFilter = role !== 'admin' ? {
-    organizationId,
-    memberAccess: { some: { userId } }
-  } : { organizationId };
+  if (scope === 'system') {
+    const adminError = requireAdmin(auth);
+    if (adminError) return adminError;
+  }
+
+  const accountFilter = scope === 'system'
+    ? {}
+    : role !== 'admin'
+      ? {
+          organizationId,
+          memberAccess: { some: { userId } },
+        }
+      : { organizationId };
+
+  const activityFilter = scope === 'system'
+    ? {}
+    : role !== 'admin'
+      ? { organizationId, account: accountFilter }
+      : { organizationId };
 
   try {
     const [
@@ -27,18 +43,33 @@ export async function GET(req: NextRequest) {
       prisma.email.count({ where: { account: accountFilter, isRead: false, folder: 'INBOX' } }),
       prisma.email.count({ where: { account: accountFilter, folder: 'SENT' } }),
       prisma.emailActivityLog.findMany({
-        where: role !== 'admin' ? { organizationId, account: accountFilter } : { organizationId },
+        where: activityFilter,
         orderBy: { createdAt: 'desc' },
         take: 5,
-        include: { user: true, account: true }
+        select: {
+          id: true,
+          action: true,
+          metadata: true,
+          createdAt: true,
+          user: { select: { name: true } },
+          account: { select: { emailAddress: true } },
+        },
       }),
       prisma.emailAccount.findMany({
         where: accountFilter,
-        orderBy: { createdAt: 'asc' }
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          label: true,
+          emailAddress: true,
+          color: true,
+        },
       })
     ]);
 
     return apiResponse({
+      scope,
+      canViewSystem: role === 'admin',
       stats: {
         totalAccounts,
         totalEmails,
