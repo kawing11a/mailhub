@@ -56,8 +56,8 @@ export function FolderSection() {
             className={clsx(
               'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium w-full',
               isActive
-                ? 'bg-accent-50 text-accent-700'
-                : 'text-gray-700 hover:bg-gray-100'
+                ? 'bg-accent-600 text-white shadow-sm'
+                : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
             )}
           >
             <Icon className="w-4 h-4" />
@@ -65,7 +65,7 @@ export function FolderSection() {
             {folder.id === 'INBOX' && stats?.unreadCount > 0 && (
               <span className={clsx(
                 'ml-auto text-xs font-semibold px-2 py-0.5 rounded-full',
-                isActive ? 'bg-accent-200 text-accent-800' : 'bg-gray-200 text-gray-700'
+                isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-900'
               )}>
                 {stats.unreadCount}
               </span>
