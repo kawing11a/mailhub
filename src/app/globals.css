@@ -121,6 +121,22 @@ input, select, textarea {
   }
 }
 
+@keyframes label-create-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scaleY(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+.label-create-enter {
+  transform-origin: top;
+  animation: label-create-enter 180ms ease-out both;
+}
+
 @keyframes dashboard-value-change {
   0% {
     opacity: 0.2;
@@ -211,5 +227,9 @@ input, select, textarea {
     animation: none !important;
     transition-duration: 0.01ms !important;
     transform: none !important;
+  }
+
+  .label-create-enter {
+    animation: none !important;
   }
 }
