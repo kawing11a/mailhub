@@ -10,10 +10,12 @@ export async function GET(req: NextRequest) {
     const stateStr = url.searchParams.get('state');
     const error = url.searchParams.get('error');
 
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.url;
+
     // First check if the user is authenticated via cookie
     const token = req.cookies.get('auth-token')?.value;
     if (!token) {
-      return NextResponse.redirect(new URL('/login?error=auth_required', req.url));
+      return NextResponse.redirect(new URL('/login?error=auth_required', baseUrl));
     }
 
     // We authenticate manually here since this is a GET redirect from Google
@@ -21,11 +23,11 @@ export async function GET(req: NextRequest) {
 
     if (error) {
       console.error('OAuth error returned from Google:', error);
-      return NextResponse.redirect(new URL('/settings/accounts?error=oauth_rejected', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=oauth_rejected', baseUrl));
     }
 
     if (!code || !stateStr) {
-      return NextResponse.redirect(new URL('/settings/accounts?error=missing_oauth_params', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=missing_oauth_params', baseUrl));
     }
 
     // Decode the state
@@ -34,18 +36,18 @@ export async function GET(req: NextRequest) {
       state = JSON.parse(Buffer.from(stateStr, 'base64').toString('utf8'));
     } catch (e) {
       console.error('Failed to parse OAuth state:', e);
-      return NextResponse.redirect(new URL('/settings/accounts?error=invalid_state', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=invalid_state', baseUrl));
     }
 
     if (state.organizationId !== auth.organizationId) {
-      return NextResponse.redirect(new URL('/settings/accounts?error=invalid_organization', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=invalid_organization', baseUrl));
     }
 
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-      return NextResponse.redirect(new URL('/settings/accounts?error=missing_server_config', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=missing_server_config', baseUrl));
     }
 
     const origin = process.env.NEXT_PUBLIC_APP_URL || url.origin;
@@ -68,7 +70,7 @@ export async function GET(req: NextRequest) {
 
     if (!tokenResponse.ok) {
       console.error('Google OAuth token exchange failed:', tokens);
-      return NextResponse.redirect(new URL('/settings/accounts?error=token_exchange_failed', req.url));
+      return NextResponse.redirect(new URL('/settings/accounts?error=token_exchange_failed', baseUrl));
     }
 
     // Optionally fetch actual user info from Google to verify email, 
@@ -142,9 +144,9 @@ export async function GET(req: NextRequest) {
     await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
 
     // Redirect to dashboard on success
-    return NextResponse.redirect(new URL('/settings/accounts?success=true', req.url));
+    return NextResponse.redirect(new URL('/settings/accounts?success=true', baseUrl));
   } catch (error: any) {
     console.error('Google OAuth error:', error);
-    return NextResponse.redirect(new URL('/settings/accounts?error=internal_error', req.url));
+    return NextResponse.redirect(new URL('/settings/accounts?error=internal_error', baseUrl));
   }
 }
