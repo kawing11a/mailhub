@@ -26,6 +26,7 @@
     "bullmq": "^5.79.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "geist": "^1.7.2",
     "imap-simple": "^5.1.0",
     "imapflow": "^1.4.2",
     "ioredis": "^5.11.1",
