@@ -3,10 +3,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
-import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, MessageCircle } from 'lucide-react';
+import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail } from 'lucide-react';
 import { format } from 'date-fns';
 import { LabelPicker } from '@/components/labels/LabelPicker';
-import { parseEmailToChat, extractTextFromHtml } from '@/lib/email/parser';
 
 interface EmailViewerProps {
   emailId: string;
@@ -15,7 +14,7 @@ interface EmailViewerProps {
 
 export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const { selectedAccountId, setComposeModalOpen, setComposeDraft } = useAccountStore();
-  const { showAvatars, timeFormat, chatMode, setChatMode } = useUIStore();
+  const { showAvatars, timeFormat } = useUIStore();
 
   const queryClient = useQueryClient();
   const { data: email, isLoading } = useQuery({
@@ -164,14 +163,6 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         
         <div className="flex items-center space-x-2">
           <LabelPicker emailId={emailId} />
-          <button 
-            onClick={() => setChatMode(!chatMode)}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" 
-            title={chatMode ? "Switch to Classic View" : "Switch to Chat View"}
-          >
-            {chatMode ? <Mail className="w-5 h-5" /> : <MessageCircle className="w-5 h-5" />}
-          </button>
-          <div className="w-px h-6 bg-gray-200 mx-1" />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
           </button>
@@ -220,31 +211,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
 
       {/* Body Content */}
-      <div className={`flex-1 overflow-y-auto ${chatMode ? 'bg-gray-50 p-6' : 'p-6'}`}>
-        {chatMode ? (
-          <div className="max-w-2xl mx-auto space-y-4">
-            <div className="flex justify-start">
-              <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200 max-w-[85%]">
-                <div className="text-xs text-gray-500 mb-1 font-medium">{email.fromName || email.fromAddress}</div>
-                <div className="whitespace-pre-wrap break-words overflow-hidden font-sans text-gray-800 text-sm">
-                  {parseEmailToChat(email.body?.bodyText || extractTextFromHtml(email.body?.bodyHtml || '') || '') || 'Empty message.'}
-                </div>
-              </div>
-            </div>
-          </div>
+      <div className="flex-1 overflow-y-auto p-6">
+        {email.body?.bodyHtml ? (
+          <iframe
+            title="Email Content"
+            className="w-full h-full border-none"
+            srcDoc={email.body.bodyHtml}
+            sandbox="allow-popups allow-same-origin"
+          />
         ) : (
-          email.body?.bodyHtml ? (
-            <iframe
-              title="Email Content"
-              className="w-full h-full border-none bg-white"
-              srcDoc={email.body.bodyHtml}
-              sandbox="allow-popups allow-same-origin"
-            />
-          ) : (
-            <div className="whitespace-pre-wrap font-sans text-gray-800 bg-white">
-              {email.body?.bodyText || 'Empty message.'}
-            </div>
-          )
+          <div className="whitespace-pre-wrap font-sans text-gray-800">
+            {email.body?.bodyText || 'Empty message.'}
+          </div>
         )}
       </div>
     </div>

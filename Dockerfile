@@ -6,7 +6,8 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 RUN npx prisma generate
 
 # Build
@@ -15,7 +16,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/prisma ./prisma
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED 1
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # Runner
 FROM base AS runner
