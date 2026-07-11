@@ -1,16 +1,5 @@
-# MailHub Phase 5 Part 2 Task Tracker
-
-- `[x]` **Task 1: Dockerfile Setup**
-  - Create `.dockerignore`
-  - Create `Dockerfile`
-
-- `[x]` **Task 2: Update Docker Compose**
-  - Modify `docker-compose.yml` to include `web` service and use Dockerfile for workers
-
-- `[x]` **Task 3: Performance Testing Seed Script**
-  - Create `scripts/seed.ts`
-  - Modify `package.json` to add `"db:seed"`
-
-- `[x]` **Task 4: Verification**
-  - Build Docker image
-  - Run seed script
+| Status | Task | Description |
+|---|---|---|
+| [x] | Task 1 | Add Chat Mode State to uiStore.ts |
+| [ ] | Task 2 | Create Email Parser Utility |
+| [ ] | Task 3 | Update EmailViewer.tsx UI |
