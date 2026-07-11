@@ -6,7 +6,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { LabelPicker } from '@/components/labels/LabelPicker';
-import { parseEmailToChat } from '@/lib/email/parser';
+import { parseEmailToChat, extractTextFromHtml } from '@/lib/email/parser';
 
 interface EmailViewerProps {
   emailId: string;
@@ -226,8 +226,8 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <div className="flex justify-start">
               <div className="bg-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm border border-gray-200 max-w-[85%]">
                 <div className="text-xs text-gray-500 mb-1 font-medium">{email.fromName || email.fromAddress}</div>
-                <div className="whitespace-pre-wrap font-sans text-gray-800 text-sm">
-                  {parseEmailToChat(email.body?.bodyText || email.body?.bodyHtml?.replace(/<[^>]*>?/gm, '') || '') || 'Empty message.'}
+                <div className="whitespace-pre-wrap break-words overflow-hidden font-sans text-gray-800 text-sm">
+                  {parseEmailToChat(email.body?.bodyText || extractTextFromHtml(email.body?.bodyHtml || '') || '') || 'Empty message.'}
                 </div>
               </div>
             </div>
