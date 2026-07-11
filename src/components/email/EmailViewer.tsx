@@ -94,7 +94,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     const replyTo = email.replyTo || email.fromAddress || '';
     const allTos = Array.isArray(email.toAddresses) ? email.toAddresses.map((a: any) => a.address) : [];
     const allCcs = Array.isArray(email.ccAddresses) ? email.ccAddresses.map((a: any) => a.address) : [];
-    
+
     // Combine unique addresses for the 'to' field since ComposeModal only has a single 'to' input
     const uniqueToAddresses = Array.from(new Set([replyTo, ...allTos, ...allCcs])).filter(Boolean).join(', ');
 
@@ -160,7 +160,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             {email.subject || '(No Subject)'}
           </h2>
         </div>
-        
+
         <div className="flex items-center space-x-2">
           <LabelPicker emailId={emailId} />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
@@ -173,10 +173,10 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <Forward className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
-          <button 
+          <button
             onClick={handleMarkUnread}
             disabled={updateEmailMutation.isPending}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50" 
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
             title="Mark as unread"
           >
             {updateEmailMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
@@ -218,6 +218,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             className="w-full h-full border-none"
             srcDoc={email.body.bodyHtml}
             sandbox="allow-popups allow-same-origin"
+            translate="yes"
           />
         ) : (
           <div className="whitespace-pre-wrap font-sans text-gray-800">
