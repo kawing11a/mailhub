@@ -18,6 +18,8 @@ interface UIState {
   setReadingPane: (pane: string) => void;
   setTimeFormat: (format: string) => void;
   setShowAvatars: (show: boolean) => void;
+  chatMode: boolean;
+  setChatMode: (val: boolean) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -31,6 +33,7 @@ export const useUIStore = create<UIState>()(
       readingPane: 'right',
       timeFormat: '12h',
       showAvatars: true,
+      chatMode: false,
       setSearchOpen: (open) => set({ isSearchOpen: open }),
       setComposeOpen: (open) => set({ isComposeOpen: open }),
       setMobileSidebarOpen: (open) => set({ isMobileSidebarOpen: open }),
@@ -39,6 +42,7 @@ export const useUIStore = create<UIState>()(
       setReadingPane: (pane) => set({ readingPane: pane }),
       setTimeFormat: (format) => set({ timeFormat: format }),
       setShowAvatars: (show) => set({ showAvatars: show }),
+      setChatMode: (val) => set({ chatMode: val }),
     }),
     {
       name: 'ui-preferences',
@@ -47,7 +51,8 @@ export const useUIStore = create<UIState>()(
         density: state.density,
         readingPane: state.readingPane,
         timeFormat: state.timeFormat,
-        showAvatars: state.showAvatars
+        showAvatars: state.showAvatars,
+        chatMode: state.chatMode
       }),
     }
   )
