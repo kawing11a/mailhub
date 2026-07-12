@@ -75,8 +75,15 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
       
       // Redirect to Google OAuth
       window.location.href = initUrl.toString();
+    } else if (provider === 'outlook') {
+      const initUrl = new URL('/api/accounts/oauth/microsoft/init', window.location.origin);
+      initUrl.searchParams.set('emailAddress', oauthEmail);
+      initUrl.searchParams.set('label', oauthLabel);
+      
+      // Redirect to Microsoft OAuth
+      window.location.href = initUrl.toString();
     } else {
-      setSubmitError('Microsoft OAuth is not yet implemented');
+      setSubmitError('OAuth provider is not yet implemented');
     }
   };
 

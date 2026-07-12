@@ -91,6 +91,11 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
       initUrl.searchParams.set('emailAddress', account.emailAddress);
       initUrl.searchParams.set('label', account.label);
       window.location.href = initUrl.toString();
+    } else if (account.provider === 'outlook' || account.oauthProvider === 'microsoft') {
+      const initUrl = new URL('/api/accounts/oauth/microsoft/init', window.location.origin);
+      initUrl.searchParams.set('emailAddress', account.emailAddress);
+      initUrl.searchParams.set('label', account.label);
+      window.location.href = initUrl.toString();
     } else {
       setSubmitError('Reauthorization for this provider is not yet implemented');
     }
@@ -195,20 +200,26 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                       </svg>
+                    ) : account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? (
+                      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M11.55 3.3L1.5 4.8C1.2 4.85 1 5.1 1 5.4V18.6C1 18.9 1.25 19.15 1.5 19.2L11.55 20.7C11.8 20.75 12 20.55 12 20.3V3.7C12 3.45 11.8 3.25 11.55 3.3z" fill="#0078D4"/>
+                        <path d="M22.5 5H12V19H22.5C22.75 19 23 18.75 23 18.5V5.5C23 5.25 22.75 5 22.5 5z" fill="#005A9E"/>
+                        <path d="M17.5 14H14.5C14.2 14 14 13.8 14 13.5V10.5C14 10.2 14.2 10 14.5 10H17.5C17.8 10 18 10.2 18 10.5V13.5C18 13.8 17.8 14 17.5 14z" fill="#FFFFFF"/>
+                      </svg>
                     ) : (
                       <Mail className="w-6 h-6 text-gray-600" />
                     )}
                   </div>
                   <h4 className="text-md font-medium text-gray-900 mb-1">OAuth Connection</h4>
                   <p className="text-sm text-gray-500 mb-6">
-                    This account is connected securely via {account.oauthProvider || (account.provider === 'gmail' ? 'Google' : 'OAuth')}. To fix connection issues, you must reauthorize access directly through them.
+                    This account is connected securely via {account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? 'Microsoft' : (account.oauthProvider || (account.provider === 'gmail' ? 'Google' : 'OAuth'))}. To fix connection issues, you must reauthorize access directly through them.
                   </p>
                   <button
                     type="button"
                     onClick={handleOauthReauthorize}
                     className="inline-flex items-center justify-center rounded-md border border-transparent bg-accent-600 px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-accent-700"
                   >
-                    {account.oauthProvider === 'google' || account.provider === 'gmail' ? 'Reauthorize with Gmail' : 'Reauthorize Account'}
+                    {account.oauthProvider === 'google' || account.provider === 'gmail' ? 'Reauthorize with Gmail' : account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? 'Reauthorize with Microsoft' : 'Reauthorize Account'}
                   </button>
                 </div>
               </div>
