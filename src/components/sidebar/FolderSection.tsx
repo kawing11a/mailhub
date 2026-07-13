@@ -67,7 +67,7 @@ export function FolderSection() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col p-2">
+    <div className="flex flex-none flex-col p-2">
       <div className="space-y-1">
         <div className="pt-2 pb-1">
           <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
