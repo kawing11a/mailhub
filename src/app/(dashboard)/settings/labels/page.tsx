@@ -1,11 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Mail, Search, Check, Loader2, ShieldAlert } from 'lucide-react';
+import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+
+// Palette offered when creating a label inline.
+const LABEL_COLORS = [
+  '#3B82F6', '#10B981', '#8B5CF6', '#EC4899', '#F59E0B',
+  '#EF4444', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
+];
 
 interface LabelWithAccounts {
   id: string;
@@ -34,6 +40,14 @@ export default function LabelAssignmentPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState('');
+  const [isCreatingLabel, setIsCreatingLabel] = useState(false);
+  const [newLabelName, setNewLabelName] = useState('');
+  const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
+  const createInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isCreatingLabel) createInputRef.current?.focus();
+  }, [isCreatingLabel]);
 
   const { data: authData } = useQuery({
     queryKey: ['auth-me'],
@@ -121,6 +135,48 @@ export default function LabelAssignmentPage() {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
     },
   });
+
+  const createLabel = useMutation({
+    mutationFn: async ({ name, color }: { name: string; color: string }) => {
+      const res = await fetch('/api/labels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to create label');
+      return json.label as LabelWithAccounts;
+    },
+    onSuccess: (label) => {
+      const created: LabelWithAccounts = { ...label, accountIds: label.accountIds || [] };
+      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+        ...(data || {}),
+        labels: [...(data?.labels || []), created].sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
+      }));
+      setSelectedLabelId(created.id);
+      setNewLabelName('');
+      setNewLabelColor(LABEL_COLORS[0]);
+      setIsCreatingLabel(false);
+      toast.success('Label created');
+    },
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['labels'] }),
+  });
+
+  const handleCreateLabel = (event: FormEvent) => {
+    event.preventDefault();
+    const name = newLabelName.trim();
+    if (!name || createLabel.isPending) return;
+    createLabel.mutate({ name, color: newLabelColor });
+  };
+
+  const cancelCreateLabel = () => {
+    setNewLabelName('');
+    setNewLabelColor(LABEL_COLORS[0]);
+    setIsCreatingLabel(false);
+  };
 
   const handleToggleLabel = (label: LabelWithAccounts) => {
     if (!activeAccountId || mutation.isPending) return;
@@ -265,26 +321,107 @@ export default function LabelAssignmentPage() {
                     )}
                   </h2>
                 </div>
-                {assignmentMode === 'account' && mutation.isPending ? (
-                  <span className="flex items-center space-x-1.5 text-xs text-gray-500 flex-shrink-0">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Saving…</span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-500 flex-shrink-0">
-                    {assignmentMode === 'account'
-                      ? `${assignedLabelCount} assigned`
-                      : `${labels.length} ${labels.length === 1 ? 'label' : 'labels'}`}
-                  </span>
-                )}
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  {assignmentMode === 'account' && mutation.isPending ? (
+                    <span className="flex items-center space-x-1.5 text-xs text-gray-500">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving…</span>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-500">
+                      {assignmentMode === 'account'
+                        ? `${assignedLabelCount} assigned`
+                        : `${labels.length} ${labels.length === 1 ? 'label' : 'labels'}`}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingLabel(true)}
+                    disabled={isCreatingLabel || createLabel.isPending}
+                    className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent-700 hover:bg-accent-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Add label</span>
+                  </button>
+                </div>
               </div>
-              {labels.length === 0 ? (
-                <p className="p-6 text-sm text-gray-500">
-                  No labels yet. Create one from the sidebar to get started.
-                </p>
-              ) : (
-                <div className="p-4 space-y-3">
-                  <div className="relative">
+              <div className="p-4 space-y-3">
+                {isCreatingLabel && (
+                  <form
+                    onSubmit={handleCreateLabel}
+                    className="rounded-lg border border-accent-200 bg-accent-50/40 p-3 space-y-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: newLabelColor }}
+                      />
+                      <input
+                        ref={createInputRef}
+                        type="text"
+                        value={newLabelName}
+                        onChange={(event) => setNewLabelName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') cancelCreateLabel();
+                        }}
+                        placeholder="Label name"
+                        maxLength={100}
+                        aria-label="New label name"
+                        className="flex-1 min-w-0 bg-transparent text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400"
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {LABEL_COLORS.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setNewLabelColor(color)}
+                          aria-label={`Use color ${color}`}
+                          aria-pressed={newLabelColor === color}
+                          className={clsx(
+                            'w-5 h-5 rounded-full transition-transform',
+                            newLabelColor === color
+                              ? 'ring-2 ring-offset-1 ring-gray-400 scale-110'
+                              : 'hover:scale-110'
+                          )}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelCreateLabel}
+                        className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={!newLabelName.trim() || createLabel.isPending}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {createLabel.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Check className="w-4 h-4" />
+                        )}
+                        <span>Create label</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
+                {labels.length === 0 ? (
+                  !isCreatingLabel && (
+                    <p className="py-6 text-center text-sm text-gray-500">
+                      No labels yet. Click{' '}
+                      <span className="font-medium text-gray-700">Add label</span> to create
+                      one.
+                    </p>
+                  )
+                ) : (
+                  <>
+                    <div className="relative">
                     <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
@@ -399,9 +536,10 @@ export default function LabelAssignmentPage() {
                         );
                       })
                     )}
-                  </div>
-                </div>
-              )}
+                    </div>
+                  </>
+                )}
+              </div>
             </section>
 
             {/* Email accounts column */}
