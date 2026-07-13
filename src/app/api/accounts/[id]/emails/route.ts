@@ -53,7 +53,21 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (folder) where.folder = folder;
   if (unreadOnly) where.isRead = false;
   if (labelId) {
-    where.emailLabels = { some: { labelId } };
+    const label = await prisma.label.findFirst({
+      where: { id: labelId, organizationId: auth.organizationId },
+      select: { id: true },
+    });
+    if (!label) return apiError('Label not found', 404);
+
+    // Emails match the label either directly or via account assignment
+    const assignedAccounts = await prisma.accountLabel.findMany({
+      where: { labelId },
+      select: { accountId: true },
+    });
+    where.OR = [
+      { emailLabels: { some: { labelId } } },
+      { accountId: { in: assignedAccounts.map((a) => a.accountId) } },
+    ];
   }
 
   const [emails, total] = await Promise.all([

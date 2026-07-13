@@ -123,6 +123,20 @@ export const updateLabelSchema = z.object({
   icon: z.string().max(50).optional(),
 });
 
+export const updateLabelAccountsSchema = z.object({
+  accountIds: z.array(z.string().uuid()).max(200),
+});
+
+export const bulkEmailLabelsSchema = z
+  .object({
+    emailIds: z.array(z.string().uuid()).min(1).max(100),
+    addLabelIds: z.array(z.string().uuid()).max(50).default([]),
+    removeLabelIds: z.array(z.string().uuid()).max(50).default([]),
+  })
+  .refine((d) => d.addLabelIds.length + d.removeLabelIds.length > 0, {
+    message: 'Provide at least one label to add or remove',
+  });
+
 // --- Query schemas ---
 
 export const emailListQuerySchema = z.object({
@@ -149,4 +163,6 @@ export type SendEmailInput = z.infer<typeof sendEmailSchema>;
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;
 export type CreateLabelInput = z.infer<typeof createLabelSchema>;
 export type UpdateLabelInput = z.infer<typeof updateLabelSchema>;
+export type UpdateLabelAccountsInput = z.infer<typeof updateLabelAccountsSchema>;
+export type BulkEmailLabelsInput = z.infer<typeof bulkEmailLabelsSchema>;
 export type EmailListQuery = z.infer<typeof emailListQuerySchema>;

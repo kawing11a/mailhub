@@ -3,7 +3,9 @@
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { EmailRow } from './EmailRow';
-import { Loader2, Search, Inbox, MailOpen, Mail, Star, StarOff, Trash2, Reply, ReplyAll, Forward } from 'lucide-react';
+import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
+import { AccountLabelList } from '@/components/labels/AccountLabelList';
+import { Loader2, Search, Inbox, MailOpen, Mail, Star, StarOff, Trash2, Reply, ReplyAll, Forward, X } from 'lucide-react';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useSearch } from '@/hooks/useSearch';
 import toast from 'react-hot-toast';
@@ -23,21 +25,49 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const queryClient = useQueryClient();
   const { selectedAccountId, selectedFolder, setComposeDraft, setComposeModalOpen } = useAccountStore();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch('', selectedAccountId, selectedFolder);
+  const isSearching = searchQuery.length > 0;
 
-  // Close context menu on escape key
+  // Escape closes the context menu first, then clears the selection
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setContextMenu(null);
+      if (e.key === 'Escape') {
+        // Let focused fields (e.g. the label picker's search) handle Escape themselves
+        const target = e.target as HTMLElement | null;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+        if (contextMenu) {
+          setContextMenu(null);
+        } else {
+          setSelectedIds(new Set());
+        }
+      }
     };
-    
-    if (contextMenu) {
+
+    if (contextMenu || selectedIds.size > 0) {
       document.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [contextMenu]);
+  }, [contextMenu, selectedIds.size]);
+
+  // Selection is transient: reset when the viewed list changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [selectedAccountId, selectedFolder, isSearching]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const handleContextMenu = (e: React.MouseEvent, email: any) => {
     e.preventDefault();
@@ -251,6 +281,22 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const emailsToDisplay = searchQuery ? searchResults : flatEmails;
   const loading = isLoading || isSearchLoading;
 
+  // Derive the live selection from the list so removed emails drop out automatically
+  const selectedEmails = useMemo(
+    () => flatEmails.filter((e: any) => selectedIds.has(e.id)),
+    [flatEmails, selectedIds]
+  );
+  const selectedEmailIds = useMemo(() => selectedEmails.map((e: any) => e.id), [selectedEmails]);
+  const selectionLabelCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    selectedEmails.forEach((e: any) => {
+      e.emailLabels?.forEach((el: any) => {
+        counts.set(el.label.id, (counts.get(el.label.id) || 0) + 1);
+      });
+    });
+    return counts;
+  }, [selectedEmails]);
+
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
@@ -267,6 +313,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               {activeAccount.label && (
                 <p className="text-xs text-gray-500 truncate mt-0.5 ml-5">{activeAccount.emailAddress}</p>
               )}
+              <AccountLabelList
+                accountId={activeAccount.id}
+              />
             </>
           ) : (
             <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -288,6 +337,31 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         </div>
       </div>
 
+      {selectedEmails.length > 0 && !isSearching && (
+        <div className="px-4 py-2 bg-accent-50 border-b border-accent-100 flex items-center justify-between">
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-accent-700 hover:bg-accent-100 rounded-md transition-colors"
+              title="Clear selection"
+              aria-label="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <span className="text-sm font-medium text-accent-700">
+              {selectedEmails.length} selected
+            </span>
+          </div>
+          <LabelAssignmentPicker
+            emailIds={selectedEmailIds}
+            labelCounts={selectionLabelCounts}
+            align="right"
+            showButtonText
+            buttonClassName="flex items-center px-3 py-1.5 bg-accent-600 hover:bg-accent-700 text-white rounded-md text-sm font-medium shadow-sm transition-colors"
+          />
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center p-8">
@@ -307,6 +381,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
                   onClick={() => handleEmailClick(email)}
                   onContextMenu={handleContextMenu}
                   isSelected={selectedEmailId === email.id}
+                  selectable={!isSearching}
+                  isChecked={selectedIds.has(email.id)}
+                  selectionActive={selectedEmails.length > 0}
+                  onToggleSelect={toggleSelect}
                 />
               ))}
             </div>

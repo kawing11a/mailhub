@@ -2,18 +2,34 @@
 
 import { format, isToday } from 'date-fns';
 import clsx from 'clsx';
-import { Paperclip, User } from 'lucide-react';
+import { Paperclip, User, Check } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
+import { LabelBadge } from '@/components/labels/LabelBadge';
 
 interface EmailRowProps {
   email: any;
   onClick: (id: string) => void;
   onContextMenu?: (e: React.MouseEvent, email: any) => void;
   isSelected?: boolean;
+  /** Render a multi-select checkbox zone at the left edge of the row. */
+  selectable?: boolean;
+  isChecked?: boolean;
+  /** True when any email in the list is checked — keeps all checkboxes visible. */
+  selectionActive?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-export function EmailRow({ email, onClick, onContextMenu, isSelected }: EmailRowProps) {
+export function EmailRow({
+  email,
+  onClick,
+  onContextMenu,
+  isSelected,
+  selectable,
+  isChecked,
+  selectionActive,
+  onToggleSelect,
+}: EmailRowProps) {
   const isUnread = !email.isRead;
   const { showAvatars, timeFormat } = useUIStore();
 
@@ -40,6 +56,36 @@ export function EmailRow({ email, onClick, onContextMenu, isSelected }: EmailRow
         isUnread ? 'font-semibold' : 'text-gray-600'
       )}
     >
+      {selectable && (
+        <label
+          onClick={(e) => e.stopPropagation()}
+          className={clsx(
+            'relative w-8 self-stretch flex-shrink-0 flex items-center justify-center cursor-pointer transition-opacity',
+            isChecked || selectionActive
+              ? 'opacity-100'
+              : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
+          )}
+        >
+          <span
+            className={clsx(
+              'w-5 h-5 rounded border flex items-center justify-center transition-colors',
+              isChecked
+                ? 'bg-accent-600 border-accent-600 text-white'
+                : 'border-gray-300 bg-white hover:border-accent-400'
+            )}
+          >
+            {isChecked && <Check className="w-3.5 h-3.5" />}
+          </span>
+          <input
+            type="checkbox"
+            className="sr-only"
+            checked={!!isChecked}
+            onChange={() => onToggleSelect?.(email.id)}
+            aria-label={`Select email: ${email.subject || '(No Subject)'}`}
+          />
+        </label>
+      )}
+
       {showAvatars && (
         <div className="w-12 h-8 flex-shrink-0 flex items-center justify-center">
           <div className="w-8 h-8 rounded-full bg-accent-100 flex items-center justify-center text-accent-700">
@@ -67,6 +113,18 @@ export function EmailRow({ email, onClick, onContextMenu, isSelected }: EmailRow
               — {email.snippet || ''}
             </span>
           </span>
+          {email.emailLabels?.length > 0 && (
+            <span className="hidden sm:flex items-center gap-1 ml-2 flex-shrink-0">
+              {email.emailLabels.slice(0, 2).map((el: any) => (
+                <LabelBadge key={el.label.id} label={el.label} />
+              ))}
+              {email.emailLabels.length > 2 && (
+                <span className="text-[11px] text-gray-400">
+                  +{email.emailLabels.length - 2}
+                </span>
+              )}
+            </span>
+          )}
           {email.hasAttachments && (
             <Paperclip className="w-3.5 h-3.5 text-gray-400 ml-2 flex-shrink-0" />
           )}
