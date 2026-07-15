@@ -97,9 +97,28 @@ export class IMAPConnectionManager {
 
       // Start IDLE on INBOX
       await this.startIDLE(account.id);
-    } catch (error) {
+    } catch (error: any) {
       console.error(`Failed to connect account ${account.id}:`, error);
       entry.isConnected = false;
+
+      const errorMessage = error.message?.toLowerCase() || '';
+      const isAuthError = errorMessage.includes('auth') || 
+                          errorMessage.includes('login') || 
+                          errorMessage.includes('credential');
+
+      if (isAuthError) {
+        try {
+          await prisma.emailAccount.update({
+            where: { id: account.id },
+            data: { isActive: false, authError: error.message }
+          });
+          console.log(`Disabled account ${account.id} due to auth error.`);
+        } catch (dbError) {
+          console.error(`Failed to update authError for account ${account.id}`, dbError);
+        }
+        return; // Do not schedule reconnect
+      }
+
       this.scheduleReconnect(account.id);
     }
   }

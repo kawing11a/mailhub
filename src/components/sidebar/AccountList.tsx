@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
-import { ChevronDown, Inbox, Loader2, Tag } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Inbox, Loader2, Tag } from 'lucide-react';
 import clsx from 'clsx';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -158,11 +158,14 @@ export function AccountList() {
               >
                 <div className="flex items-center space-x-3 truncate">
                   <div
-                    className="w-2 h-2 rounded-full"
+                    className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: account.color || '#3B82F6' }}
                   />
                   <span className="truncate">{account.label || account.emailAddress}</span>
                 </div>
+                {account.authError && (
+                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 ml-2" title="Authentication Error" />
+                )}
               </button>
             ))}
           </div>

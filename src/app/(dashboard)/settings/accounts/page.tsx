@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Mail, RefreshCw, Trash2, Settings } from 'lucide-react';
+import { Loader2, Plus, Mail, RefreshCw, Trash2, Settings, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { AddAccountModal } from '@/components/settings/AddAccountModal';
 import { EditAccountModal } from '@/components/settings/EditAccountModal';
@@ -196,9 +196,17 @@ function EmailAccountsContent() {
                     </div>
                     
                     <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
-                      <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {account.isActive ? 'Active' : 'Inactive'}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {account.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        {account.authError && (
+                          <span className="flex items-center text-red-600 text-xs font-medium" title={account.authError}>
+                            <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                            Auth Error
+                          </span>
+                        )}
+                      </div>
                       
                       <div className="flex items-center space-x-1.5 text-xs text-gray-500" title="Last Synced">
                         <RefreshCw className="w-3.5 h-3.5" />

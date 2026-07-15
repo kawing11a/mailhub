@@ -173,11 +173,18 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                     <AlertTriangle className="h-5 w-5 text-yellow-400" aria-hidden="true" />
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-yellow-700">
+                    <p className="text-sm text-yellow-700 font-medium">
                       This account is currently inactive due to connection or authentication issues. 
+                    </p>
+                    {account.authError && (
+                      <p className="mt-1 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-100">
+                        <span className="font-semibold">Error:</span> {account.authError}
+                      </p>
+                    )}
+                    <p className="mt-2 text-sm text-yellow-700">
                       {isOauth 
-                        ? ' Reauthorize with your provider to restore the connection.' 
-                        : ' Please update your IMAP/SMTP credentials below to restore the connection.'}
+                        ? 'Reauthorize with your provider to restore the connection.' 
+                        : 'Please update your IMAP/SMTP credentials below to restore the connection.'}
                     </p>
                   </div>
                 </div>
