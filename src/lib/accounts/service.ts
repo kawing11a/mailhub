@@ -94,6 +94,7 @@ export async function updateAccount(
   // If we are updating connection settings, re-activate the account to trigger a sync
   if (input.imapHost || input.smtpHost || input.password || input.username) {
     data.isActive = true;
+    data.authError = null;
   }
 
   const account = await prisma.emailAccount.update({

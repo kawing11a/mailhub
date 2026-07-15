@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       color: true,
       avatarInitials: true,
       isActive: true,
+      authError: true,
       lastSyncedAt: true,
       createdAt: true,
     },
