@@ -22,6 +22,8 @@ interface DashboardAccount {
   label: string;
   emailAddress: string;
   color: string | null;
+  lastSyncedAt?: string | null;
+  authError?: string | null;
 }
 
 interface DashboardActivity {
@@ -30,6 +32,15 @@ interface DashboardActivity {
   createdAt: string;
   metadata: { subject?: string } | null;
   user: { name: string } | null;
+  account: { emailAddress: string } | null;
+}
+
+interface DashboardEmail {
+  id: string;
+  subject: string | null;
+  fromName: string | null;
+  fromAddress: string | null;
+  receivedAt: string | null;
   account: { emailAddress: string } | null;
 }
 
@@ -44,6 +55,11 @@ interface DashboardData {
   };
   recentActivity: DashboardActivity[];
   accounts: DashboardAccount[];
+  recentEmails: DashboardEmail[];
+  systemHealth: {
+    sync: { active: number; waiting: number; failed: number; completed: number; delayed: number; };
+    search: { active: number; waiting: number; failed: number; completed: number; delayed: number; };
+  } | null;
 }
 
 export default function OverviewPage() {
@@ -60,6 +76,7 @@ export default function OverviewPage() {
       return res.json();
     },
     placeholderData: (previousData) => previousData,
+    refetchInterval: 10000,
   });
 
   const changeScope = () => {
@@ -86,7 +103,7 @@ export default function OverviewPage() {
 
   if (!data) return null;
 
-  const { stats, recentActivity, accounts } = data;
+  const { stats, recentActivity, accounts, recentEmails, systemHealth } = data;
   const isSystem = scope === 'system';
 
   return (
@@ -214,91 +231,207 @@ export default function OverviewPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Connected Accounts */}
-          <div className={`relative lg:col-span-1 bg-white rounded-xl shadow-sm border overflow-hidden transition-colors duration-300 ${
-            isSystem ? 'border-violet-200' : 'border-blue-100'
-          }`}>
-            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="font-semibold text-gray-900">Connected Accounts</h2>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  isSystem ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  <AnimatedCount value={accounts.length} />
-                </span>
-              </div>
-            </div>
-            <div
-              key={`${scope}-${accounts.map((account) => account.id).join('-')}`}
-              className="dashboard-panel-change divide-y divide-gray-100"
-            >
-              {accounts.length === 0 ? (
-                <div className="p-4 text-sm text-gray-500 text-center">No accounts connected yet.</div>
-              ) : (
-                accounts.map((account) => (
-                  <div key={account.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
-                    <div className="flex items-center space-x-3 truncate">
-                      <div 
-                        className="w-3 h-3 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: account.color || '#3B82F6' }}
-                      />
-                      <div className="truncate">
-                        <p className="text-sm font-medium text-gray-900 truncate">{account.label}</p>
-                        <p className="text-xs text-gray-500 truncate">{account.emailAddress}</p>
+          <div className="flex flex-col gap-6 lg:col-span-1">
+            {systemHealth && (
+              <div className="bg-white rounded-xl shadow-sm border border-violet-200 overflow-hidden">
+                <div className="p-4 border-b border-gray-100 bg-violet-50/50">
+                  <h2 className="font-semibold text-gray-900 flex items-center space-x-2">
+                    <Activity className="w-4 h-4 text-violet-500" />
+                    <span>System Health (Queues)</span>
+                  </h2>
+                </div>
+                <div className="p-4 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Sync Worker</div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Active</div>
+                        <div className="text-sm font-bold text-blue-600">{systemHealth.sync.active}</div>
+                      </div>
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Waiting</div>
+                        <div className="text-sm font-bold text-gray-700">{systemHealth.sync.waiting}</div>
+                      </div>
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Failed</div>
+                        <div className={`text-sm font-bold ${systemHealth.sync.failed > 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                          {systemHealth.sync.failed}
+                        </div>
                       </div>
                     </div>
-                    <span className="text-xs font-medium px-2 py-1 bg-green-100 text-green-700 rounded-full">
-                      Active
-                    </span>
                   </div>
-                ))
-              )}
-            </div>
-            <div className="p-3 border-t border-gray-100 bg-gray-50">
-              <Link 
-                href="/settings/accounts" 
-                className="text-sm text-accent-600 hover:text-accent-700 font-medium block text-center"
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wider">Search Worker</div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Active</div>
+                        <div className="text-sm font-bold text-blue-600">{systemHealth.search.active}</div>
+                      </div>
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Waiting</div>
+                        <div className="text-sm font-bold text-gray-700">{systemHealth.search.waiting}</div>
+                      </div>
+                      <div className="flex-1 bg-gray-50 rounded-md p-2 text-center border border-gray-100">
+                        <div className="text-xs text-gray-400">Failed</div>
+                        <div className={`text-sm font-bold ${systemHealth.search.failed > 0 ? 'text-red-600' : 'text-gray-700'}`}>
+                          {systemHealth.search.failed}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className={`relative bg-white rounded-xl shadow-sm border overflow-hidden transition-colors duration-300 ${
+              isSystem ? 'border-violet-200' : 'border-blue-100'
+            }`}>
+              <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="flex items-center justify-between gap-3">
+                  <h2 className="font-semibold text-gray-900 flex items-center space-x-2">
+                    <Globe2 className="w-4 h-4 text-gray-400" />
+                    <span>Sync Status</span>
+                  </h2>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    isSystem ? 'bg-violet-100 text-violet-700' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    <AnimatedCount value={accounts.length} />
+                  </span>
+                </div>
+              </div>
+              <div
+                key={`${scope}-${accounts.map((account) => account.id).join('-')}`}
+                className="dashboard-panel-change divide-y divide-gray-100 max-h-[400px] overflow-y-auto"
               >
-                Manage Accounts
-              </Link>
+                {accounts.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500 text-center">No accounts connected yet.</div>
+                ) : (
+                  accounts.map((account) => (
+                    <div key={account.id} className="p-4 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center space-x-3 truncate">
+                        <div 
+                          className="w-3 h-3 rounded-full flex-shrink-0" 
+                          style={{ backgroundColor: account.color || '#3B82F6' }}
+                        />
+                        <div className="truncate pr-2">
+                          <p className="text-sm font-medium text-gray-900 truncate">{account.label}</p>
+                          <p className="text-xs text-gray-500 truncate">{account.emailAddress}</p>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {account.authError ? (
+                          <span className="text-[10px] font-medium px-2 py-1 bg-red-100 text-red-700 rounded-full" title={account.authError}>
+                            Error
+                          </span>
+                        ) : account.lastSyncedAt ? (
+                          <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-gray-500 font-medium">Synced</span>
+                            <span className="text-[10px] text-gray-400">
+                              {new Date(account.lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-[10px] font-medium px-2 py-1 bg-yellow-100 text-yellow-700 rounded-full">
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="p-3 border-t border-gray-100 bg-gray-50">
+                <Link 
+                  href="/settings/accounts" 
+                  className="text-sm text-accent-600 hover:text-accent-700 font-medium block text-center"
+                >
+                  Manage Accounts
+                </Link>
+              </div>
             </div>
           </div>
 
-          {/* Recent Activity */}
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-              <h2 className="font-semibold text-gray-900 flex items-center space-x-2">
-                <Activity className="w-4 h-4 text-gray-400" />
-                <span>Recent Activity</span>
-              </h2>
-            </div>
-            <div key={`${scope}-${recentActivity.map((activity) => activity.id).join('-')}`} className="dashboard-panel-change divide-y divide-gray-100">
-              {recentActivity.length === 0 ? (
-                <div className="p-8 text-sm text-gray-500 text-center">No recent activity found.</div>
-              ) : (
-                recentActivity.map((activity) => (
-                  <div key={activity.id} className="p-4 flex items-start space-x-4">
-                    <div className="w-8 h-8 rounded bg-accent-50 text-accent-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      {activity.action === 'EMAIL_SENT' ? <Send className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 font-medium">
-                        {activity.action.replace('_', ' ')}
-                      </p>
-                      <p className="text-sm text-gray-500 mt-0.5 truncate">
-                        {activity.user?.name} via {activity.account?.emailAddress || 'Unknown Account'}
-                      </p>
-                      {activity.metadata?.subject && (
-                        <p className="text-xs text-gray-400 mt-1 italic">
-                          "{activity.metadata.subject}"
+          {/* Recent Activity & Recent Emails */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            
+            {/* Recent Inbox Messages */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center space-x-2">
+                <Mail className="w-4 h-4 text-blue-500" />
+                <h2 className="font-semibold text-gray-900">Live Inbox Feed</h2>
+                <div className="ml-auto flex items-center space-x-2 text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent-500"></span>
+                  </span>
+                  Live Updates
+                </div>
+              </div>
+              <div key={`emails-${recentEmails.map(e => e.id).join('-')}`} className="dashboard-panel-change divide-y divide-gray-100">
+                {recentEmails.length === 0 ? (
+                  <div className="p-8 text-sm text-gray-500 text-center">No recent emails found.</div>
+                ) : (
+                  recentEmails.map((email) => (
+                    <div key={email.id} className="p-4 flex items-start space-x-4 hover:bg-gray-50 transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-bold">
+                        {email.fromName ? email.fromName.charAt(0).toUpperCase() : '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900 font-medium truncate">
+                          {email.fromName || email.fromAddress}
                         </p>
-                      )}
+                        <p className="text-sm text-gray-800 mt-0.5 truncate font-semibold">
+                          {email.subject || '(No Subject)'}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1 truncate">
+                          To: {email.account?.emailAddress}
+                        </p>
+                      </div>
+                      <div className="text-xs text-gray-400 whitespace-nowrap">
+                        {email.receivedAt ? new Date(email.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-400 whitespace-nowrap">
-                      {new Date(activity.createdAt).toLocaleDateString()}
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="font-semibold text-gray-900 flex items-center space-x-2">
+                  <Activity className="w-4 h-4 text-gray-400" />
+                  <span>Recent Activity</span>
+                </h2>
+              </div>
+              <div key={`${scope}-${recentActivity.map((activity) => activity.id).join('-')}`} className="dashboard-panel-change divide-y divide-gray-100">
+                {recentActivity.length === 0 ? (
+                  <div className="p-8 text-sm text-gray-500 text-center">No recent activity found.</div>
+                ) : (
+                  recentActivity.map((activity) => (
+                    <div key={activity.id} className="p-4 flex items-start space-x-4">
+                      <div className="w-8 h-8 rounded bg-accent-50 text-accent-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        {activity.action === 'EMAIL_SENT' ? <Send className="w-4 h-4" /> : <Activity className="w-4 h-4" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-900 font-medium">
+                          {activity.action.replace('_', ' ')}
+                        </p>
+                        <p className="text-sm text-gray-500 mt-0.5 truncate">
+                          {activity.user?.name} via {activity.account?.emailAddress || 'Unknown Account'}
+                        </p>
+                        {activity.metadata?.subject && (
+                          <p className="text-xs text-gray-400 mt-1 italic">
+                            "{activity.metadata.subject}"
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 whitespace-nowrap">
+                        {new Date(activity.createdAt).toLocaleDateString()}
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </div>

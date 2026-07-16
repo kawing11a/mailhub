@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { authenticate, apiResponse, requireAdmin } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
+import { syncQueue, searchQueue } from '@/lib/queue/client';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -31,7 +32,10 @@ export async function GET(req: NextRequest) {
       unreadEmails,
       sentEmails,
       recentActivity,
-      accounts
+      accounts,
+      recentEmails,
+      syncQueueStats,
+      searchQueueStats
     ] = await Promise.all([
       prisma.emailAccount.count({ where: accountFilter }),
       prisma.email.count({ where: { account: accountFilter } }),
@@ -58,8 +62,25 @@ export async function GET(req: NextRequest) {
           label: true,
           emailAddress: true,
           color: true,
+          lastSyncedAt: true,
+          authError: true,
         },
-      })
+      }),
+      prisma.email.findMany({
+        where: { account: accountFilter, folder: 'INBOX' },
+        orderBy: { receivedAt: 'desc' },
+        take: 5,
+        select: {
+          id: true,
+          subject: true,
+          fromName: true,
+          fromAddress: true,
+          receivedAt: true,
+          account: { select: { emailAddress: true } },
+        }
+      }),
+      scope === 'system' ? syncQueue.getJobCounts() : Promise.resolve(null),
+      scope === 'system' ? searchQueue.getJobCounts() : Promise.resolve(null),
     ]);
 
     return apiResponse({
@@ -73,6 +94,11 @@ export async function GET(req: NextRequest) {
       },
       recentActivity,
       accounts,
+      recentEmails,
+      systemHealth: scope === 'system' ? {
+        sync: syncQueueStats,
+        search: searchQueueStats,
+      } : null,
     });
   } catch (error) {
     console.error('Failed to fetch dashboard data', error);
