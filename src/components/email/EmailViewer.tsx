@@ -22,18 +22,16 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const { data: email, isLoading } = useQuery({
     queryKey: ['email', emailId],
     queryFn: async () => {
-      const accountPath = selectedAccountId === 'all' ? 'all' : selectedAccountId;
-      const res = await fetch(`/api/accounts/${accountPath}/emails/${emailId}`);
+      const res = await fetch(`/api/accounts/${selectedAccountId}/emails/${emailId}`);
       if (!res.ok) throw new Error('Failed to fetch email');
       return res.json();
     },
-    enabled: !!emailId,
+    enabled: !!emailId && !!selectedAccountId,
   });
 
   const updateEmailMutation = useMutation({
     mutationFn: async ({ isRead }: { isRead: boolean }) => {
-      const accountPath = selectedAccountId === 'all' ? email.accountId : selectedAccountId;
-      const res = await fetch(`/api/accounts/${accountPath}/emails/${emailId}`, {
+      const res = await fetch(`/api/accounts/${selectedAccountId}/emails/${emailId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isRead }),
