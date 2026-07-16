@@ -3,7 +3,15 @@ import Redis from 'ioredis';
 import { meilisearch } from '@/lib/search/meilisearch';
 import { prisma } from '@/lib/db/prisma';
 
-const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true });
+const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+  lazyConnect: true,
+  retryStrategy(times) {
+    console.warn(`Redis connection lost. Retrying in search worker (attempt ${times})...`);
+    return Math.min(times * 100, 3000); // Reconnect after max 3 seconds
+  }
+});
 
 export interface SearchIndexPayload {
   emailId: string;

@@ -5,7 +5,15 @@ import { prisma } from '@/lib/db/prisma';
 import { imapManager } from '@/lib/imap/connection-manager';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
 
-const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true });
+const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+  lazyConnect: true,
+  retryStrategy(times) {
+    console.warn(`Redis connection lost. Retrying in worker (attempt ${times})...`);
+    return Math.min(times * 100, 3000); // Reconnect after max 3 seconds
+  }
+});
 
 export interface SyncJobPayload {
   accountId: string;
