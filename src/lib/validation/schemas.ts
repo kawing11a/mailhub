@@ -14,6 +14,11 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+});
+
 // --- Organization schemas ---
 
 export const updateOrgSchema = z.object({
@@ -155,6 +160,7 @@ export const emailListQuerySchema = z.object({
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type CreateUserInput = z.input<typeof createUserSchema>;
 export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
