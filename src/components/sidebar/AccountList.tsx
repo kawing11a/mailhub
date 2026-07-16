@@ -12,6 +12,7 @@ interface EmailAccount {
   label?: string | null;
   emailAddress: string;
   color?: string | null;
+  authError?: string | null;
 }
 
 interface AccountLabel {
@@ -164,7 +165,9 @@ export function AccountList() {
                   <span className="truncate">{account.label || account.emailAddress}</span>
                 </div>
                 {account.authError && (
-                  <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 ml-2" title="Authentication Error" />
+                  <span title="Authentication Error" className="flex-shrink-0 ml-2">
+                    <AlertTriangle className="w-4 h-4 text-red-500" />
+                  </span>
                 )}
               </button>
             ))}
