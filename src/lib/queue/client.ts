@@ -4,7 +4,15 @@ import Redis from 'ioredis';
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 
 const defaultOptions: QueueOptions = {
-  connection: new Redis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false, lazyConnect: true }) as any,
+  connection: new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: true,
+    retryStrategy(times) {
+      console.warn(`Redis connection lost. Retrying in queue client (attempt ${times})...`);
+      return Math.min(times * 100, 3000);
+    }
+  }) as any,
   defaultJobOptions: {
     attempts: 3,
     backoff: {
