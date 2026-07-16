@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 
 interface AccountState {
-  selectedAccountId: string | 'all';
-  setSelectedAccountId: (id: string | 'all') => void;
+  selectedAccountId: string | null;
+  setSelectedAccountId: (id: string | null) => void;
   
   isComposeModalOpen: boolean;
   setComposeModalOpen: (isOpen: boolean) => void;
@@ -19,7 +19,7 @@ interface AccountState {
 }
 
 export const useAccountStore = create<AccountState>((set) => ({
-  selectedAccountId: 'all',
+  selectedAccountId: null,
   setSelectedAccountId: (id) => set({ selectedAccountId: id }),
   
   selectedFolder: 'INBOX',

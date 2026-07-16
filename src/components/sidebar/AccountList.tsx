@@ -81,18 +81,7 @@ export function AccountList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col space-y-1 p-2">
-      <button
-        onClick={() => handleSelect('all')}
-        className={clsx(
-          'flex flex-none items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium',
-          selectedAccountId === 'all'
-            ? 'bg-accent-600 text-white shadow-sm'
-            : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
-        )}
-      >
-        <Inbox className="w-4 h-4" />
-        <span>Unified Inbox</span>
-      </button>
+
 
       <div className="flex-none pt-4 pb-1">
         <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
