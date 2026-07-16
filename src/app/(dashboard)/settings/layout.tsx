@@ -31,6 +31,7 @@ export default function SettingsLayout({
       : []),
     { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
     { name: 'Preferences', href: '/settings/preferences', icon: Settings },
+    { name: 'Security', href: '/settings/security', icon: Shield },
   ];
 
   return (
