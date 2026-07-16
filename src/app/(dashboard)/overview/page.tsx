@@ -117,72 +117,70 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {data.canViewSystem && (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={isSystem}
-              aria-label={`Switch to ${isSystem ? 'my data' : 'system data'}`}
-              aria-busy={isFetching}
-              onClick={changeScope}
-              className={`dashboard-scope-switch group relative isolate flex h-16 w-full shrink-0 items-center overflow-hidden rounded-[22px] border p-1.5 transition-all duration-300 sm:w-[328px] ${
+          <button
+            type="button"
+            role="switch"
+            aria-checked={isSystem}
+            aria-label={`Switch to ${isSystem ? 'my data' : 'system data'}`}
+            aria-busy={isFetching}
+            onClick={changeScope}
+            className={`dashboard-scope-switch group relative isolate flex h-16 w-full shrink-0 items-center overflow-hidden rounded-[22px] border p-1.5 transition-all duration-300 sm:w-[328px] ${
+              isSystem
+                ? 'border-violet-300/90 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 shadow-[0_12px_34px_-16px_rgba(124,58,237,0.75)]'
+                : 'border-blue-300/90 bg-gradient-to-br from-blue-50 via-white to-cyan-50 shadow-[0_12px_34px_-16px_rgba(37,99,235,0.75)]'
+            }`}
+          >
+            <span
+              aria-hidden="true"
+              className={`dashboard-switch-active absolute inset-y-1.5 left-1.5 z-0 w-[calc(50%-6px)] overflow-hidden rounded-[16px] transition-all duration-500 ease-out ${
                 isSystem
-                  ? 'border-violet-300/90 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 shadow-[0_12px_34px_-16px_rgba(124,58,237,0.75)]'
-                  : 'border-blue-300/90 bg-gradient-to-br from-blue-50 via-white to-cyan-50 shadow-[0_12px_34px_-16px_rgba(37,99,235,0.75)]'
+                  ? 'translate-x-full bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500 shadow-lg shadow-violet-500/30'
+                  : 'translate-x-0 bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500 shadow-lg shadow-blue-500/30'
+              }`}
+            />
+            <span
+              className={`relative z-10 flex w-1/2 items-center justify-center gap-2.5 transition-colors duration-300 ${
+                isSystem ? 'text-slate-600' : 'text-white'
               }`}
             >
-              <span
-                aria-hidden="true"
-                className={`dashboard-switch-active absolute inset-y-1.5 left-1.5 z-0 w-[calc(50%-6px)] overflow-hidden rounded-[16px] transition-all duration-500 ease-out ${
-                  isSystem
-                    ? 'translate-x-full bg-gradient-to-br from-violet-600 via-purple-600 to-fuchsia-500 shadow-lg shadow-violet-500/30'
-                    : 'translate-x-0 bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500 shadow-lg shadow-blue-500/30'
-                }`}
-              />
-              <span
-                className={`relative z-10 flex w-1/2 items-center justify-center gap-2.5 transition-colors duration-300 ${
-                  isSystem ? 'text-slate-600' : 'text-white'
-                }`}
-              >
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
-                  isSystem ? 'bg-white text-blue-600 shadow-sm' : 'bg-white/18 text-white ring-1 ring-white/20'
-                }`}>
-                  <UserRound className="h-[18px] w-[18px] transition-transform duration-300 group-hover:scale-110" />
-                </span>
-                <span className="flex flex-col items-start leading-none">
-                  <span className="text-sm font-bold">My Data</span>
-                  <span className={`mt-1 text-[10px] font-semibold tracking-wide ${isSystem ? 'text-slate-400' : 'text-blue-100'}`}>
-                    PERSONAL
-                  </span>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
+                isSystem ? 'bg-white text-blue-600 shadow-sm' : 'bg-white/18 text-white ring-1 ring-white/20'
+              }`}>
+                <UserRound className="h-[18px] w-[18px] transition-transform duration-300 group-hover:scale-110" />
+              </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-sm font-bold">My Data</span>
+                <span className={`mt-1 text-[10px] font-semibold tracking-wide ${isSystem ? 'text-slate-400' : 'text-blue-100'}`}>
+                  PERSONAL
                 </span>
               </span>
-              <span
-                className={`relative z-10 flex w-1/2 items-center justify-center gap-2.5 transition-colors duration-300 ${
-                  isSystem ? 'text-white' : 'text-slate-600'
-                }`}
-              >
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
-                  isSystem ? 'bg-white/18 text-white ring-1 ring-white/20' : 'bg-white text-violet-600 shadow-sm'
-                }`}>
-                  <Globe2 className={`h-[18px] w-[18px] transition-transform duration-500 ${isSystem ? 'rotate-180' : ''}`} />
-                </span>
-                <span className="flex flex-col items-start leading-none">
-                  <span className="text-sm font-bold">System</span>
-                  <span className={`mt-1 text-[10px] font-semibold tracking-wide ${isSystem ? 'text-violet-100' : 'text-slate-400'}`}>
-                    ALL DATA
-                  </span>
+            </span>
+            <span
+              className={`relative z-10 flex w-1/2 items-center justify-center gap-2.5 transition-colors duration-300 ${
+                isSystem ? 'text-white' : 'text-slate-600'
+              }`}
+            >
+              <span className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-300 ${
+                isSystem ? 'bg-white/18 text-white ring-1 ring-white/20' : 'bg-white text-violet-600 shadow-sm'
+              }`}>
+                <Globe2 className={`h-[18px] w-[18px] transition-transform duration-500 ${isSystem ? 'rotate-180' : ''}`} />
+              </span>
+              <span className="flex flex-col items-start leading-none">
+                <span className="text-sm font-bold">System</span>
+                <span className={`mt-1 text-[10px] font-semibold tracking-wide ${isSystem ? 'text-violet-100' : 'text-slate-400'}`}>
+                  ALL DATA
                 </span>
               </span>
-              <span
-                aria-hidden="true"
-                className={`absolute bottom-1.5 z-20 h-1.5 w-1.5 rounded-full ring-2 ring-white transition-all duration-500 ${
-                  isSystem
-                    ? 'left-[calc(100%-14px)] bg-fuchsia-300 shadow-[0_0_8px_rgba(240,171,252,0.9)]'
-                    : 'left-2.5 bg-cyan-200 shadow-[0_0_8px_rgba(165,243,252,0.9)]'
-                }`}
-              />
-            </button>
-          )}
+            </span>
+            <span
+              aria-hidden="true"
+              className={`absolute bottom-1.5 z-20 h-1.5 w-1.5 rounded-full ring-2 ring-white transition-all duration-500 ${
+                isSystem
+                  ? 'left-[calc(100%-14px)] bg-fuchsia-300 shadow-[0_0_8px_rgba(240,171,252,0.9)]'
+                  : 'left-2.5 bg-cyan-200 shadow-[0_0_8px_rgba(165,243,252,0.9)]'
+              }`}
+            />
+          </button>
         </div>
 
       {/* Top Stats Cards */}

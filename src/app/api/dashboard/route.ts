@@ -9,13 +9,8 @@ export async function GET(req: NextRequest) {
   const { organizationId, role, userId } = auth;
   const scope = req.nextUrl.searchParams.get('scope') === 'system' ? 'system' : 'user';
 
-  if (scope === 'system') {
-    const adminError = requireAdmin(auth);
-    if (adminError) return adminError;
-  }
-
   const accountFilter = scope === 'system'
-    ? {}
+    ? { organizationId }
     : role !== 'admin'
       ? {
           organizationId,
@@ -24,7 +19,7 @@ export async function GET(req: NextRequest) {
       : { organizationId };
 
   const activityFilter = scope === 'system'
-    ? {}
+    ? { organizationId }
     : role !== 'admin'
       ? { organizationId, account: accountFilter }
       : { organizationId };
