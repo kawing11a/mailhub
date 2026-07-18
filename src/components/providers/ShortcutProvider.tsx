@@ -22,8 +22,9 @@ export function ShortcutProvider({ children }: { children: React.ReactNode }) {
         setSearchOpen(!isSearchOpen);
       }
 
-      // Cmd+C or Ctrl+C for Compose (only if not in an input, otherwise it conflicts with Copy)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && !isInput) {
+      // Cmd+C or Ctrl+C for Compose (only if not in an input and no text is selected, otherwise it conflicts with Copy)
+      const hasSelection = window.getSelection()?.toString() !== '';
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && !isInput && !hasSelection) {
         e.preventDefault();
         setComposeModalOpen(true);
       }
