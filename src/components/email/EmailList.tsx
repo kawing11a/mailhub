@@ -26,7 +26,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const { selectedAccountId, selectedFolder, setComposeDraft, setComposeModalOpen } = useAccountStore();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch('', selectedAccountId, selectedFolder);
+  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch('', selectedAccountId || undefined, selectedFolder);
   const isSearching = searchQuery.length > 0;
 
   // Escape closes the context menu first, then clears the selection

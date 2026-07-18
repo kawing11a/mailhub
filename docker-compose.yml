@@ -26,6 +26,7 @@ services:
     environment:
       MEILI_MASTER_KEY: "meilisearch_dev_master_key_123"
       MEILI_ENV: "development"
+      MEILI_EXPERIMENTAL_ALLOWED_IP_NETWORKS: "any"
     ports:
       - "7700:7700"
     volumes:
