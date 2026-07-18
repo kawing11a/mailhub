@@ -27,7 +27,7 @@ export class IMAPConnectionManager {
    * Initialize an IMAP connection for a single account.
    * Opens connection, enters IDLE on INBOX.
    */
-  async initializeAccount(account: EmailAccount): Promise<void> {
+  async initializeAccount(account: EmailAccount, reconnectAttempts: number = 0): Promise<void> {
     if (this.connections.has(account.id)) {
       console.log(`Account ${account.id} already connected, skipping`);
       return;
@@ -68,7 +68,7 @@ export class IMAPConnectionManager {
       accountId: account.id,
       organizationId: account.organizationId,
       isConnected: false,
-      reconnectAttempts: 0,
+      reconnectAttempts: reconnectAttempts,
     };
 
     this.connections.set(account.id, entry);
@@ -417,6 +417,10 @@ export class IMAPConnectionManager {
     const entry = this.connections.get(accountId);
     if (!entry) return;
 
+    if (entry.reconnectTimer) {
+      clearTimeout(entry.reconnectTimer);
+    }
+
     const delay = Math.min(
       BASE_RECONNECT_DELAY_MS * Math.pow(2, entry.reconnectAttempts),
       MAX_RECONNECT_DELAY_MS
@@ -425,17 +429,20 @@ export class IMAPConnectionManager {
     console.log(`Scheduling reconnect for account ${accountId} in ${delay}ms`);
 
     entry.reconnectTimer = setTimeout(async () => {
-      entry.reconnectAttempts++;
+      const currentAttempts = entry.reconnectAttempts + 1;
       try {
         const account = await prisma.emailAccount.findUnique({
           where: { id: accountId },
         });
         if (account && account.isActive) {
           this.connections.delete(accountId);
-          await this.initializeAccount(account);
+          await this.initializeAccount(account, currentAttempts);
+        } else {
+          this.connections.delete(accountId);
         }
       } catch (error) {
         console.error(`Reconnect failed for account ${accountId}:`, error);
+        entry.reconnectAttempts = currentAttempts;
         this.scheduleReconnect(accountId);
       }
     }, delay);

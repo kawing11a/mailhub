@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const auth = await authenticate(req);
     if (auth instanceof NextResponse) return auth;
     const { organizationId } = auth;
-    
+
     const url = new URL(req.url);
     const query = url.searchParams.get('q') || '';
     const limit = parseInt(url.searchParams.get('limit') || '50');
@@ -18,12 +18,16 @@ export async function GET(req: NextRequest) {
       limit,
       offset,
       filter: [`organizationId = "${organizationId}"`],
+      hybrid: {
+        semanticRatio: 0.5,
+        embedder: 'default',
+      }
     };
 
     // Parse additional filters
     const accountId = url.searchParams.get('accountId');
     if (accountId) searchParams.filter.push(`accountId = "${accountId}"`);
-    
+
     const folder = url.searchParams.get('folder');
     if (folder) searchParams.filter.push(`folder = "${folder}"`);
 
