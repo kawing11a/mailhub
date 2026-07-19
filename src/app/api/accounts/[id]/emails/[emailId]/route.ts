@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   let where: Record<string, unknown> = { id: emailId };
 
-  if (accountId !== 'all') {
+  if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
       where: { id: accountId, organizationId: auth.organizationId },
       select: { id: true },
@@ -73,7 +73,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   let where: Record<string, unknown> = { id: emailId };
 
-  if (accountId !== 'all') {
+  if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
       where: { id: accountId, organizationId: auth.organizationId },
       select: { id: true },
@@ -110,7 +110,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
   let where: Record<string, unknown> = { id: emailId };
 
-  if (accountId !== 'all') {
+  if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
       where: { id: accountId, organizationId: auth.organizationId },
       select: { id: true },

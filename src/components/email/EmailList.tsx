@@ -116,7 +116,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const handleContextAction = async (action: string) => {
     if (!contextMenu) return;
     const { email } = contextMenu;
-    const accountId = selectedAccountId === 'all' ? email.accountId : selectedAccountId;
+    const accountId = (selectedAccountId === 'all' || selectedAccountId === 'new-emails') ? email.accountId : selectedAccountId;
 
     setContextMenu(null);
 

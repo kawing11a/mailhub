@@ -22,12 +22,12 @@ export function FolderSection() {
   const { data: stats } = useQuery({
     queryKey: ['accountStats', selectedAccountId],
     queryFn: async () => {
-      if (!selectedAccountId) return null;
+      if (!selectedAccountId || selectedAccountId === 'new-emails') return null;
       const res = await fetch(`/api/accounts/${selectedAccountId}/stats`);
       if (!res.ok) throw new Error('Failed to fetch stats');
       return res.json();
     },
-    enabled: !!selectedAccountId,
+    enabled: !!selectedAccountId && selectedAccountId !== 'new-emails',
   });
 
   const handleSelect = (id: string) => {
