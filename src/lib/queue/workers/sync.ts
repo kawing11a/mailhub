@@ -57,7 +57,10 @@ export const syncWorker = new Worker<SyncJobPayload>(
       // Update account sync timestamp
       await prisma.emailAccount.update({
         where: { id: accountId },
-        data: { lastSyncedAt: new Date() }
+        data: { 
+          lastSyncedAt: new Date(),
+          ...(account.initialSyncCompletedAt ? {} : { initialSyncCompletedAt: new Date() })
+        }
       });
       
       // Trigger SSE to refresh UI instantly

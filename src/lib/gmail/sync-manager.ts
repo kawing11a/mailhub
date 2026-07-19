@@ -119,7 +119,10 @@ export class GmailSyncManager {
 
       await prisma.emailAccount.update({
         where: { id: accountId },
-        data: { lastSyncedAt: new Date() }
+        data: { 
+          lastSyncedAt: new Date(),
+          ...(account.initialSyncCompletedAt ? {} : { initialSyncCompletedAt: new Date() })
+        }
       });
       
     } catch (error) {
