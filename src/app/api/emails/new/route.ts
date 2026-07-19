@@ -20,18 +20,20 @@ export async function GET(req: NextRequest) {
           }
         : {}),
     },
-    select: { id: true, createdAt: true },
+    select: { id: true, initialSyncCompletedAt: true },
   });
 
-  if (accounts.length === 0) {
+  const readyAccounts = accounts.filter(acc => acc.initialSyncCompletedAt !== null);
+
+  if (readyAccounts.length === 0) {
     return apiResponse({ emails: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 } });
   }
 
-  // 2. Build OR conditions for each account (isRead = false, receivedAt > account.createdAt)
-  const orConditions = accounts.map(acc => ({
+  // 2. Build OR conditions for each account (isRead = false, receivedAt > account.initialSyncCompletedAt)
+  const orConditions = readyAccounts.map(acc => ({
     accountId: acc.id,
     isRead: false,
-    receivedAt: { gt: acc.createdAt },
+    receivedAt: { gt: acc.initialSyncCompletedAt! },
   }));
 
   // 3. Fetch emails

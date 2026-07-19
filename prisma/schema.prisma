@@ -58,9 +58,10 @@ model EmailAccount {
   provider        String    @db.VarChar(50)
   color           String?   @db.VarChar(7)
   avatarInitials  String?   @map("avatar_initials") @db.VarChar(3)
-  isActive        Boolean   @default(true) @map("is_active")
-  lastSyncedAt    DateTime? @map("last_synced_at") @db.Timestamptz
-  workerPartition String?   @map("worker_partition") @db.VarChar(50)
+  isActive               Boolean   @default(true) @map("is_active")
+  lastSyncedAt           DateTime? @map("last_synced_at") @db.Timestamptz
+  initialSyncCompletedAt DateTime? @map("initial_sync_completed_at") @db.Timestamptz
+  workerPartition        String?   @map("worker_partition") @db.VarChar(50)
 
   // IMAP/SMTP credentials (encrypted)
   imapHost           String?  @map("imap_host") @db.VarChar(255)
