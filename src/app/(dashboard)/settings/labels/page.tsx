@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus } from 'lucide-react';
+import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus, Pencil, Trash2 } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
@@ -45,9 +45,14 @@ export default function LabelAssignmentPage() {
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
   const createInputRef = useRef<HTMLInputElement>(null);
 
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [editLabelName, setEditLabelName] = useState('');
+  const [editLabelColor, setEditLabelColor] = useState(LABEL_COLORS[0]);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
-    if (isCreatingLabel) createInputRef.current?.focus();
-  }, [isCreatingLabel]);
+    if (editingLabelId) editInputRef.current?.focus();
+  }, [editingLabelId]);
 
   const { data: authData } = useQuery({
     queryKey: ['auth-me'],
@@ -164,6 +169,69 @@ export default function LabelAssignmentPage() {
     onError: (error: Error) => toast.error(error.message),
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['labels'] }),
   });
+
+  const updateLabel = useMutation({
+    mutationFn: async ({ id, name, color }: { id: string; name: string; color: string }) => {
+      const res = await fetch(`/api/labels/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, color }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update label');
+      return json.label as LabelWithAccounts;
+    },
+    onSuccess: (updated) => {
+      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+        ...(data || {}),
+        labels: (data?.labels || []).map(l => l.id === updated.id ? { ...updated, accountIds: l.accountIds || [] } : l).sort((a, b) =>
+          a.name.localeCompare(b.name)
+        ),
+      }));
+      setEditingLabelId(null);
+      toast.success('Label updated');
+    },
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['labels'] }),
+  });
+
+  const deleteLabel = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/labels/${id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to delete label');
+      return id;
+    },
+    onSuccess: (id) => {
+      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+        ...(data || {}),
+        labels: (data?.labels || []).filter(l => l.id !== id),
+      }));
+      if (selectedLabelId === id) setSelectedLabelId(null);
+      toast.success('Label deleted');
+    },
+    onError: (error: Error) => toast.error(error.message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['labels'] }),
+  });
+
+  const startEditing = (label: LabelWithAccounts) => {
+    setEditingLabelId(label.id);
+    setEditLabelName(label.name);
+    setEditLabelColor(label.color);
+  };
+
+  const cancelEditing = () => {
+    setEditingLabelId(null);
+  };
+
+  const handleUpdateLabel = (event: FormEvent) => {
+    event.preventDefault();
+    const name = editLabelName.trim();
+    if (!name || !editingLabelId || updateLabel.isPending) return;
+    updateLabel.mutate({ id: editingLabelId, name, color: editLabelColor });
+  };
 
   const handleCreateLabel = (event: FormEvent) => {
     event.preventDefault();
@@ -441,68 +509,89 @@ export default function LabelAssignmentPage() {
                           !!activeAccountId && label.accountIds?.includes(activeAccountId);
                         const isSelected = label.id === activeLabelId;
 
-                        if (assignmentMode === 'label') {
+                        if (editingLabelId === label.id) {
                           return (
-                            <button
+                            <form
                               key={label.id}
-                              type="button"
-                              aria-pressed={isSelected}
-                              onClick={() => setSelectedLabelId(label.id)}
-                              disabled={mutation.isPending}
-                              className={clsx(
-                                'w-full flex items-center justify-between p-3 border rounded-lg text-left transition-colors',
-                                mutation.isPending
-                                  ? 'cursor-wait opacity-70'
-                                  : 'cursor-pointer hover:bg-gray-50',
-                                isSelected
-                                  ? 'border-accent-300 bg-accent-50 ring-1 ring-accent-200'
-                                  : 'border-gray-200'
-                              )}
+                              onSubmit={handleUpdateLabel}
+                              className="rounded-lg border border-accent-300 bg-white p-3 space-y-3 ring-1 ring-accent-200 shadow-sm"
                             >
-                              <span className="flex items-center space-x-2.5 min-w-0">
+                              <div className="flex items-center gap-2">
                                 <span
                                   className="w-3 h-3 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: label.color }}
+                                  style={{ backgroundColor: editLabelColor }}
                                 />
-                                <span className="text-sm font-medium text-gray-900 truncate">
-                                  {label.name}
-                                </span>
-                              </span>
-                              <span className="flex items-center space-x-2 flex-shrink-0 ml-3">
-                                <span className="text-xs text-gray-400">
-                                  {label.accountIds?.length || 0}{' '}
-                                  {(label.accountIds?.length || 0) === 1
-                                    ? 'account'
-                                    : 'accounts'}
-                                </span>
-                                <span
-                                  className={clsx(
-                                    'w-5 h-5 rounded-full border flex items-center justify-center',
-                                    isSelected
-                                      ? 'bg-accent-600 border-accent-600 text-white'
-                                      : 'border-gray-300'
-                                  )}
+                                <input
+                                  ref={editInputRef}
+                                  type="text"
+                                  value={editLabelName}
+                                  onChange={(event) => setEditLabelName(event.target.value)}
+                                  onKeyDown={(event) => {
+                                    if (event.key === 'Escape') cancelEditing();
+                                  }}
+                                  placeholder="Label name"
+                                  maxLength={100}
+                                  className="flex-1 min-w-0 bg-transparent text-sm font-medium text-gray-900 outline-none placeholder:text-gray-400"
+                                />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {LABEL_COLORS.map((color) => (
+                                  <button
+                                    key={color}
+                                    type="button"
+                                    onClick={() => setEditLabelColor(color)}
+                                    className={clsx(
+                                      'w-5 h-5 rounded-full transition-transform',
+                                      editLabelColor === color
+                                        ? 'ring-2 ring-offset-1 ring-gray-400 scale-110'
+                                        : 'hover:scale-110'
+                                    )}
+                                    style={{ backgroundColor: color }}
+                                  />
+                                ))}
+                              </div>
+                              <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this label?')) {
+                                      deleteLabel.mutate(label.id);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                                  disabled={deleteLabel.isPending}
                                 >
-                                  {isSelected && <Check className="w-3.5 h-3.5" />}
-                                </span>
-                              </span>
-                            </button>
+                                  {deleteLabel.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                  <span>Delete</span>
+                                </button>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={cancelEditing}
+                                    className="px-3 py-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="submit"
+                                    disabled={!editLabelName.trim() || updateLabel.isPending}
+                                    className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                  >
+                                    {updateLabel.isPending ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : (
+                                      <Check className="w-3 h-3" />
+                                    )}
+                                    <span>Save</span>
+                                  </button>
+                                </div>
+                              </div>
+                            </form>
                           );
                         }
 
-                        return (
-                          <label
-                            key={label.id}
-                            className={clsx(
-                              'relative flex items-center justify-between p-3 border rounded-lg transition-colors',
-                              mutation.isPending
-                                ? 'cursor-wait opacity-70'
-                                : 'cursor-pointer hover:bg-gray-50',
-                              isAssigned
-                                ? 'border-accent-200 bg-accent-50/40'
-                                : 'border-gray-200'
-                            )}
-                          >
+                        const InnerContent = (
+                          <>
                             <span className="flex items-center space-x-2.5 min-w-0">
                               <span
                                 className="w-3 h-3 rounded-full flex-shrink-0"
@@ -512,27 +601,109 @@ export default function LabelAssignmentPage() {
                                 {label.name}
                               </span>
                             </span>
-                            <span
-                              className={clsx(
-                                'w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ml-3',
-                                isAssigned
-                                  ? 'bg-accent-600 border-accent-600 text-white'
-                                  : 'border-gray-300'
+                            <span className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                              {assignmentMode === 'label' ? (
+                                <>
+                                  <span className="text-xs text-gray-400">
+                                    {label.accountIds?.length || 0}{' '}
+                                    {(label.accountIds?.length || 0) === 1
+                                      ? 'account'
+                                      : 'accounts'}
+                                  </span>
+                                  <span
+                                    className={clsx(
+                                      'w-5 h-5 rounded-full border flex items-center justify-center',
+                                      isSelected
+                                        ? 'bg-accent-600 border-accent-600 text-white'
+                                      : 'border-gray-300'
+                                    )}
+                                  >
+                                    {isSelected && <Check className="w-3.5 h-3.5" />}
+                                  </span>
+                                </>
+                              ) : (
+                                <span
+                                  className={clsx(
+                                    'w-5 h-5 rounded border flex items-center justify-center',
+                                    isAssigned
+                                      ? 'bg-accent-600 border-accent-600 text-white'
+                                      : 'border-gray-300'
+                                  )}
+                                >
+                                  {isAssigned && <Check className="w-3.5 h-3.5" />}
+                                </span>
                               )}
-                            >
-                              {isAssigned && <Check className="w-3.5 h-3.5" />}
                             </span>
-                            <input
-                              type="checkbox"
-                              className="sr-only"
-                              checked={!!isAssigned}
-                              disabled={mutation.isPending}
-                              onChange={() => handleToggleLabel(label)}
-                              aria-label={`${isAssigned ? 'Remove' : 'Assign'} label ${
-                                label.name
-                              } ${isAssigned ? 'from' : 'to'} ${selectedAccount?.label}`}
-                            />
-                          </label>
+                          </>
+                        );
+
+                        return (
+                          <div
+                            key={label.id}
+                            className={clsx(
+                              'relative flex items-stretch border rounded-lg transition-colors overflow-hidden',
+                              mutation.isPending ? 'opacity-70' : '',
+                              (assignmentMode === 'label' ? isSelected : isAssigned)
+                                ? (assignmentMode === 'label' ? 'border-accent-300 bg-accent-50 ring-1 ring-accent-200' : 'border-accent-200 bg-accent-50/40')
+                                : 'border-gray-200 bg-white hover:bg-gray-50'
+                            )}
+                          >
+                            {assignmentMode === 'label' ? (
+                              <button
+                                type="button"
+                                aria-pressed={isSelected}
+                                onClick={() => setSelectedLabelId(label.id)}
+                                disabled={mutation.isPending}
+                                className={clsx(
+                                  'flex-1 flex items-center justify-between p-3 text-left transition-colors outline-none',
+                                  mutation.isPending ? 'cursor-wait' : 'cursor-pointer'
+                                )}
+                              >
+                                {InnerContent}
+                              </button>
+                            ) : (
+                              <label
+                                className={clsx(
+                                  'flex-1 flex items-center justify-between p-3 transition-colors outline-none',
+                                  mutation.isPending ? 'cursor-wait' : 'cursor-pointer'
+                                )}
+                              >
+                                {InnerContent}
+                                <input
+                                  type="checkbox"
+                                  className="sr-only"
+                                  checked={!!isAssigned}
+                                  disabled={mutation.isPending}
+                                  onChange={() => handleToggleLabel(label)}
+                                  aria-label={`${isAssigned ? 'Remove' : 'Assign'} label ${
+                                    label.name
+                                  } ${isAssigned ? 'from' : 'to'} ${selectedAccount?.label}`}
+                                />
+                              </label>
+                            )}
+                            
+                            <div className={clsx(
+                               "flex items-center px-2 border-l",
+                               (assignmentMode === 'label' ? isSelected : isAssigned)
+                                  ? (assignmentMode === 'label' ? 'border-accent-200' : 'border-accent-200')
+                                  : 'border-gray-100'
+                            )}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  startEditing(label);
+                                }}
+                                disabled={mutation.isPending}
+                                className="p-1.5 text-gray-400 hover:text-accent-600 hover:bg-accent-50 rounded transition-colors disabled:opacity-50"
+                                aria-label="Edit label"
+                                title="Edit label"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
                         );
                       })
                     )}
