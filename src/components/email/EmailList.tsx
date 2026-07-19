@@ -246,7 +246,11 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     queryFn: async ({ pageParam = 1 }) => {
       let url = `/api/accounts/${selectedAccountId}/emails`;
         
-      url += `?folder=${selectedFolder}&page=${pageParam}&limit=20`;
+      if (selectedAccountId === 'new-emails') {
+        url = '/api/emails/new';
+      } else {
+        url += `?folder=${selectedFolder}&page=${pageParam}&limit=20`;
+      }
         
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch emails');
@@ -313,21 +317,29 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
         <div className="mb-4 flex flex-col justify-center min-h-[40px]">
-          {activeAccount ? (
+          {activeAccount || selectedAccountId === 'new-emails' ? (
             <>
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                <div 
-                  className="w-3 h-3 rounded-full flex-shrink-0" 
-                  style={{ backgroundColor: activeAccount.color || '#3B82F6' }}
-                />
-                <span className="truncate">{activeAccount.label || activeAccount.emailAddress}</span>
-              </h2>
-              {activeAccount.label && (
-                <p className="text-xs text-gray-500 truncate mt-0.5 ml-5">{activeAccount.emailAddress}</p>
+              {selectedAccountId === 'new-emails' ? (
+                 <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                   <span>New Emails</span>
+                 </h2>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                    <div 
+                      className="w-3 h-3 rounded-full flex-shrink-0" 
+                      style={{ backgroundColor: activeAccount?.color || '#3B82F6' }}
+                    />
+                    <span className="truncate">{activeAccount?.label || activeAccount?.emailAddress}</span>
+                  </h2>
+                  {activeAccount?.label && (
+                    <p className="text-xs text-gray-500 truncate mt-0.5 ml-5">{activeAccount.emailAddress}</p>
+                  )}
+                  <AccountLabelList
+                    accountId={activeAccount!.id}
+                  />
+                </>
               )}
-              <AccountLabelList
-                accountId={activeAccount.id}
-              />
             </>
           ) : null}
         </div>
