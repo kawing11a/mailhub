@@ -90,12 +90,12 @@ export function SearchModal() {
 
       {/* Modal */}
       <div className="relative w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white/95 backdrop-blur-xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] transition-all border border-white/20 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200">
-        <div className="flex items-center border-b border-gray-200 px-4 py-3">
-          <Search className="h-5 w-5 text-gray-400" />
+        <div className="flex items-center border-b border-gray-200 px-5 py-4">
+          <Search className="h-6 w-6 text-gray-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
-            className="flex-1 bg-transparent px-4 py-2 text-gray-900 placeholder:text-gray-500 focus:outline-none"
+            className="flex-1 bg-transparent ml-4 text-lg text-gray-900 placeholder:text-gray-500 focus:outline-none border-0 p-0"
             placeholder="Search emails by subject, sender, or content..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -103,7 +103,7 @@ export function SearchModal() {
           {isLoading && <Loader2 className="h-5 w-5 animate-spin text-gray-400 mr-2" />}
           <button
             onClick={() => setSearchOpen(false)}
-            className="rounded-md p-1 hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="rounded-md p-1.5 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -131,7 +131,7 @@ export function SearchModal() {
                   return (
                   <li key={email.id} id={`search-result-${index}`}>
                     <button
-                      className={`w-full flex flex-col items-start px-4 py-3 rounded-xl transition-all duration-200 text-left group ${index === selectedIndex ? 'bg-gradient-to-r from-accent-50/80 to-transparent ring-1 ring-accent-200 shadow-sm transform scale-[1.01]' : 'hover:bg-gray-50/80 hover:scale-[1.005]'}`}
+                      className={`w-full flex flex-col items-start px-3 py-3 rounded-xl transition-all duration-200 text-left group ${index === selectedIndex ? 'bg-gradient-to-r from-accent-50/80 to-transparent ring-1 ring-accent-200 shadow-sm transform scale-[1.01]' : 'hover:bg-gray-50/80 hover:scale-[1.005]'}`}
                       onMouseEnter={() => setSelectedIndex(index)}
                       onClick={() => {
                         setSearchOpen(false);
@@ -183,7 +183,7 @@ export function SearchModal() {
         )}
 
         {/* Footer */}
-        <div className="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+        <div className="bg-gray-50 px-5 py-3 border-t border-gray-200 flex items-center justify-between">
           <div className="flex items-center space-x-4 text-xs text-gray-500">
             <span className="flex items-center"><kbd className="bg-white border border-gray-200 rounded px-2 py-0.5 shadow-sm mr-2 font-mono">↑↓</kbd> to navigate</span>
             <span className="flex items-center"><kbd className="bg-white border border-gray-200 rounded px-2 py-0.5 shadow-sm mr-2 font-mono">Enter</kbd> to select</span>

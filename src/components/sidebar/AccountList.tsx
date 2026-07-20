@@ -13,6 +13,7 @@ interface EmailAccount {
   emailAddress: string;
   color?: string | null;
   authError?: string | null;
+  isActive?: boolean;
 }
 
 interface AccountLabel {
@@ -63,13 +64,14 @@ export function AccountList() {
   });
 
   const labels = labelsData?.labels || [];
+  const selectedLabel = useMemo(() => labels.find((l) => l.id === selectedLabelId), [labels, selectedLabelId]);
+  
   const filteredAccounts = useMemo(() => {
     if (selectedLabelId === 'all') return accounts;
-    const selectedLabel = labels.find((label) => label.id === selectedLabelId);
     if (!selectedLabel) return accounts;
     const accountIds = new Set(selectedLabel.accountIds || []);
     return accounts.filter((account) => accountIds.has(account.id));
-  }, [accounts, labels, selectedLabelId]);
+  }, [accounts, selectedLabelId, selectedLabel]);
 
   if (isLoadingAccounts) {
     return (
@@ -100,7 +102,13 @@ export function AccountList() {
           {isLoadingLabels ? (
             <Loader2 className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
           ) : (
-            <Tag className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Tag 
+              className={clsx(
+                "pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2",
+                !selectedLabel?.color && "text-gray-400"
+              )}
+              style={selectedLabel?.color ? { color: selectedLabel.color } : undefined}
+            />
           )}
           <select
             id="account-label-filter"
@@ -108,8 +116,9 @@ export function AccountList() {
             onChange={(event) => setSelectedLabelId(event.target.value)}
             disabled={isLoadingLabels || isLabelsError || labels.length === 0}
             className="w-full appearance-none rounded-md border border-gray-200 bg-white py-2 pl-8 pr-8 text-sm text-gray-700 shadow-sm outline-none transition-colors hover:border-gray-300 focus:border-accent-500 focus:ring-2 focus:ring-accent-100 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-400"
+            style={selectedLabel?.color ? { color: selectedLabel.color, fontWeight: 500 } : undefined}
           >
-            <option value="all">
+            <option value="all" style={{ color: '#374151' }}>
               {isLoadingLabels
                 ? 'Loading labels…'
                 : isLabelsError
@@ -119,7 +128,7 @@ export function AccountList() {
                     : 'All labels'}
             </option>
             {labels.map((label) => (
-              <option key={label.id} value={label.id}>
+              <option key={label.id} value={label.id} style={{ color: label.color || undefined, fontWeight: 500 }}>
                 {label.name}
               </option>
             ))}
@@ -148,8 +157,21 @@ export function AccountList() {
               >
                 <div className="flex items-center space-x-3 truncate">
                   <div
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: account.color || '#3B82F6' }}
+                    className={clsx(
+                      "w-2 h-2 rounded-full flex-shrink-0",
+                      account.authError
+                        ? "bg-red-500"
+                        : account.isActive === false
+                          ? "bg-yellow-500"
+                          : "bg-green-500"
+                    )}
+                    title={
+                      account.authError
+                        ? "Authentication Error"
+                        : account.isActive === false
+                          ? "Sync Problem"
+                          : "Connected and syncing"
+                    }
                   />
                   <span className="truncate">{account.label || account.emailAddress}</span>
                 </div>
