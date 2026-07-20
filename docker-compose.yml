@@ -43,6 +43,8 @@ services:
       - postgres
       - redis
       - meilisearch
+    volumes:
+      - mailhub_storage:/app/.storage
 
   email-manager-worker-1:
     build: .
@@ -55,6 +57,8 @@ services:
       - postgres
       - redis
       - meilisearch
+    volumes:
+      - mailhub_storage:/app/.storage
 
   email-manager-worker-2:
     build: .
@@ -67,8 +71,11 @@ services:
       - postgres
       - redis
       - meilisearch
+    volumes:
+      - mailhub_storage:/app/.storage
 
 volumes:
   mailhub_postgres_data:
   mailhub_redis_data:
   mailhub_meili_data:
+  mailhub_storage:

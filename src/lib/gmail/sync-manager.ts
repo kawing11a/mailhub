@@ -1,9 +1,13 @@
 import { prisma } from '@/lib/db/prisma';
 import { parseEmail } from '@/lib/imap/email-parser';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { resolveThreadId } from '@/lib/imap/threading';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
 import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from './api';
+import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import type { EmailAccount } from '@prisma/client';
 
 export class GmailSyncManager {
@@ -71,7 +75,7 @@ export class GmailSyncManager {
               const batch = result.messages.slice(i, i + batchSize);
               await Promise.all(
                 batch.map((msg: any) =>
-                  this.fetchAndPersist(accessToken, accountId, account.organizationId, msg.id, folder)
+                  this.fetchAndPersist(accessToken, accountId, account.organizationId, msg.id, folder, true)
                 )
               );
             }
@@ -135,7 +139,8 @@ export class GmailSyncManager {
     accountId: string,
     organizationId: string,
     gmailMessageId: string,
-    folder: string
+    folder: string,
+    skipNotifications: boolean = false
   ): Promise<void> {
     try {
       // Check if we already have it using the gmailMessageId.
@@ -160,6 +165,21 @@ export class GmailSyncManager {
         organizationId
       );
 
+      let finalFolder = folder;
+      let isHighRisk = false;
+      let riskReason: string | null = null;
+      
+      // Only check spam for INBOX and non-historical syncs
+      if (!skipNotifications && folder === 'INBOX') {
+        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '');
+        if (aiCheck.isHighRisk) {
+          isHighRisk = true;
+          riskReason = aiCheck.reason || 'Flagged by local LLM';
+          finalFolder = 'SPAM';
+          skipNotifications = true; // Suppress notifications for SPAM
+        }
+      }
+
       const email = await prisma.$transaction(async (tx) => {
         const email = await tx.email.upsert({
           where: {
@@ -168,12 +188,15 @@ export class GmailSyncManager {
               messageId: parsed.messageId,
             },
           },
+
           create: {
             accountId,
             messageId: parsed.messageId,
             uid,
             threadId,
-            folder,
+            folder: finalFolder,
+            isHighRisk,
+            riskReason,
             subject: parsed.subject,
             snippet: parsed.snippet,
             fromAddress: parsed.fromAddress,
@@ -201,6 +224,31 @@ export class GmailSyncManager {
           },
           update: {},
         });
+
+        // Store attachments
+        if (parsed.attachments && parsed.attachments.length > 0) {
+          const storageDir = path.join(process.cwd(), '.storage', 'attachments');
+          await fs.mkdir(storageDir, { recursive: true }).catch(() => {});
+
+          for (const att of parsed.attachments) {
+            const attachmentId = randomUUID();
+            const storagePath = path.join(storageDir, attachmentId);
+            
+            await fs.writeFile(storagePath, att.content);
+            
+            await tx.attachment.create({
+              data: {
+                id: attachmentId,
+                emailId: email.id,
+                filename: att.filename,
+                contentType: att.contentType,
+                sizeBytes: att.size,
+                storagePath,
+                cid: att.cid,
+              }
+            });
+          }
+        }
         
         return email;
       });
@@ -213,55 +261,58 @@ export class GmailSyncManager {
       if (isNew) {
         await searchQueue.add('index-email', { emailId: email.id });
 
-        await redis.publish(
-          `new_email:${organizationId}`,
-          JSON.stringify({
-            event: 'new_email',
-            accountId,
-            messageId: parsed.messageId,
-            subject: parsed.subject,
-            from: parsed.fromAddress,
-            folder,
-          })
-        );
+        // Trigger SSE & Push notifications only if not skipping
+        if (!skipNotifications) {
+          await redis.publish(
+            `new_email:${organizationId}`,
+            JSON.stringify({
+              event: 'new_email',
+              accountId,
+              messageId: parsed.messageId,
+              subject: parsed.subject,
+              from: parsed.fromAddress,
+              folder,
+            })
+          );
 
-        if (folder === 'INBOX') {
-          // Send Web Push
-          try {
-            const webpush = require('web-push');
-            webpush.setVapidDetails(
-              process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
-              process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
-              process.env.VAPID_PRIVATE_KEY as string
-            );
+          if (folder === 'INBOX') {
+            // Send Web Push
+            try {
+              const webpush = require('web-push');
+              webpush.setVapidDetails(
+                process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
+                process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
+                process.env.VAPID_PRIVATE_KEY as string
+              );
 
-            const subscriptions = await prisma.pushSubscription.findMany({
-              where: { organizationId },
-            });
+              const subscriptions = await prisma.pushSubscription.findMany({
+                where: { organizationId },
+              });
 
-            const pushPayload = JSON.stringify({
-              title: `New email from ${parsed.fromAddress}`,
-              body: parsed.subject || 'No Subject',
-              url: '/inbox',
-            });
+              const pushPayload = JSON.stringify({
+                title: `New email from ${parsed.fromAddress}`,
+                body: parsed.subject || 'No Subject',
+                url: '/inbox',
+              });
 
-            const pushPromises = subscriptions.map((sub: any) => 
-              webpush.sendNotification({
-                endpoint: sub.endpoint,
-                keys: {
-                  p256dh: sub.p256dh,
-                  auth: sub.auth,
-                }
-              }, pushPayload).catch(async (err: any) => {
-                if (err.statusCode === 404 || err.statusCode === 410) {
-                  await prisma.pushSubscription.delete({ where: { id: sub.id } });
-                }
-              })
-            );
+              const pushPromises = subscriptions.map((sub: any) => 
+                webpush.sendNotification({
+                  endpoint: sub.endpoint,
+                  keys: {
+                    p256dh: sub.p256dh,
+                    auth: sub.auth,
+                  }
+                }, pushPayload).catch(async (err: any) => {
+                  if (err.statusCode === 404 || err.statusCode === 410) {
+                    await prisma.pushSubscription.delete({ where: { id: sub.id } });
+                  }
+                })
+              );
 
-            await Promise.all(pushPromises);
-          } catch (err) {
-            console.error('Failed to send Web Push:', err);
+              await Promise.all(pushPromises);
+            } catch (err) {
+              console.error('Failed to send Web Push:', err);
+            }
           }
         }
       }

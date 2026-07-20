@@ -29,10 +29,11 @@ export async function GET(req: NextRequest) {
     return apiResponse({ emails: [], pagination: { total: 0, page: 1, limit: 50, totalPages: 0 } });
   }
 
-  // 2. Build OR conditions for each account (isRead = false, receivedAt > account.initialSyncCompletedAt)
   const orConditions = readyAccounts.map(acc => ({
     accountId: acc.id,
     isRead: false,
+    folder: { notIn: ['SPAM', 'TRASH'] },
+    isHighRisk: false,
     receivedAt: { gt: acc.initialSyncCompletedAt! },
   }));
 

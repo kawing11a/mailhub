@@ -113,6 +113,8 @@ model Email {
   isRead           Boolean   @default(false) @map("is_read")
   isStarred        Boolean   @default(false) @map("is_starred")
   isDraft          Boolean   @default(false) @map("is_draft")
+  isHighRisk       Boolean   @default(false) @map("is_high_risk")
+  riskReason       String?   @map("risk_reason")
   hasAttachments   Boolean   @default(false) @map("has_attachments")
   sizeBytes        Int?      @map("size_bytes")
   receivedAt       DateTime? @map("received_at") @db.Timestamptz
