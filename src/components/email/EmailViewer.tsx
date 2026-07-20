@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
-import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail } from 'lucide-react';
+import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, Paperclip, Download } from 'lucide-react';
 import { format } from 'date-fns';
 import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { LabelBadge } from '@/components/labels/LabelBadge';
@@ -17,6 +17,9 @@ interface EmailViewerProps {
 export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const { selectedAccountId, setComposeModalOpen, setComposeDraft } = useAccountStore();
   const { showAvatars, timeFormat } = useUIStore();
+
+  const [downloadConfirmStep, setDownloadConfirmStep] = useState(0);
+  const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
   const { data: email, isLoading } = useQuery({
@@ -62,6 +65,13 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const getFormattedDate = (dateString?: string) => {
     if (!dateString) return '';
     return format(new Date(dateString), timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
+  };
+
+  const formatSize = (bytes?: number) => {
+    if (!bytes) return 'Unknown size';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleReply = () => {
@@ -235,7 +245,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         {email.body?.bodyHtml ? (
           <iframe
             title="Email Content"
-            className="w-full h-full border-none"
+            className="w-full h-full min-h-[400px] border-none"
             srcDoc={email.body.bodyHtml}
             sandbox="allow-popups allow-same-origin"
             translate="yes"
@@ -245,7 +255,132 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             {email.body?.bodyText || 'Empty message.'}
           </div>
         )}
+        
+        {/* Attachments Section */}
+        {email.attachments && email.attachments.length > 0 ? (
+          <div className="mt-8 border-t border-gray-100 pt-6">
+            <h3 className="text-sm font-medium text-gray-900 flex items-center mb-4">
+              <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
+              Attachments ({email.attachments.length})
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {email.attachments.map((att: any) => {
+                const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
+                const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
+                
+                return (
+                  <div key={att.id} className="flex items-center p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                    <div className="flex-1 min-w-0 mr-3">
+                      <p className="text-sm font-medium text-gray-900 truncate" title={att.filename}>
+                        {att.filename || 'Unnamed attachment'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formatSize(att.sizeBytes)}
+                      </p>
+                    </div>
+                    <a
+                      href={downloadUrl}
+                      download
+                      onClick={(e) => {
+                        if (isSpam) {
+                          e.preventDefault();
+                          setPendingDownloadUrl(downloadUrl);
+                          setDownloadConfirmStep(1);
+                        }
+                      }}
+                      className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
+                      title="Download"
+                    >
+                      <Download className="w-4 h-4" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : email.hasAttachments ? (
+          <div className="mt-8 border-t border-gray-100 pt-6">
+            <h3 className="text-sm font-medium text-gray-900 flex items-center mb-2">
+              <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
+              Attachments
+            </h3>
+            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+              This email has attachments, but they were not saved to the server during the initial sync. 
+              Only newly synced emails will have their attachments available for download.
+            </div>
+          </div>
+        ) : null}
       </div>
+      
+      {/* Playful Spam Warning Modal */}
+      {downloadConfirmStep > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl p-6 max-w-md w-full text-center">
+            <div className="mb-6">
+              {downloadConfirmStep === 1 && (
+                <>
+                  <h3 className="text-xl font-bold text-red-600 mb-2">Hold your horses! 🐎</h3>
+                  <p className="text-gray-600">
+                    This email is in the SPAM folder. Are you sure you want to download this file? It could be from a Nigerian Prince!
+                  </p>
+                </>
+              )}
+              {downloadConfirmStep === 2 && (
+                <>
+                  <h3 className="text-xl font-bold text-orange-600 mb-2">Really sure? 🤔</h3>
+                  <p className="text-gray-600">
+                    Like, 100% sure? We take zero responsibility if your computer starts mining crypto for hackers.
+                  </p>
+                </>
+              )}
+              {downloadConfirmStep === 3 && (
+                <>
+                  <h3 className="text-xl font-bold text-yellow-600 mb-2">Last Chance! 🛑</h3>
+                  <p className="text-gray-600">
+                    Okay, brave soul. Proceed at your own peril!
+                  </p>
+                </>
+              )}
+            </div>
+            
+            <div className="flex justify-center space-x-3">
+              <button
+                onClick={() => {
+                  setDownloadConfirmStep(0);
+                  setPendingDownloadUrl(null);
+                }}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
+              >
+                Nevermind, I'm scared 🏃‍♂️
+              </button>
+              <button
+                onClick={() => {
+                  if (downloadConfirmStep < 3) {
+                    setDownloadConfirmStep(step => step + 1);
+                  } else {
+                    // Proceed with download
+                    if (pendingDownloadUrl) {
+                      const a = document.createElement('a');
+                      a.href = pendingDownloadUrl;
+                      a.download = '';
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                    }
+                    setDownloadConfirmStep(0);
+                    setPendingDownloadUrl(null);
+                  }
+                }}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
+              >
+                {downloadConfirmStep === 1 ? "I know what I'm doing 😎" : 
+                 downloadConfirmStep === 2 ? "Yes, I like living dangerously 🎲" : 
+                 "GIVE ME THE FILE! 📥"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

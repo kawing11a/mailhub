@@ -1,10 +1,14 @@
 import { ImapFlow, FetchMessageObject } from 'imapflow';
 import { prisma } from '@/lib/db/prisma';
-import { decrypt } from '@/lib/crypto';
+import { decrypt, encrypt } from '@/lib/crypto';
 import { parseEmail } from './email-parser';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
 import { resolveThreadId } from './threading';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
+import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import type { EmailAccount } from '@prisma/client';
 
 interface ConnectionEntry {
@@ -37,9 +41,87 @@ export class IMAPConnectionManager {
       ? decrypt(account.passwordEncrypted)
       : null;
       
-    const accessToken = account.oauthAccessToken
+    let accessToken = account.oauthAccessToken
       ? decrypt(account.oauthAccessToken)
       : null;
+
+    if (accessToken && account.oauthTokenExpiry) {
+      const now = new Date();
+      if (account.oauthTokenExpiry < new Date(now.getTime() + 5 * 60000)) {
+        if (account.oauthRefreshToken) {
+          const refreshToken = decrypt(account.oauthRefreshToken);
+          try {
+            let newAccessToken: string | null = null;
+            let newExpiry: Date | null = null;
+            let newRefreshToken: string | null = null;
+
+            if (account.oauthProvider === 'microsoft') {
+              console.log(`Refreshing Microsoft OAuth token for account ${account.id}`);
+              const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  client_id: process.env.MICROSOFT_CLIENT_ID || '',
+                  client_secret: process.env.MICROSOFT_CLIENT_SECRET || '',
+                  refresh_token: refreshToken,
+                  grant_type: 'refresh_token',
+                }),
+              });
+
+              if (res.ok) {
+                const data = await res.json();
+                newAccessToken = data.access_token;
+                newExpiry = new Date(Date.now() + (data.expires_in * 1000));
+                if (data.refresh_token) newRefreshToken = data.refresh_token;
+              } else {
+                console.error(`Failed to refresh Microsoft token: ${await res.text()}`);
+              }
+            } else if (account.oauthProvider === 'google') {
+              console.log(`Refreshing Google OAuth token for account ${account.id}`);
+              const res = await fetch('https://oauth2.googleapis.com/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
+                  client_id: process.env.GOOGLE_CLIENT_ID || '',
+                  client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+                  refresh_token: refreshToken,
+                  grant_type: 'refresh_token',
+                }),
+              });
+
+              if (res.ok) {
+                const data = await res.json();
+                newAccessToken = data.access_token;
+                newExpiry = new Date(Date.now() + (data.expires_in * 1000));
+                if (data.refresh_token) newRefreshToken = data.refresh_token;
+              } else {
+                console.error(`Failed to refresh Google token: ${await res.text()}`);
+              }
+            }
+
+            if (newAccessToken && newExpiry) {
+              const updateData: any = {
+                oauthAccessToken: encrypt(newAccessToken),
+                oauthTokenExpiry: newExpiry,
+              };
+              if (newRefreshToken) {
+                updateData.oauthRefreshToken = encrypt(newRefreshToken);
+              }
+              
+              await prisma.emailAccount.update({
+                where: { id: account.id },
+                data: updateData
+              });
+              
+              accessToken = newAccessToken;
+              console.log(`Successfully refreshed OAuth token for account ${account.id}`);
+            }
+          } catch (error) {
+            console.error(`Error refreshing OAuth token for account ${account.id}:`, error);
+          }
+        }
+      }
+    }
 
     if (!account.imapHost || (!password && !accessToken)) {
       console.warn(`Account ${account.id} missing IMAP credentials, skipping`);
@@ -168,7 +250,8 @@ export class IMAPConnectionManager {
     accountId: string,
     startSeqOrUid: number | number[],
     endSeq?: number,
-    folder: string = 'INBOX'
+    folder: string = 'INBOX',
+    skipNotifications: boolean = false
   ): Promise<void> {
     const entry = this.connections.get(accountId);
     if (!entry || !entry.isConnected) return;
@@ -189,7 +272,7 @@ export class IMAPConnectionManager {
         source: true,
         uid: true,
       }, { uid: fetchByUid })) {
-        promises.push(this.persistEmail(accountId, organizationId, message, folder));
+        promises.push(this.persistEmail(accountId, organizationId, message, folder, skipNotifications));
         
         if (promises.length >= batchSize) {
           await Promise.all(promises);
@@ -212,7 +295,8 @@ export class IMAPConnectionManager {
     accountId: string,
     organizationId: string,
     message: FetchMessageObject,
-    folder: string = 'INBOX'
+    folder: string = 'INBOX',
+    skipNotifications: boolean = false
   ): Promise<void> {
     try {
       const rawSource = message.source;
@@ -226,6 +310,21 @@ export class IMAPConnectionManager {
         parsed.referencesHeader,
         organizationId
       );
+
+      let finalFolder = folder;
+      let isHighRisk = false;
+      let riskReason: string | null = null;
+      
+      // Only check spam for INBOX and non-historical syncs
+      if (!skipNotifications && folder === 'INBOX') {
+        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '');
+        if (aiCheck.isHighRisk) {
+          isHighRisk = true;
+          riskReason = aiCheck.reason || 'Flagged by local LLM';
+          finalFolder = 'SPAM';
+          skipNotifications = true; // Suppress notifications for SPAM
+        }
+      }
 
       // Persist email envelope + body in a transaction
       const email = await prisma.$transaction(async (tx) => {
@@ -241,7 +340,9 @@ export class IMAPConnectionManager {
             messageId: parsed.messageId,
             uid: message.uid ? BigInt(message.uid) : null,
             threadId,
-            folder: folder,
+            folder: finalFolder,
+            isHighRisk,
+            riskReason,
             subject: parsed.subject,
             snippet: parsed.snippet,
             fromAddress: parsed.fromAddress,
@@ -271,65 +372,94 @@ export class IMAPConnectionManager {
           update: {},
         });
         
+        // Store attachments
+        if (parsed.attachments && parsed.attachments.length > 0) {
+          const storageDir = path.join(process.cwd(), '.storage', 'attachments');
+          await fs.mkdir(storageDir, { recursive: true }).catch(() => {});
+
+          for (const att of parsed.attachments) {
+            const attachmentId = randomUUID();
+            const storagePath = path.join(storageDir, attachmentId);
+            
+            await fs.writeFile(storagePath, att.content);
+            
+            await tx.attachment.create({
+              data: {
+                id: attachmentId,
+                emailId: email.id,
+                filename: att.filename,
+                contentType: att.contentType,
+                sizeBytes: att.size,
+                storagePath,
+                cid: att.cid,
+              }
+            });
+          }
+        }
+        
         return email;
       });
 
       // Add to search indexing queue
       await searchQueue.add('index-email', { emailId: email.id });
 
-      // Publish new email event via Redis for SSE
-      await redis.publish(
-        `new_email:${organizationId}`,
-        JSON.stringify({
-          event: 'new_email',
-          accountId,
-          messageId: parsed.messageId,
-          subject: parsed.subject,
-          from: parsed.fromAddress,
-          folder: 'INBOX',
-        })
-      );
-
-      // Send Web Push to all devices subscribed to this organization
-      try {
-        const webpush = require('web-push');
-        
-        webpush.setVapidDetails(
-          process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
-          process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
-          process.env.VAPID_PRIVATE_KEY as string
-        );
-
-        const subscriptions = await prisma.pushSubscription.findMany({
-          where: { organizationId },
-        });
-
-        const pushPayload = JSON.stringify({
-          title: `New email from ${parsed.fromAddress}`,
-          body: parsed.subject || 'No Subject',
-          url: '/inbox',
-        });
-
-        const pushPromises = subscriptions.map((sub: any) => 
-          webpush.sendNotification({
-            endpoint: sub.endpoint,
-            keys: {
-              p256dh: sub.p256dh,
-              auth: sub.auth,
-            }
-          }, pushPayload).catch(async (err: any) => {
-            if (err.statusCode === 404 || err.statusCode === 410) {
-              console.log('Push subscription expired or removed, deleting from DB');
-              await prisma.pushSubscription.delete({ where: { id: sub.id } });
-            } else {
-              console.error('Push notification failed:', err);
-            }
+      // Publish new email event via Redis for SSE only if not skipping
+      if (!skipNotifications) {
+        await redis.publish(
+          `new_email:${organizationId}`,
+          JSON.stringify({
+            event: 'new_email',
+            accountId,
+            messageId: parsed.messageId,
+            subject: parsed.subject,
+            from: parsed.fromAddress,
+            folder: 'INBOX',
           })
         );
+      }
 
-        await Promise.all(pushPromises);
-      } catch (err) {
-        console.error('Failed to send Web Push:', err);
+      if (!skipNotifications) {
+        // Send Web Push to all devices subscribed to this organization
+        try {
+          const webpush = require('web-push');
+          
+          webpush.setVapidDetails(
+            process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
+            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
+            process.env.VAPID_PRIVATE_KEY as string
+          );
+
+          const subscriptions = await prisma.pushSubscription.findMany({
+            where: { organizationId },
+          });
+
+          const pushPayload = JSON.stringify({
+            title: `New email from ${parsed.fromAddress}`,
+            body: parsed.subject || 'No Subject',
+            url: '/inbox',
+          });
+
+          const pushPromises = subscriptions.map((sub: any) => 
+            webpush.sendNotification({
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              }
+            }, pushPayload).catch(async (err: any) => {
+              if (err.statusCode === 404 || err.statusCode === 410) {
+                console.log('Push subscription expired or removed, deleting from DB');
+                await prisma.pushSubscription.delete({ where: { id: sub.id } });
+              } else {
+                console.error('Push notification failed:', err);
+              }
+            })
+          );
+
+          await Promise.all(pushPromises);
+        } catch (err) {
+          console.error('Failed to send Web Push:', err);
+        }
       }
 
       console.log(`Persisted email: ${parsed.subject} (${parsed.messageId})`);
@@ -391,7 +521,7 @@ export class IMAPConnectionManager {
                 for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
                   const chunk = uids.slice(i, i + CHUNK_SIZE);
                   console.log(`Fetching UIDs chunk ${i} to ${i + chunk.length} from ${mailbox.path} (Total recent: ${uids.length})`);
-                  await this.fetchNewEmails(accountId, chunk, undefined, mappedFolder);
+                  await this.fetchNewEmails(accountId, chunk, undefined, mappedFolder, true);
                 }
               }
             }
