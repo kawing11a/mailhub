@@ -49,18 +49,14 @@ function NewEmailsContent() {
 
   return (
     <div className={clsx("flex flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
-      <div className={clsx("flex flex-col", isBottomPane ? (selectedEmailId ? "h-[45%] min-h-[300px]" : "h-full") : "w-1/3 min-w-[320px] max-w-[480px] h-full")}>
+      <div className={clsx("flex flex-col", isBottomPane ? (selectedEmailId ? "h-[45%] min-h-[300px]" : "h-full") : (selectedEmailId ? "w-1/3 min-w-[320px] max-w-[480px] h-full" : "w-full h-full"))}>
         <EmailList selectedEmailId={selectedEmailId} onSelectEmail={handleSelectEmail} />
       </div>
-      <div className={clsx("bg-white relative", isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200")}>
-        {selectedEmailId ? (
+      {selectedEmailId && (
+        <div className={clsx("bg-white relative", isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200")}>
           <EmailViewer emailId={selectedEmailId} onBack={() => handleSelectEmail(null)} />
-        ) : (
-          <div className="flex h-full flex-col items-center justify-center text-gray-500 bg-gray-50/50">
-            <p className="text-sm font-medium">Select an item to read</p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
