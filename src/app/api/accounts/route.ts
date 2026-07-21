@@ -34,18 +34,21 @@ export async function GET(req: NextRequest) {
       authError: true,
       lastSyncedAt: true,
       createdAt: true,
-      // Whether the current user has favourited this account (active rows only).
+      // The current user's favourite row for this account (active rows only),
+      // carrying the ordering so one query can drive both the sidebar and modal.
       favouritedBy: {
         where: { userId: auth.userId, deletedAt: null },
-        select: { accountId: true },
+        select: { sortOrder: true },
       },
     },
   });
 
-  // Flatten the favourite relation into a boolean flag for the client.
+  // Flatten the favourite relation into a boolean flag plus its ordering
+  // (sortOrder is null for accounts the user has not favourited).
   const result = accounts.map(({ favouritedBy, ...account }) => ({
     ...account,
     isFavourite: favouritedBy.length > 0,
+    sortOrder: favouritedBy[0]?.sortOrder ?? null,
   }));
 
   return apiResponse(result);
