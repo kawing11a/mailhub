@@ -112,7 +112,7 @@ export function AccountList() {
   }
 
   return (
-    <div className={clsx('flex flex-col space-y-1 p-2', showList ? 'min-h-0 flex-1' : 'flex-none')}>
+    <div className={clsx('flex flex-col space-y-1 p-2', !hasFavourites ? 'min-h-0 flex-1' : 'flex-none')}>
 
 
       <div className="flex-none pt-4 pb-1">
@@ -180,7 +180,10 @@ export function AccountList() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
+      <div className={clsx(
+        'overflow-y-auto overscroll-contain pr-0.5',
+        !hasFavourites ? 'min-h-0 flex-1' : 'max-h-[35vh]'
+      )}>
         {filteredAccounts.length === 0 ? (
           <p className="px-3 py-2 text-xs italic text-gray-500">
             {selectedLabelId === 'all' ? 'No accounts connected' : 'No accounts use this label'}

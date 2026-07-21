@@ -190,8 +190,8 @@ export function FavouritesSection() {
   if (favourites.length === 0) return null;
 
   return (
-    <div className="flex-none p-2">
-      <div className="flex items-center justify-between pb-1 pt-2 pl-3 pr-1">
+    <div className="flex min-h-0 flex-1 flex-col p-2">
+      <div className="flex flex-none items-center justify-between pb-1 pt-2 pl-3 pr-1">
         <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
           Favourites
         </p>
@@ -214,7 +214,7 @@ export function FavouritesSection() {
           items={favourites.map((f) => f.id)}
           strategy={verticalListSortingStrategy}
         >
-          <div className="space-y-1">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
             {favourites.map((account) => (
               <FavouriteRow
                 key={account.id}
