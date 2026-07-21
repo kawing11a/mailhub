@@ -34,10 +34,21 @@ export async function GET(req: NextRequest) {
       authError: true,
       lastSyncedAt: true,
       createdAt: true,
+      // Whether the current user has favourited this account (active rows only).
+      favouritedBy: {
+        where: { userId: auth.userId, deletedAt: null },
+        select: { accountId: true },
+      },
     },
   });
 
-  return apiResponse(accounts);
+  // Flatten the favourite relation into a boolean flag for the client.
+  const result = accounts.map(({ favouritedBy, ...account }) => ({
+    ...account,
+    isFavourite: favouritedBy.length > 0,
+  }));
+
+  return apiResponse(result);
 }
 
 export async function POST(req: NextRequest) {

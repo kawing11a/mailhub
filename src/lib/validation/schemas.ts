@@ -106,6 +106,16 @@ export const updateEmailSchema = z.object({
   isStarred: z.boolean().optional(),
 });
 
+// --- Favourite account schemas ---
+
+export const addFavouriteSchema = z.object({
+  accountId: z.string().uuid('Invalid account id'),
+});
+
+export const reorderFavouritesSchema = z.object({
+  orderedAccountIds: z.array(z.string().uuid('Invalid account id')),
+});
+
 // --- Label schemas ---
 
 export const createLabelSchema = z.object({

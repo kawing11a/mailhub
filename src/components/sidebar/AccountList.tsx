@@ -1,8 +1,9 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
-import { AlertTriangle, ChevronDown, Inbox, Loader2, Tag } from 'lucide-react';
+import { useUIStore } from '@/stores/uiStore';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, Star, Tag } from 'lucide-react';
 import clsx from 'clsx';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -14,6 +15,7 @@ interface EmailAccount {
   color?: string | null;
   authError?: string | null;
   isActive?: boolean;
+  isFavourite?: boolean;
 }
 
 interface AccountLabel {
@@ -29,8 +31,10 @@ interface LabelsResponse {
 
 export function AccountList() {
   const { selectedAccountId, setSelectedAccountId } = useAccountStore();
+  const { accountsExpanded, setAccountsExpanded } = useUIStore();
   const pathname = usePathname();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedLabelId, setSelectedLabelId] = useState('all');
 
   const handleSelect = (id: string) => {
@@ -39,6 +43,27 @@ export function AccountList() {
       router.push('/inbox');
     }
   };
+
+  // Toggle an account's favourite state. `isFavourite` is the CURRENT state:
+  // true means it's favourited, so this call removes it (soft delete); false adds it.
+  const favouriteMutation = useMutation({
+    mutationFn: async ({ accountId, isFavourite }: { accountId: string; isFavourite: boolean }) => {
+      const res = await fetch(
+        isFavourite ? `/api/favourites/${accountId}` : '/api/favourites',
+        {
+          method: isFavourite ? 'DELETE' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: isFavourite ? undefined : JSON.stringify({ accountId }),
+        }
+      );
+      if (!res.ok) throw new Error('Failed to update favourite');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['favourites'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
 
 
   const { data: accounts = [], isLoading: isLoadingAccounts } = useQuery<EmailAccount[]>({
@@ -73,6 +98,11 @@ export function AccountList() {
     return accounts.filter((account) => accountIds.has(account.id));
   }, [accounts, selectedLabelId, selectedLabel]);
 
+  // Force the list open when there's nothing favourited, otherwise honour the
+  // user's persisted collapse preference.
+  const hasFavourites = useMemo(() => accounts.some((a) => a.isFavourite), [accounts]);
+  const showList = accountsExpanded || !hasFavourites;
+
   if (isLoadingAccounts) {
     return (
       <div className="flex items-center justify-center p-4">
@@ -82,15 +112,28 @@ export function AccountList() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-1 p-2">
+    <div className={clsx('flex flex-col space-y-1 p-2', showList ? 'min-h-0 flex-1' : 'flex-none')}>
 
 
       <div className="flex-none pt-4 pb-1">
-        <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Accounts
-        </p>
+        <button
+          type="button"
+          onClick={() => setAccountsExpanded(!accountsExpanded)}
+          disabled={!hasFavourites}
+          className="flex w-full items-center gap-1 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider transition-colors hover:text-gray-700 disabled:cursor-default disabled:hover:text-gray-500"
+          title={hasFavourites ? (showList ? 'Collapse accounts' : 'Expand accounts') : undefined}
+        >
+          {hasFavourites && (
+            showList
+              ? <ChevronDown className="h-3.5 w-3.5" />
+              : <ChevronRight className="h-3.5 w-3.5" />
+          )}
+          <span>Accounts</span>
+        </button>
       </div>
 
+      {showList && (
+      <>
       <div className="flex-none px-2 pb-1">
         <label
           htmlFor="account-label-filter"
@@ -144,18 +187,25 @@ export function AccountList() {
           </p>
         ) : (
           <div className="space-y-1">
-            {filteredAccounts.map((account) => (
-              <button
+            {filteredAccounts.map((account) => {
+              const isSelected = selectedAccountId === account.id;
+              return (
+              <div
                 key={account.id}
-                onClick={() => handleSelect(account.id)}
                 className={clsx(
-                  'flex w-full items-center justify-between px-3 py-2 rounded-md transition-colors text-sm font-medium',
-                  selectedAccountId === account.id
-                    ? 'bg-accent-600 text-white shadow-sm'
-                    : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
+                  'group flex items-center rounded-md pr-1 transition-colors',
+                  isSelected
+                    ? 'bg-accent-600 shadow-sm'
+                    : 'hover:bg-gray-200'
                 )}
               >
-                <div className="flex items-center space-x-3 truncate">
+                <button
+                  onClick={() => handleSelect(account.id)}
+                  className={clsx(
+                    'flex min-w-0 flex-1 items-center space-x-3 px-3 py-2 rounded-md text-left text-sm font-medium',
+                    isSelected ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'
+                  )}
+                >
                   <div
                     className={clsx(
                       "w-2 h-2 rounded-full flex-shrink-0",
@@ -174,17 +224,43 @@ export function AccountList() {
                     }
                   />
                   <span className="truncate">{account.label || account.emailAddress}</span>
-                </div>
+                </button>
                 {account.authError && (
-                  <span title="Authentication Error" className="flex-shrink-0 ml-2">
+                  <span title="Authentication Error" className="flex-shrink-0 mr-0.5">
                     <AlertTriangle className="w-4 h-4 text-red-500" />
                   </span>
                 )}
-              </button>
-            ))}
+                <button
+                  onClick={() =>
+                    favouriteMutation.mutate({
+                      accountId: account.id,
+                      isFavourite: !!account.isFavourite,
+                    })
+                  }
+                  disabled={favouriteMutation.isPending}
+                  title={account.isFavourite ? 'Remove from favourites' : 'Add to favourites'}
+                  aria-pressed={account.isFavourite}
+                  className="flex-shrink-0 rounded p-1 transition-colors disabled:opacity-50"
+                >
+                  <Star
+                    className={clsx(
+                      'w-4 h-4 transition-colors',
+                      account.isFavourite
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : isSelected
+                          ? 'text-white/70 hover:text-white'
+                          : 'text-gray-300 hover:text-yellow-400'
+                    )}
+                  />
+                </button>
+              </div>
+              );
+            })}
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { AccountList } from './AccountList';
+import { FavouritesSection } from './FavouritesSection';
 import { FolderSection } from './FolderSection';
 import { PenSquare, Settings, LogOut, Search, LayoutDashboard, Inbox } from 'lucide-react';
 import { useAccountStore } from '@/stores/accountStore';
@@ -93,6 +94,7 @@ export function Sidebar() {
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <FavouritesSection />
         <AccountList />
         <FolderSection />
       </div>
