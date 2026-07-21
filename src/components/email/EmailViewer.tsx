@@ -46,6 +46,8 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
       if (onBack) onBack();
     },
   });
