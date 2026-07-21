@@ -145,7 +145,7 @@ export const bulkEmailLabelsSchema = z
 // --- Query schemas ---
 
 export const emailListQuerySchema = z.object({
-  folder: z.enum(['INBOX', 'SENT', 'DRAFTS', 'TRASH']).default('INBOX'),
+  folder: z.enum(['INBOX', 'SENT', 'DRAFTS', 'TRASH', 'SPAM']).default('INBOX'),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   search: z.string().optional(),
