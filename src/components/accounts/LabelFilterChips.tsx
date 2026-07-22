@@ -26,18 +26,23 @@ const CHIP_BASE =
   'flex-none cursor-pointer select-none rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors';
 
 /**
- * Single-select label filter for the sidebar: a horizontal row of colour-filled
- * chips (with a leading "All" reset chip). The row hides its scrollbar but stays
- * scrollable via the mouse wheel and by dragging.
+ * Single-select label filter chips, with a leading "All" reset chip. Two layouts:
+ * - default (`wrap` false): one horizontal row that hides its scrollbar but stays
+ *   scrollable via the mouse wheel and by dragging, with a right-edge fade. Used
+ *   in the sidebar.
+ * - `wrap` true: chips flow onto multiple rows (no scroll/drag/fade). Used in the
+ *   all-accounts modal.
  */
 export function LabelFilterChips({
   labels,
   selectedLabelId,
   onSelect,
+  wrap = false,
 }: {
   labels: AccountLabel[];
   selectedLabelId: string | null;
   onSelect: (labelId: string | null) => void;
+  wrap?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({
@@ -50,9 +55,10 @@ export function LabelFilterChips({
 
   // Vertical wheel scrolls the row horizontally, smoothly. Registered natively
   // as non-passive so preventDefault() actually stops the page from scrolling.
+  // Only relevant for the scrolling (non-wrapping) layout.
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || wrap) return;
     const onWheel = (e: WheelEvent) => {
       if (e.deltaY === 0) return;
       el.scrollBy({ left: e.deltaY, behavior: 'smooth' });
@@ -60,7 +66,7 @@ export function LabelFilterChips({
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [wrap]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
@@ -110,15 +116,8 @@ export function LabelFilterChips({
 
   const allSelected = selectedLabelId === null;
 
-  return (
-    <div
-      ref={scrollRef}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      className="flex flex-nowrap items-center gap-1.5 overflow-x-auto scrollbar-hide"
-    >
+  const chips = (
+    <>
       <button
         type="button"
         onClick={() => select(null)}
@@ -154,6 +153,28 @@ export function LabelFilterChips({
           </button>
         );
       })}
+    </>
+  );
+
+  if (wrap) {
+    return <div className="flex flex-wrap items-center gap-1.5">{chips}</div>;
+  }
+
+  return (
+    <div
+      ref={scrollRef}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      className="flex flex-nowrap items-center gap-1.5 overflow-x-auto scrollbar-hide"
+      // Fade chips out toward the right edge, hinting there's more to scroll.
+      style={{
+        maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+        WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+      }}
+    >
+      {chips}
     </div>
   );
 }

@@ -38,7 +38,7 @@ import {
   allowedAccountIdsForLabels,
   useLabels,
 } from '@/components/accounts/LabelFilterMenu';
-import { LabelFilterChips } from '@/components/sidebar/LabelFilterChips';
+import { LabelFilterChips } from '@/components/accounts/LabelFilterChips';
 
 /** How many accounts to show when the user hasn't favourited anything yet. */
 const FALLBACK_COUNT = 5;
@@ -283,6 +283,9 @@ export function AccountsSection() {
 
       {labels.length > 0 && (
         <div className="flex-none px-1 pb-2">
+          <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Quick Filter
+          </p>
           <LabelFilterChips
             labels={labels}
             selectedLabelId={selectedLabelId}

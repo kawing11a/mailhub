@@ -32,11 +32,8 @@ import {
   useFavouriteMutations,
   type SidebarAccount,
 } from '@/hooks/useFavouriteMutations';
-import {
-  allowedAccountIdsForLabels,
-  LabelFilterMenu,
-  useLabels,
-} from '@/components/accounts/LabelFilterMenu';
+import { allowedAccountIdsForLabels, useLabels } from '@/components/accounts/LabelFilterMenu';
+import { LabelFilterChips } from '@/components/accounts/LabelFilterChips';
 
 function AccountRow({
   account,
@@ -169,7 +166,7 @@ export function AllAccountsModal() {
   const pathname = usePathname();
 
   const [query, setQuery] = useState('');
-  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: accounts = [] } = useAccounts();
@@ -197,7 +194,7 @@ export function AllAccountsModal() {
     if (!isOpen) return;
     setFrozenFavouriteIds(sortedFavourites(accounts).map((a) => a.id));
     setQuery('');
-    setSelectedLabelIds(new Set());
+    setSelectedLabelId(null);
     const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => clearTimeout(t);
     // Intentionally keyed on isOpen only — we want the snapshot taken at open time.
@@ -213,12 +210,14 @@ export function AllAccountsModal() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isOpen, setOpen]);
 
-  const isFiltering = query.trim().length > 0 || selectedLabelIds.size > 0;
+  const isFiltering = query.trim().length > 0 || selectedLabelId !== null;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    // An account matches if it carries ANY of the selected labels.
-    const allowedIds = allowedAccountIdsForLabels(labels, selectedLabelIds);
+    const allowedIds = allowedAccountIdsForLabels(
+      labels,
+      selectedLabelId ? new Set([selectedLabelId]) : new Set()
+    );
 
     return accounts.filter((a) => {
       if (allowedIds && !allowedIds.has(a.id)) return false;
@@ -228,7 +227,7 @@ export function AllAccountsModal() {
         a.emailAddress.toLowerCase().includes(q)
       );
     });
-  }, [accounts, query, selectedLabelIds, labels]);
+  }, [accounts, query, selectedLabelId, labels]);
 
   // While filtering, show one flat list — group headers are noise there.
   const groups = useMemo(() => {
@@ -252,14 +251,6 @@ export function AllAccountsModal() {
       router.push('/inbox');
     }
   };
-
-  const toggleLabel = (labelId: string) =>
-    setSelectedLabelIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(labelId)) next.delete(labelId);
-      else next.add(labelId);
-      return next;
-    });
 
   const renderRow = (account: SidebarAccount) => (
     <AccountRow
@@ -306,7 +297,7 @@ export function AllAccountsModal() {
           onClick={() => setOpen(false)}
         />
 
-        <div className="relative flex max-h-[80vh] w-full transform flex-col overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:max-w-2xl">
+        <div className="relative flex h-[60vh] w-full transform flex-col overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:max-w-2xl">
           <div className="flex flex-none items-center justify-between border-b border-gray-100 px-6 py-4">
             <h3 className="text-lg font-semibold leading-6 text-gray-900">All accounts</h3>
             <button
@@ -319,8 +310,8 @@ export function AllAccountsModal() {
           </div>
 
           {/* Search + label filter */}
-          <div className="flex flex-none items-center gap-2 border-b border-gray-100 px-6 py-3">
-            <div className="relative flex-1">
+          <div className="flex flex-none flex-col gap-3 border-b border-gray-100 px-6 py-3">
+            <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <input
                 ref={inputRef}
@@ -331,13 +322,14 @@ export function AllAccountsModal() {
               />
             </div>
 
-            <LabelFilterMenu
-              className="flex-none"
-              labels={labels}
-              selectedLabelIds={selectedLabelIds}
-              onToggle={toggleLabel}
-              onClear={() => setSelectedLabelIds(new Set())}
-            />
+            {labels.length > 0 && (
+              <LabelFilterChips
+                wrap
+                labels={labels}
+                selectedLabelId={selectedLabelId}
+                onSelect={setSelectedLabelId}
+              />
+            )}
           </div>
 
           {/* Account list */}
