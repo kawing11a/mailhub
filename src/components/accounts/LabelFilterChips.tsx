@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import type { AccountLabel } from '@/components/accounts/LabelFilterMenu';
 
@@ -53,6 +53,10 @@ export function LabelFilterChips({
     captured: false,
   });
 
+  // The right-edge fade shows only while the row can still scroll right, so it
+  // disappears once scrolled to the end (or when nothing overflows at all).
+  const [showRightFade, setShowRightFade] = useState(false);
+
   // Vertical wheel scrolls the row horizontally, smoothly. Registered natively
   // as non-passive so preventDefault() actually stops the page from scrolling.
   // Only relevant for the scrolling (non-wrapping) layout.
@@ -67,6 +71,26 @@ export function LabelFilterChips({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [wrap]);
+
+  // Recompute the fade on scroll and on size/content changes. Re-observing when
+  // `labels` changes also refreshes it (ResizeObserver fires on observe), so the
+  // fade stays correct as chips are added/removed. Keyed off the ResizeObserver
+  // callback and scroll events rather than the effect body — no setState-in-effect.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || wrap) return;
+    const update = () => {
+      // 1px tolerance for sub-pixel rounding at the end of the scroll range.
+      setShowRightFade(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    };
+    el.addEventListener('scroll', update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      ro.disconnect();
+    };
+  }, [wrap, labels]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const el = scrollRef.current;
@@ -168,11 +192,16 @@ export function LabelFilterChips({
       onPointerUp={endDrag}
       onPointerCancel={endDrag}
       className="flex flex-nowrap items-center gap-1.5 overflow-x-auto scrollbar-hide"
-      // Fade chips out toward the right edge, hinting there's more to scroll.
-      style={{
-        maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
-        WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
-      }}
+      // Fade chips out toward the right edge, but only while more remains to the
+      // right — the fade clears once scrolled to the end.
+      style={
+        showRightFade
+          ? {
+              maskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+              WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 24px), transparent)',
+            }
+          : undefined
+      }
     >
       {chips}
     </div>
