@@ -6,7 +6,7 @@ import { EmailRow } from './EmailRow';
 import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { AccountLabelList } from '@/components/labels/AccountLabelList';
 import { Loader2, Search, Inbox, MailOpen, Mail, Star, StarOff, Trash2, Reply, ReplyAll, Forward, X } from 'lucide-react';
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useSearch } from '@/hooks/useSearch';
 import toast from 'react-hot-toast';
 
@@ -25,6 +25,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const queryClient = useQueryClient();
   const { selectedAccountId, selectedFolder, setComposeDraft, setComposeModalOpen } = useAccountStore();
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  // Final on-screen position after clamping the menu to the viewport. Null until
+  // the menu is measured (falls back to the raw cursor point for that one frame).
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch('', selectedAccountId || undefined, selectedFolder);
   const isSearching = searchQuery.length > 0;
@@ -71,12 +75,27 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
   const handleContextMenu = (e: React.MouseEvent, email: any) => {
     e.preventDefault();
+    // Reset so the menu is re-measured and re-clamped for this new position.
+    setMenuPos(null);
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       email,
     });
   };
+
+  // Once the menu is rendered, measure it and clamp so it never runs off-screen
+  // (e.g. right-clicking near the bottom). useLayoutEffect corrects the position
+  // before paint, so there's no visible jump.
+  useLayoutEffect(() => {
+    const el = contextMenuRef.current;
+    if (!contextMenu || !el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const left = Math.max(8, Math.min(contextMenu.x, window.innerWidth - width - 8));
+    const top = Math.max(8, Math.min(contextMenu.y, window.innerHeight - height - 8));
+    setMenuPos({ top, left });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }, [contextMenu]);
 
   const updateEmailMutation = useMutation({
     mutationFn: async ({ emailId, accountId, data }: { emailId: string; accountId: string; data: any }) => {
@@ -449,11 +468,12 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               setContextMenu(null);
             }}
           />
-          <div 
+          <div
+            ref={contextMenuRef}
             className="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 py-1 w-48 text-sm text-gray-700"
-            style={{ 
-              top: `${Math.min(contextMenu.y, window.innerHeight - 200)}px`, 
-              left: `${Math.min(contextMenu.x, window.innerWidth - 200)}px` 
+            style={{
+              top: `${menuPos?.top ?? contextMenu.y}px`,
+              left: `${menuPos?.left ?? contextMenu.x}px`
             }}
             onClick={(e) => e.stopPropagation()}
           >
