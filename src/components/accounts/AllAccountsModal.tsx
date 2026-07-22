@@ -1,9 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { AlertTriangle, Search, Star, X } from 'lucide-react';
+import { AlertTriangle, GripVertical, Search, Star, X } from 'lucide-react';
 import clsx from 'clsx';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import {
@@ -26,19 +43,32 @@ function AccountRow({
   isSelected,
   onSelect,
   onToggleFavourite,
+  leading,
+  containerRef,
+  style,
+  dragging,
 }: {
   account: SidebarAccount;
   isSelected: boolean;
   onSelect: () => void;
   onToggleFavourite: () => void;
+  /** Optional leading slot (drag handle or its spacer) rendered before the row. */
+  leading?: ReactNode;
+  containerRef?: (node: HTMLElement | null) => void;
+  style?: CSSProperties;
+  dragging?: boolean;
 }) {
   return (
     <div
+      ref={containerRef}
+      style={style}
       className={clsx(
         'group flex items-center rounded-md pr-1 transition-colors',
+        dragging && 'z-10 opacity-60',
         isSelected ? 'bg-accent-50 ring-1 ring-accent-200' : 'hover:bg-gray-100'
       )}
     >
+      {leading}
       <button
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center space-x-3 rounded-md px-3 py-2 text-left"
@@ -78,6 +108,59 @@ function AccountRow({
   );
 }
 
+/**
+ * A favourite row that can be dragged to reorder. Reordering is gated by
+ * `draggable`: an un-favourited row (still shown in place until the modal
+ * reopens) and a freshly-favourited row (not yet in the favourites group) both
+ * pass `draggable={false}`, so they render with a static spacer instead of a
+ * grip and can't be picked up.
+ */
+function SortableFavouriteRow({
+  account,
+  isSelected,
+  draggable,
+  onSelect,
+  onToggleFavourite,
+}: {
+  account: SidebarAccount;
+  isSelected: boolean;
+  draggable: boolean;
+  onSelect: () => void;
+  onToggleFavourite: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: account.id,
+    disabled: !draggable,
+  });
+
+  const leading = draggable ? (
+    <button
+      {...attributes}
+      {...listeners}
+      aria-label="Drag to reorder"
+      className="flex-shrink-0 cursor-grab touch-none rounded p-1 text-gray-400 hover:text-gray-600 active:cursor-grabbing"
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  ) : (
+    // Keeps identity text aligned with draggable siblings.
+    <span className="w-6 flex-shrink-0" aria-hidden="true" />
+  );
+
+  return (
+    <AccountRow
+      account={account}
+      isSelected={isSelected}
+      onSelect={onSelect}
+      onToggleFavourite={onToggleFavourite}
+      leading={leading}
+      containerRef={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      dragging={isDragging}
+    />
+  );
+}
+
 export function AllAccountsModal() {
   const isOpen = useUIStore((s) => s.isAllAccountsOpen);
   const setOpen = useUIStore((s) => s.setAllAccountsOpen);
@@ -90,9 +173,20 @@ export function AllAccountsModal() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: accounts = [] } = useAccounts();
-  const { toggleFavourite } = useFavouriteMutations();
+  const { toggleFavourite, reorderFavourites } = useFavouriteMutations();
 
   const labels = useLabels(isOpen);
+
+  const sensors = useSensors(
+    // Small activation distance so a plain click still selects the account.
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const accountsById = useMemo(
+    () => new Map(accounts.map((a) => [a.id, a])),
+    [accounts]
+  );
 
   // Grouping is frozen while the modal is open: un-favouriting flips the star but
   // leaves the row where it is, so nothing jumps out from under the cursor.
@@ -177,6 +271,33 @@ export function AllAccountsModal() {
     />
   );
 
+  const renderFavouriteRow = (account: SidebarAccount) => (
+    <SortableFavouriteRow
+      key={account.id}
+      account={account}
+      isSelected={selectedAccountId === account.id}
+      // Only genuine favourites can be dragged — un-favourited placeholders and
+      // freshly-favourited rows (which live in "Others" until reopen) cannot.
+      draggable={account.isFavourite}
+      onSelect={() => handleSelect(account.id)}
+      onToggleFavourite={() => toggleFavourite(account)}
+    />
+  );
+
+  // Reordering acts on the frozen favourite order (the group's visual order) and
+  // persists only the still-favourite ids. Only reachable in grouped mode.
+  const handleReorder = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = frozenFavouriteIds.indexOf(String(active.id));
+    const newIndex = frozenFavouriteIds.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const next = arrayMove(frozenFavouriteIds, oldIndex, newIndex);
+    setFrozenFavouriteIds(next);
+    reorderFavourites(next.filter((id) => accountsById.get(id)?.isFavourite));
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
@@ -232,7 +353,18 @@ export function AllAccountsModal() {
                     <p className="px-2 pb-1 pt-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Favourites
                     </p>
-                    {groups.favourites.map(renderRow)}
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleReorder}
+                    >
+                      <SortableContext
+                        items={groups.favourites.map((a) => a.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {groups.favourites.map(renderFavouriteRow)}
+                      </SortableContext>
+                    </DndContext>
                   </>
                 )}
                 {groups.others.length > 0 && (
@@ -245,7 +377,11 @@ export function AllAccountsModal() {
                 )}
               </>
             ) : (
-              sortedByName(filtered).map(renderRow)
+              // Filtering: one flat list, but favourites lead (drag disabled here).
+              [
+                ...sortedFavourites(filtered),
+                ...sortedByName(filtered.filter((a) => !a.isFavourite)),
+              ].map(renderRow)
             )}
           </div>
         </div>
