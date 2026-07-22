@@ -199,10 +199,10 @@ export function AccountsSection() {
       labels,
       selectedLabelId ? new Set([selectedLabelId]) : new Set()
     );
-    return base.filter(
-      (a) => a.id !== activeAccount?.id && (!allowedIds || allowedIds.has(a.id))
-    );
-  }, [accounts, activeAccount, labels, selectedLabelId]);
+    // The active account stays in the list (highlighted) as well as in the pinned
+    // area above — selecting it shouldn't make its list entry disappear.
+    return base.filter((a) => !allowedIds || allowedIds.has(a.id));
+  }, [accounts, labels, selectedLabelId]);
 
   // Reordering acts on the full favourite list; a filtered subset would reorder
   // confusingly, so drag is disabled while a label filter is active.
@@ -212,11 +212,17 @@ export function AccountsSection() {
   // ambiguous whether or not its twin happens to be listed right now.
   const duplicates = useMemo(() => duplicateDisplayNames(accounts), [accounts]);
 
-  // The address only earns its line when it disambiguates: on the active account
-  // (confirming which identity you're acting as) or on a shared display name.
+  // In the pinned area the address earns its line when it disambiguates: on the
+  // active account (confirming which identity you're acting as) or a shared name.
   const showEmailFor = (account: SidebarAccount) =>
     shouldShowEmail(account) &&
     (account.id === selectedAccountId || duplicates.has(normalizedDisplayName(account)));
+
+  // In the list, visibility must not depend on selection — otherwise the active
+  // account's row would sprout an address its unselected twin doesn't have. Show
+  // it only for genuinely ambiguous (shared) names.
+  const showEmailInList = (account: SidebarAccount) =>
+    shouldShowEmail(account) && duplicates.has(normalizedDisplayName(account));
 
   const handleSelect = (id: string) => {
     setSelectedAccountId(id);
@@ -324,7 +330,7 @@ export function AccountsSection() {
                   key={account.id}
                   account={account}
                   isSelected={selectedAccountId === account.id}
-                  showEmail={showEmailFor(account)}
+                  showEmail={showEmailInList(account)}
                   onSelect={() => handleSelect(account.id)}
                   onToggleFavourite={() => toggleFavourite(account)}
                 />
@@ -353,7 +359,7 @@ export function AccountsSection() {
                   <AccountIdentity
                     account={account}
                     isSelected={isSelected}
-                    showEmail={showEmailFor(account)}
+                    showEmail={showEmailInList(account)}
                   />
                 </button>
                 <StarButton

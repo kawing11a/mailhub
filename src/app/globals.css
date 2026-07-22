@@ -195,13 +195,14 @@ input, select, textarea {
   animation: dashboard-panel-change 440ms ease-out both;
 }
 
-/* Hide the scrollbar while keeping the element scrollable (wheel/drag/keyboard). */
-@utility scrollbar-hide {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
+/* Hide the scrollbar while keeping the element scrollable (wheel/drag/keyboard).
+   Plain CSS (not @utility) so the ::-webkit-scrollbar rule compiles reliably. */
+.scrollbar-hide {
+  scrollbar-width: none;      /* Firefox */
+  -ms-overflow-style: none;   /* legacy Edge/IE */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;              /* Chrome/Safari */
 }
 
 .dashboard-stat-card:hover {
