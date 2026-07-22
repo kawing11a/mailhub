@@ -6,8 +6,9 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
+import { useAccounts } from '@/hooks/useFavouriteMutations';
+import { FromAddressSelect } from './FromAddressSelect';
 
 export function ComposeModal() {
   const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
@@ -15,6 +16,8 @@ export function ComposeModal() {
   const [subject, setSubject] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  // Chosen "From" account for THIS message (null = fall back to the active account).
+  const [fromId, setFromId] = useState<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -46,22 +49,19 @@ export function ComposeModal() {
     }
   }, [isComposeModalOpen, composeDraft, editor]);
 
-  // Fetch accounts to select the "From" address if unified inbox is selected
-  const { data: accounts } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: async () => {
-      const res = await fetch('/api/accounts');
-      return res.json();
-    },
-  });
+  // Shared accounts query (typed, with favourites metadata) for the From picker.
+  const { data: accounts = [] } = useAccounts();
 
-  const activeAccount = selectedAccountId !== 'all' 
-    ? accounts?.find((a: any) => a.id === selectedAccountId)
-    : accounts?.[0]; // Default to first account if 'all' is selected
+  const activeAccount = selectedAccountId !== 'all'
+    ? accounts.find((a) => a.id === selectedAccountId)
+    : accounts[0]; // Default to first account if 'all' is selected
+
+  // The account we actually send/save from: the user's pick, else the active one.
+  const fromAccount = accounts.find((a) => a.id === fromId) ?? activeAccount;
 
   // Debounced auto-save
   useEffect(() => {
-    if (!isComposeModalOpen || !activeAccount) return;
+    if (!isComposeModalOpen || !fromAccount) return;
 
     // Don't auto-save if completely empty to avoid spamming empty drafts
     if (!to && !subject && (!editor || editor.isEmpty)) return;
@@ -71,7 +71,7 @@ export function ComposeModal() {
 
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/accounts/${activeAccount.id}/drafts`, {
+        const res = await fetch(`/api/accounts/${fromAccount.id}/drafts`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -101,16 +101,16 @@ export function ComposeModal() {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [to, subject, editor?.getHTML(), isComposeModalOpen, activeAccount?.id]);
+  }, [to, subject, editor?.getHTML(), isComposeModalOpen, fromAccount?.id]);
 
   if (!isComposeModalOpen) return null;
 
   const handleSend = async () => {
-    if (!activeAccount || !to) return;
+    if (!fromAccount || !to) return;
     setIsSending(true);
 
     try {
-      const res = await fetch(`/api/accounts/${activeAccount.id}/emails/send`, {
+      const res = await fetch(`/api/accounts/${fromAccount.id}/emails/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,11 +123,12 @@ export function ComposeModal() {
       });
 
       if (!res.ok) throw new Error('Failed to send email');
-      
+
       setComposeModalOpen(false);
       setComposeDraft(null);
       setTo('');
       setSubject('');
+      setFromId(null);
       editor?.commands.clearContent();
     } catch (error) {
       console.error(error);
@@ -138,9 +139,9 @@ export function ComposeModal() {
   };
 
   const handleClose = () => {
-    if (composeDraft?.id && activeAccount) {
+    if (composeDraft?.id && fromAccount) {
       // Sync final draft to IMAP asynchronously when closing
-      fetch(`/api/accounts/${activeAccount.id}/drafts/sync`, {
+      fetch(`/api/accounts/${fromAccount.id}/drafts/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draftId: composeDraft.id }),
@@ -149,6 +150,7 @@ export function ComposeModal() {
 
     setTo('');
     setSubject('');
+    setFromId(null);
     editor?.commands.clearContent();
     setComposeDraft(null);
     setComposeModalOpen(false);
@@ -185,30 +187,28 @@ export function ComposeModal() {
       {/* Form Fields */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
-          <span className="text-gray-500 w-12">From:</span>
-          <span className="font-medium bg-gray-100 px-2 py-0.5 rounded text-gray-700">
-            {activeAccount?.emailAddress || 'Loading...'}
-          </span>
+          <span className="text-gray-500 w-16">From:</span>
+          <FromAddressSelect accounts={accounts} value={fromAccount} onChange={setFromId} />
         </div>
-        
+
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
-          <span className="text-gray-500 w-12">To:</span>
-          <input 
-            type="email" 
+          <span className="text-gray-500 w-16">To:</span>
+          <input
+            type="email"
             value={to}
             onChange={(e) => setTo(e.target.value)}
-            className="flex-1 focus:outline-none" 
+            className="flex-1 focus:outline-none"
             placeholder="recipient@example.com"
           />
         </div>
 
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
-          <span className="text-gray-500 w-12">Subject:</span>
-          <input 
-            type="text" 
+          <span className="text-gray-500 w-16">Subject:</span>
+          <input
+            type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="flex-1 focus:outline-none font-medium" 
+            className="flex-1 focus:outline-none font-medium"
             placeholder="Subject"
           />
         </div>
@@ -224,7 +224,7 @@ export function ComposeModal() {
         <div className="flex items-center space-x-2">
           <button
             onClick={handleSend}
-            disabled={isSending || !to || !activeAccount}
+            disabled={isSending || !to || !fromAccount}
             className="bg-accent-600 hover:bg-accent-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-1.5 rounded-md font-medium text-sm flex items-center space-x-2 transition-colors shadow-sm"
           >
             <span>{isSending ? 'Sending...' : 'Send'}</span>
