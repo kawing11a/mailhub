@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   accountDisplayName,
   duplicateDisplayNames,
@@ -187,26 +187,44 @@ export function AccountsSection() {
     [accounts, selectedAccountId]
   );
 
+  const favouriteAccounts = useMemo(() => sortedFavourites(accounts), [accounts]);
+  const hasFavourites = favouriteAccounts.length > 0;
+
+  // Which labels earn a chip: with favourites, only labels that tag at least one
+  // favourite (so no chip is a dead end); with none, every label.
+  const filterLabels = useMemo(() => {
+    if (!hasFavourites) return labels;
+    const favIds = new Set(favouriteAccounts.map((a) => a.id));
+    return labels.filter((l) => (l.accountIds ?? []).some((id) => favIds.has(id)));
+  }, [labels, favouriteAccounts, hasFavourites]);
+
+  // Drop a selection that's no longer offered (e.g. its last favourite was removed).
+  useEffect(() => {
+    if (selectedLabelId && !filterLabels.some((l) => l.id === selectedLabelId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedLabelId(null);
+    }
+  }, [filterLabels, selectedLabelId]);
+
   // Favourites drive the list. With none yet, fall back to the first few accounts
-  // alphabetically so the section is never empty.
+  // alphabetically — scoped to the selected label when one is picked — so the
+  // section is never empty and a label always shows its own accounts.
   const listedAccounts = useMemo(() => {
-    const favourites = sortedFavourites(accounts);
-    const base =
-      favourites.length > 0
-        ? favourites
-        : sortedByName(accounts).slice(0, FALLBACK_COUNT);
-    const allowedIds = allowedAccountIdsForLabels(
-      labels,
-      selectedLabelId ? new Set([selectedLabelId]) : new Set()
-    );
-    // The active account stays in the list (highlighted) as well as in the pinned
-    // area above — selecting it shouldn't make its list entry disappear.
-    return base.filter((a) => !allowedIds || allowedIds.has(a.id));
-  }, [accounts, labels, selectedLabelId]);
+    const allowedIds = selectedLabelId
+      ? allowedAccountIdsForLabels(labels, new Set([selectedLabelId]))
+      : null;
+    if (hasFavourites) {
+      // The active account stays in the list (highlighted) as well as the pinned
+      // area above — selecting it shouldn't make its list entry disappear.
+      return allowedIds ? favouriteAccounts.filter((a) => allowedIds.has(a.id)) : favouriteAccounts;
+    }
+    const pool = sortedByName(accounts);
+    return (allowedIds ? pool.filter((a) => allowedIds.has(a.id)) : pool).slice(0, FALLBACK_COUNT);
+  }, [accounts, favouriteAccounts, hasFavourites, labels, selectedLabelId]);
 
   // Reordering acts on the full favourite list; a filtered subset would reorder
   // confusingly, so drag is disabled while a label filter is active.
-  const isDraggable = !isFiltering && sortedFavourites(accounts).length > 0;
+  const isDraggable = !isFiltering && hasFavourites;
 
   // Computed over ALL accounts, not just the rendered rows: an ambiguous name is
   // ambiguous whether or not its twin happens to be listed right now.
@@ -297,13 +315,13 @@ export function AccountsSection() {
         )}
       </div>
 
-      {labels.length > 0 && (
+      {filterLabels.length > 0 && (
         <div className="flex-none px-1 pb-2">
           <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
             Quick Filter
           </p>
           <LabelFilterChips
-            labels={labels}
+            labels={filterLabels}
             selectedLabelId={selectedLabelId}
             onSelect={setSelectedLabelId}
           />
