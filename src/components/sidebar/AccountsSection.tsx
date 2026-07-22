@@ -36,9 +36,9 @@ import {
 } from '@/hooks/useFavouriteMutations';
 import {
   allowedAccountIdsForLabels,
-  LabelFilterMenu,
   useLabels,
 } from '@/components/accounts/LabelFilterMenu';
+import { LabelFilterChips } from '@/components/sidebar/LabelFilterChips';
 
 /** How many accounts to show when the user hasn't favourited anything yet. */
 const FALLBACK_COUNT = 5;
@@ -173,16 +173,8 @@ export function AccountsSection() {
   const { toggleFavourite, reorderFavourites } = useFavouriteMutations();
 
   const labels = useLabels();
-  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
-  const isFiltering = selectedLabelIds.size > 0;
-
-  const toggleLabel = (labelId: string) =>
-    setSelectedLabelIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(labelId)) next.delete(labelId);
-      else next.add(labelId);
-      return next;
-    });
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const isFiltering = selectedLabelId !== null;
 
   const sensors = useSensors(
     // A small activation distance keeps normal clicks (select account) working.
@@ -203,11 +195,14 @@ export function AccountsSection() {
       favourites.length > 0
         ? favourites
         : sortedByName(accounts).slice(0, FALLBACK_COUNT);
-    const allowedIds = allowedAccountIdsForLabels(labels, selectedLabelIds);
+    const allowedIds = allowedAccountIdsForLabels(
+      labels,
+      selectedLabelId ? new Set([selectedLabelId]) : new Set()
+    );
     return base.filter(
       (a) => a.id !== activeAccount?.id && (!allowedIds || allowedIds.has(a.id))
     );
-  }, [accounts, activeAccount, labels, selectedLabelIds]);
+  }, [accounts, activeAccount, labels, selectedLabelId]);
 
   // Reordering acts on the full favourite list; a filtered subset would reorder
   // confusingly, so drag is disabled while a label filter is active.
@@ -288,11 +283,10 @@ export function AccountsSection() {
 
       {labels.length > 0 && (
         <div className="flex-none px-1 pb-2">
-          <LabelFilterMenu
+          <LabelFilterChips
             labels={labels}
-            selectedLabelIds={selectedLabelIds}
-            onToggle={toggleLabel}
-            onClear={() => setSelectedLabelIds(new Set())}
+            selectedLabelId={selectedLabelId}
+            onSelect={setSelectedLabelId}
           />
         </div>
       )}
