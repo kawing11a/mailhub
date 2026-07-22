@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   accountDisplayName,
   duplicateDisplayNames,
@@ -34,31 +34,14 @@ import {
   useFavouriteMutations,
   type SidebarAccount,
 } from '@/hooks/useFavouriteMutations';
+import {
+  allowedAccountIdsForLabels,
+  LabelFilterMenu,
+  useLabels,
+} from '@/components/accounts/LabelFilterMenu';
 
 /** How many accounts to show when the user hasn't favourited anything yet. */
 const FALLBACK_COUNT = 5;
-
-function HealthDot({ account }: { account: SidebarAccount }) {
-  return (
-    <div
-      className={clsx(
-        'w-2 h-2 rounded-full flex-shrink-0',
-        account.authError
-          ? 'bg-red-500'
-          : account.isActive === false
-            ? 'bg-yellow-500'
-            : 'bg-green-500'
-      )}
-      title={
-        account.authError
-          ? 'Authentication Error'
-          : account.isActive === false
-            ? 'Sync Problem'
-            : 'Connected and syncing'
-      }
-    />
-  );
-}
 
 /**
  * Name, with the address underneath only when the caller says it adds information
@@ -167,7 +150,6 @@ function FavouriteRow({
           isSelected ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'
         )}
       >
-        <HealthDot account={account} />
         <AccountIdentity account={account} isSelected={isSelected} showEmail={showEmail} />
         {account.authError && (
           <span title="Authentication Error" className="flex-shrink-0">
@@ -190,6 +172,18 @@ export function AccountsSection() {
   const { data: accounts = [], isLoading } = useAccounts();
   const { toggleFavourite, reorderFavourites } = useFavouriteMutations();
 
+  const labels = useLabels();
+  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
+  const isFiltering = selectedLabelIds.size > 0;
+
+  const toggleLabel = (labelId: string) =>
+    setSelectedLabelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(labelId)) next.delete(labelId);
+      else next.add(labelId);
+      return next;
+    });
+
   const sensors = useSensors(
     // A small activation distance keeps normal clicks (select account) working.
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -209,10 +203,15 @@ export function AccountsSection() {
       favourites.length > 0
         ? favourites
         : sortedByName(accounts).slice(0, FALLBACK_COUNT);
-    return base.filter((a) => a.id !== activeAccount?.id);
-  }, [accounts, activeAccount]);
+    const allowedIds = allowedAccountIdsForLabels(labels, selectedLabelIds);
+    return base.filter(
+      (a) => a.id !== activeAccount?.id && (!allowedIds || allowedIds.has(a.id))
+    );
+  }, [accounts, activeAccount, labels, selectedLabelIds]);
 
-  const isDraggable = sortedFavourites(accounts).length > 0;
+  // Reordering acts on the full favourite list; a filtered subset would reorder
+  // confusingly, so drag is disabled while a label filter is active.
+  const isDraggable = !isFiltering && sortedFavourites(accounts).length > 0;
 
   // Computed over ALL accounts, not just the rendered rows: an ambiguous name is
   // ambiguous whether or not its twin happens to be listed right now.
@@ -261,6 +260,17 @@ export function AccountsSection() {
         </p>
       </div>
 
+      {labels.length > 0 && (
+        <div className="flex-none px-1 pb-2">
+          <LabelFilterMenu
+            labels={labels}
+            selectedLabelIds={selectedLabelIds}
+            onToggle={toggleLabel}
+            onClear={() => setSelectedLabelIds(new Set())}
+          />
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
         {/* Active account leads and doubles as the switcher. */}
         {activeAccount && (
@@ -269,12 +279,14 @@ export function AccountsSection() {
             title="Switch account"
             className="flex w-full items-center space-x-3 rounded-md bg-accent-600 px-3 py-2 text-left text-sm font-medium text-white shadow-sm"
           >
-            <HealthDot account={activeAccount} />
             <AccountIdentity
               account={activeAccount}
               isSelected
               showEmail={showEmailFor(activeAccount)}
             />
+            <span className="flex-none rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+              Active
+            </span>
             {activeAccount.authError && (
               <span title="Authentication Error" className="flex-shrink-0">
                 <AlertTriangle className="w-4 h-4 text-red-300" />
@@ -283,8 +295,10 @@ export function AccountsSection() {
           </button>
         )}
 
-        {listedAccounts.length === 0 && !activeAccount ? (
-          <p className="px-3 py-2 text-xs italic text-gray-500">No accounts connected</p>
+        {listedAccounts.length === 0 && (isFiltering || !activeAccount) ? (
+          <p className="px-3 py-2 text-xs italic text-gray-500">
+            {isFiltering ? 'No accounts match this label' : 'No accounts connected'}
+          </p>
         ) : isDraggable ? (
           <DndContext
             sensors={sensors}
@@ -326,7 +340,6 @@ export function AccountsSection() {
                     isSelected ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'
                   )}
                 >
-                  <HealthDot account={account} />
                   <AccountIdentity
                     account={account}
                     isSelected={isSelected}

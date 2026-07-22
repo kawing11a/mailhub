@@ -1,9 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useRouter, usePathname } from 'next/navigation';
-import { AlertTriangle, Check, Search, Star, Tag, X } from 'lucide-react';
+import { AlertTriangle, Search, Star, X } from 'lucide-react';
 import clsx from 'clsx';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -16,13 +15,11 @@ import {
   useFavouriteMutations,
   type SidebarAccount,
 } from '@/hooks/useFavouriteMutations';
-
-interface AccountLabel {
-  id: string;
-  name: string;
-  color?: string | null;
-  accountIds?: string[];
-}
+import {
+  allowedAccountIdsForLabels,
+  LabelFilterMenu,
+  useLabels,
+} from '@/components/accounts/LabelFilterMenu';
 
 function AccountRow({
   account,
@@ -46,23 +43,6 @@ function AccountRow({
         onClick={onSelect}
         className="flex min-w-0 flex-1 items-center space-x-3 rounded-md px-3 py-2 text-left"
       >
-        <div
-          className={clsx(
-            'h-2 w-2 flex-shrink-0 rounded-full',
-            account.authError
-              ? 'bg-red-500'
-              : account.isActive === false
-                ? 'bg-yellow-500'
-                : 'bg-green-500'
-          )}
-          title={
-            account.authError
-              ? 'Authentication Error'
-              : account.isActive === false
-                ? 'Sync Problem'
-                : 'Connected and syncing'
-          }
-        />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-gray-900">
             {accountDisplayName(account)}
@@ -107,22 +87,12 @@ export function AllAccountsModal() {
 
   const [query, setQuery] = useState('');
   const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
-  const [labelMenuOpen, setLabelMenuOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { data: accounts = [] } = useAccounts();
   const { toggleFavourite } = useFavouriteMutations();
 
-  const { data: labelsData } = useQuery<{ labels: AccountLabel[] }>({
-    queryKey: ['labels'],
-    queryFn: async () => {
-      const res = await fetch('/api/labels');
-      if (!res.ok) throw new Error('Failed to fetch labels');
-      return res.json();
-    },
-    enabled: isOpen,
-  });
-  const labels = labelsData?.labels || [];
+  const labels = useLabels(isOpen);
 
   // Grouping is frozen while the modal is open: un-favouriting flips the star but
   // leaves the row where it is, so nothing jumps out from under the cursor.
@@ -134,7 +104,6 @@ export function AllAccountsModal() {
     setFrozenFavouriteIds(sortedFavourites(accounts).map((a) => a.id));
     setQuery('');
     setSelectedLabelIds(new Set());
-    setLabelMenuOpen(false);
     const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => clearTimeout(t);
     // Intentionally keyed on isOpen only — we want the snapshot taken at open time.
@@ -155,14 +124,7 @@ export function AllAccountsModal() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     // An account matches if it carries ANY of the selected labels.
-    const allowedIds =
-      selectedLabelIds.size > 0
-        ? new Set(
-            labels
-              .filter((l) => selectedLabelIds.has(l.id))
-              .flatMap((l) => l.accountIds || [])
-          )
-        : null;
+    const allowedIds = allowedAccountIdsForLabels(labels, selectedLabelIds);
 
     return accounts.filter((a) => {
       if (allowedIds && !allowedIds.has(a.id)) return false;
@@ -197,14 +159,13 @@ export function AllAccountsModal() {
     }
   };
 
-  const toggleLabel = (labelId: string) => {
+  const toggleLabel = (labelId: string) =>
     setSelectedLabelIds((prev) => {
       const next = new Set(prev);
       if (next.has(labelId)) next.delete(labelId);
       else next.add(labelId);
       return next;
     });
-  };
 
   const renderRow = (account: SidebarAccount) => (
     <AccountRow
@@ -249,72 +210,13 @@ export function AllAccountsModal() {
               />
             </div>
 
-            <div className="relative flex-none">
-              <button
-                type="button"
-                onClick={() => setLabelMenuOpen((o) => !o)}
-                className={clsx(
-                  'flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm transition-colors',
-                  selectedLabelIds.size > 0
-                    ? 'border-accent-300 bg-accent-50 text-accent-700'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                )}
-              >
-                <Tag className="h-4 w-4" />
-                <span>
-                  {selectedLabelIds.size > 0 ? `${selectedLabelIds.size} label(s)` : 'Labels'}
-                </span>
-              </button>
-
-              {labelMenuOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setLabelMenuOpen(false)} />
-                  <div className="absolute right-0 z-50 mt-1 max-h-64 w-56 overflow-y-auto rounded-md border border-gray-200 bg-white py-1 shadow-lg">
-                    {labels.length === 0 ? (
-                      <p className="px-3 py-2 text-xs italic text-gray-500">No labels</p>
-                    ) : (
-                      labels.map((label) => {
-                        const checked = selectedLabelIds.has(label.id);
-                        return (
-                          <button
-                            key={label.id}
-                            type="button"
-                            onClick={() => toggleLabel(label.id)}
-                            className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-gray-50"
-                          >
-                            <span
-                              className={clsx(
-                                'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                                checked
-                                  ? 'border-accent-600 bg-accent-600 text-white'
-                                  : 'border-gray-300'
-                              )}
-                            >
-                              {checked && <Check className="h-3 w-3" />}
-                            </span>
-                            <span
-                              className="truncate"
-                              style={label.color ? { color: label.color } : undefined}
-                            >
-                              {label.name}
-                            </span>
-                          </button>
-                        );
-                      })
-                    )}
-                    {selectedLabelIds.size > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setSelectedLabelIds(new Set())}
-                        className="mt-1 w-full border-t border-gray-100 px-3 py-1.5 text-left text-xs text-gray-500 hover:bg-gray-50"
-                      >
-                        Clear labels
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+            <LabelFilterMenu
+              className="flex-none"
+              labels={labels}
+              selectedLabelIds={selectedLabelIds}
+              onToggle={toggleLabel}
+              onClear={() => setSelectedLabelIds(new Set())}
+            />
           </div>
 
           {/* Account list */}
