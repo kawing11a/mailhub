@@ -260,20 +260,10 @@ export function AccountsSection() {
         </p>
       </div>
 
-      {labels.length > 0 && (
+      {/* Active account is pinned above the scroll area so it stays visible and
+          doubles as the switcher, no matter how far the favourites scroll. */}
+      {activeAccount && (
         <div className="flex-none px-1 pb-2">
-          <LabelFilterMenu
-            labels={labels}
-            selectedLabelIds={selectedLabelIds}
-            onToggle={toggleLabel}
-            onClear={() => setSelectedLabelIds(new Set())}
-          />
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
-        {/* Active account leads and doubles as the switcher. */}
-        {activeAccount && (
           <button
             onClick={() => setAllAccountsOpen(true)}
             title="Switch account"
@@ -293,8 +283,21 @@ export function AccountsSection() {
               </span>
             )}
           </button>
-        )}
+        </div>
+      )}
 
+      {labels.length > 0 && (
+        <div className="flex-none px-1 pb-2">
+          <LabelFilterMenu
+            labels={labels}
+            selectedLabelIds={selectedLabelIds}
+            onToggle={toggleLabel}
+            onClear={() => setSelectedLabelIds(new Set())}
+          />
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
         {listedAccounts.length === 0 && (isFiltering || !activeAccount) ? (
           <p className="px-3 py-2 text-xs italic text-gray-500">
             {isFiltering ? 'No accounts match this label' : 'No accounts connected'}
