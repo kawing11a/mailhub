@@ -255,10 +255,11 @@ export function AccountsSection() {
         </p>
       </div>
 
-      {/* Active account is pinned above the scroll area so it stays visible and
-          doubles as the switcher, no matter how far the favourites scroll. */}
-      {activeAccount && (
-        <div className="flex-none px-1 pb-2">
+      {/* Active-account slot is always reserved (above the scroll area, so it
+          stays pinned) — a real switcher when one is active, otherwise a
+          placeholder — so the Quick Filter never sits directly under the title. */}
+      <div className="flex-none px-1 pb-2">
+        {activeAccount ? (
           <button
             onClick={() => setAllAccountsOpen(true)}
             title="Switch account"
@@ -278,8 +279,17 @@ export function AccountsSection() {
               </span>
             )}
           </button>
-        </div>
-      )}
+        ) : (
+          <button
+            onClick={() => setAllAccountsOpen(true)}
+            title="Select an account"
+            className="flex w-full items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          >
+            <Users className="h-4 w-4 flex-shrink-0 text-gray-400" />
+            <span className="min-w-0 flex-1 truncate">No active account</span>
+          </button>
+        )}
+      </div>
 
       {labels.length > 0 && (
         <div className="flex-none px-1 pb-2">
