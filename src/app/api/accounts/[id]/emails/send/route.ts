@@ -4,6 +4,7 @@ import { sendEmailSchema } from '@/lib/validation';
 import { sendEmail } from '@/lib/smtp/sender';
 import { logActivity } from '@/lib/activity/log';
 import { prisma } from '@/lib/db/prisma';
+import { createEmailSnippet } from '@/lib/email/snippet';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -30,6 +31,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const { messageId } = await sendEmail(accountId, parsed.data);
     const sentAt = new Date();
+    const snippet = createEmailSnippet({
+      bodyText: parsed.data.bodyText,
+      bodyHtml: parsed.data.bodyHtml,
+    });
 
     // Save sent email record
     const email = await prisma.email.create({
@@ -39,6 +44,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         threadId: parsed.data.inReplyTo || messageId, // Basic fallback
         folder: 'SENT',
         subject: parsed.data.subject,
+        snippet,
         fromAddress: account.emailAddress,
         toAddresses: parsed.data.to.map((address) => ({ address, name: '' })),
         ccAddresses: parsed.data.cc?.map((address) => ({ address, name: '' })) || [],

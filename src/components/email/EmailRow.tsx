@@ -33,6 +33,7 @@ export function EmailRow({
 }: EmailRowProps) {
   const isUnread = !email.isRead;
   const { showAvatars, timeFormat } = useUIStore();
+  const snippet = typeof email.snippet === 'string' ? email.snippet.trim() : '';
 
   const formattedTime = useMemo(() => {
     const date = getEmailDisplayTimestamp(email);
@@ -110,9 +111,11 @@ export function EmailRow({
             <span className={clsx('mr-2', isUnread ? 'text-gray-900' : 'text-gray-700')}>
               {email.subject || '(No Subject)'}
             </span>
-            <span className="text-gray-500 font-normal truncate hidden sm:inline">
-              — {email.snippet || ''}
-            </span>
+            {snippet && (
+              <span className="text-gray-500 font-normal truncate hidden sm:inline">
+                — {snippet}
+              </span>
+            )}
           </span>
           {email.emailLabels?.length > 0 && (
             <span className="hidden sm:flex items-center gap-1 ml-2 flex-shrink-0">

@@ -40,7 +40,12 @@ const mockDeleteDraft = prisma.email.deleteMany as jest.Mock;
 const mockSendEmail = sendEmail as jest.Mock;
 const mockLogActivity = logActivity as jest.Mock;
 
-function createRequest(): NextRequest {
+function createRequest(
+  overrides: Partial<{
+    bodyText: string | undefined;
+    bodyHtml: string | undefined;
+  }> = {}
+): NextRequest {
   return new Request('http://localhost/api/accounts/account-1/emails/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -48,6 +53,7 @@ function createRequest(): NextRequest {
       to: ['recipient@example.com'],
       subject: 'Timestamp test',
       bodyText: 'Hello',
+      ...overrides,
     }),
   }) as NextRequest;
 }
@@ -86,9 +92,53 @@ describe('POST sent email', () => {
     expect(data.receivedAt).toBe(data.sentAt);
     expect(data.sentAt.getTime()).toBeGreaterThanOrEqual(beforeSend);
     expect(data.sentAt.getTime()).toBeLessThanOrEqual(afterSend);
+    expect(data.snippet).toBe('Hello');
 
     const body = await response.json();
     expect(body.sentAt).toBe(data.sentAt.toISOString());
+  });
+
+  it('stores a readable snippet for an HTML-only message', async () => {
+    mockSendEmail.mockResolvedValue({ messageId: '<html@example.com>' });
+
+    const response = await POST(createRequest({
+      bodyText: undefined,
+      bodyHtml: '<p>Hello&nbsp;<strong>from HTML</strong></p>',
+    }), {
+      params: Promise.resolve({ id: 'account-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(mockCreateEmail.mock.calls[0][0].data.snippet).toBe('Hello from HTML');
+  });
+
+  it('limits snippets to 300 characters and accepts an empty body', async () => {
+    mockSendEmail.mockResolvedValue({ messageId: '<long@example.com>' });
+
+    await POST(createRequest({ bodyText: 'a'.repeat(350) }), {
+      params: Promise.resolve({ id: 'account-1' }),
+    });
+    expect(mockCreateEmail.mock.calls[0][0].data.snippet).toHaveLength(300);
+
+    jest.clearAllMocks();
+    mockAuthenticate.mockResolvedValue({
+      userId: 'user-1',
+      organizationId: 'org-1',
+      role: 'admin',
+    });
+    mockFindAccount.mockResolvedValue({
+      id: 'account-1',
+      emailAddress: 'sender@example.com',
+    });
+    mockSendEmail.mockResolvedValue({ messageId: '<empty@example.com>' });
+    mockCreateEmail.mockResolvedValue({ id: 'email-2' });
+    mockLogActivity.mockResolvedValue(undefined);
+
+    const response = await POST(createRequest({ bodyText: undefined }), {
+      params: Promise.resolve({ id: 'account-1' }),
+    });
+    expect(response.status).toBe(200);
+    expect(mockCreateEmail.mock.calls[0][0].data.snippet).toBe('');
   });
 
   it('does not create a local Sent record when provider sending fails', async () => {
