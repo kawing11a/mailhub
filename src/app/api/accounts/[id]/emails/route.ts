@@ -73,7 +73,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const [emails, total] = await Promise.all([
     prisma.email.findMany({
       where,
-      orderBy: { receivedAt: 'desc' },
+      orderBy: [
+        { receivedAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
       skip,
       take: limit,
       select: {
@@ -93,6 +96,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         hasAttachments: true,
         receivedAt: true,
         sentAt: true,
+        createdAt: true,
         emailLabels: {
           include: { label: { select: { id: true, name: true, color: true } } },
         },

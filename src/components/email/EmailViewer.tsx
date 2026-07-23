@@ -9,6 +9,7 @@ import { format } from 'date-fns';
 import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { LabelBadge } from '@/components/labels/LabelBadge';
 import { formatStoredAddresses } from '@/lib/email/display-addresses';
+import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
 
 interface EmailViewerProps {
   emailId: string;
@@ -65,15 +66,16 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     [email?.emailLabels]
   );
 
-  const getFormattedDate = (dateString?: string) => {
-    if (!dateString) return '';
-    return format(new Date(dateString), timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
+  const getFormattedDate = (date?: Date | null) => {
+    if (!date) return '';
+    return format(date, timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
   };
 
   const toRecipients = formatStoredAddresses(email?.toAddresses);
   const ccRecipients = formatStoredAddresses(email?.ccAddresses);
   const bccRecipients = formatStoredAddresses(email?.bccAddresses);
   const canShowBcc = email?.folder === 'SENT' || email?.isDraft;
+  const displayTimestamp = email ? getEmailDisplayTimestamp(email) : null;
 
   const formatSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
@@ -85,7 +87,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleReply = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote" style="border-left: 1px solid #ccc; margin: 0 0 0 .8ex; padding-left: 1ex;">
@@ -107,7 +109,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleReplyAll = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote" style="border-left: 1px solid #ccc; margin: 0 0 0 .8ex; padding-left: 1ex;">
@@ -137,7 +139,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleForward = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote">
@@ -257,7 +259,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           </div>
         </div>
         <div className="text-sm text-gray-500 whitespace-nowrap">
-          {getFormattedDate(email.receivedAt)}
+          {getFormattedDate(displayTimestamp)}
         </div>
       </div>
 

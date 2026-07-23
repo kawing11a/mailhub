@@ -29,6 +29,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   try {
     const { messageId } = await sendEmail(accountId, parsed.data);
+    const sentAt = new Date();
 
     // Save sent email record
     const email = await prisma.email.create({
@@ -45,6 +46,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         inReplyTo: parsed.data.inReplyTo,
         referencesHeader: parsed.data.references,
         isRead: true, // Sent emails are read
+        sentAt,
+        receivedAt: sentAt,
         body: {
           create: {
             bodyHtml: parsed.data.bodyHtml,
@@ -70,7 +73,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       // (Optional: Also delete from IMAP Drafts if possible, but local is the main priority)
     }
 
-    return apiResponse({ success: true, messageId });
+    return apiResponse({ success: true, messageId, sentAt });
   } catch (error) {
     console.error('Send email error:', error);
     return apiError('Failed to send email', 500);

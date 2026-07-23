@@ -6,6 +6,7 @@ import { Paperclip, User, Check } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
 import { LabelBadge } from '@/components/labels/LabelBadge';
+import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
 
 interface EmailRowProps {
   email: any;
@@ -34,13 +35,13 @@ export function EmailRow({
   const { showAvatars, timeFormat } = useUIStore();
 
   const formattedTime = useMemo(() => {
-    if (!email.receivedAt) return '';
-    const date = new Date(email.receivedAt);
+    const date = getEmailDisplayTimestamp(email);
+    if (!date) return '';
     if (isToday(date)) {
       return format(date, timeFormat === '24h' ? 'HH:mm' : 'h:mm a');
     }
     return format(date, timeFormat === '24h' ? 'MMM d, HH:mm' : 'MMM d, h:mm a');
-  }, [email.receivedAt, timeFormat]);
+  }, [email.folder, email.sentAt, email.receivedAt, email.createdAt, timeFormat]);
 
   return (
     <div
