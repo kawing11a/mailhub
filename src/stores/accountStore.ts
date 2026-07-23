@@ -10,6 +10,8 @@ interface AccountState {
   composeDraft: {
     id?: string;
     to: string;
+    cc?: string;
+    bcc?: string;
     subject: string;
     bodyHtml: string;
   } | null;

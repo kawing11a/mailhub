@@ -9,10 +9,15 @@ import { useState, useEffect } from 'react';
 import clsx from 'clsx';
 import { useAccounts } from '@/hooks/useFavouriteMutations';
 import { FromAddressSelect } from './FromAddressSelect';
+import { parseAddresses, isValidEmail } from '@/lib/email/addresses';
 
 export function ComposeModal() {
   const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
   const [to, setTo] = useState('');
+  const [cc, setCc] = useState('');
+  const [bcc, setBcc] = useState('');
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [subject, setSubject] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -36,6 +41,11 @@ export function ComposeModal() {
   useEffect(() => {
     if (isComposeModalOpen && composeDraft) {
       setTo(composeDraft.to || '');
+      setCc(composeDraft.cc || '');
+      setBcc(composeDraft.bcc || '');
+      // Reveal Cc/Bcc rows when the draft carries them.
+      setShowCc(!!composeDraft.cc);
+      setShowBcc(!!composeDraft.bcc);
       setSubject(composeDraft.subject || '');
       // We can't use editor inside this useEffect directly if editor is initialized after.
       // But editor is created with useEditor above, so it is available.
@@ -64,7 +74,7 @@ export function ComposeModal() {
     if (!isComposeModalOpen || !fromAccount) return;
 
     // Don't auto-save if completely empty to avoid spamming empty drafts
-    if (!to && !subject && (!editor || editor.isEmpty)) return;
+    if (!to && !cc && !bcc && !subject && (!editor || editor.isEmpty)) return;
 
     const bodyHtml = editor?.getHTML() || '';
     const bodyText = editor?.getText() || '';
@@ -77,21 +87,25 @@ export function ComposeModal() {
           body: JSON.stringify({
             draftId: composeDraft?.id,
             to,
+            cc,
+            bcc,
             subject,
             bodyHtml,
             bodyText,
           }),
         });
-        
+
         if (res.ok) {
           const data = await res.json();
           // Update the draft id in the store if it's new, so we keep updating the same draft
           if (data.draftId && data.draftId !== composeDraft?.id) {
-            setComposeDraft({ 
-              id: data.draftId, 
-              to, 
-              subject, 
-              bodyHtml 
+            setComposeDraft({
+              id: data.draftId,
+              to,
+              cc,
+              bcc,
+              subject,
+              bodyHtml
             });
           }
         }
@@ -101,12 +115,24 @@ export function ComposeModal() {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [to, subject, editor?.getHTML(), isComposeModalOpen, fromAccount?.id]);
+  }, [to, cc, bcc, subject, editor?.getHTML(), isComposeModalOpen, fromAccount?.id]);
 
   if (!isComposeModalOpen) return null;
 
   const handleSend = async () => {
     if (!fromAccount || !to) return;
+
+    const toList = parseAddresses(to);
+    const ccList = parseAddresses(cc);
+    const bccList = parseAddresses(bcc);
+
+    if (toList.length === 0) return;
+    const invalid = [...toList, ...ccList, ...bccList].find((a) => !isValidEmail(a));
+    if (invalid) {
+      alert(`Invalid email address: ${invalid}`);
+      return;
+    }
+
     setIsSending(true);
 
     try {
@@ -115,7 +141,9 @@ export function ComposeModal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           draftId: composeDraft?.id,
-          to: [to],
+          to: toList,
+          ...(ccList.length ? { cc: ccList } : {}),
+          ...(bccList.length ? { bcc: bccList } : {}),
           subject,
           bodyHtml: editor?.getHTML(),
           bodyText: editor?.getText(),
@@ -127,6 +155,10 @@ export function ComposeModal() {
       setComposeModalOpen(false);
       setComposeDraft(null);
       setTo('');
+      setCc('');
+      setBcc('');
+      setShowCc(false);
+      setShowBcc(false);
       setSubject('');
       setFromId(null);
       editor?.commands.clearContent();
@@ -149,6 +181,10 @@ export function ComposeModal() {
     }
 
     setTo('');
+    setCc('');
+    setBcc('');
+    setShowCc(false);
+    setShowBcc(false);
     setSubject('');
     setFromId(null);
     editor?.commands.clearContent();
@@ -194,13 +230,51 @@ export function ComposeModal() {
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-16">To:</span>
           <input
-            type="email"
+            type="text"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             className="flex-1 focus:outline-none"
-            placeholder="recipient@example.com"
+            placeholder="recipient@example.com, another@example.com"
           />
+          <div className="flex flex-shrink-0 items-center gap-3 pl-2 text-xs text-gray-500">
+            {!showCc && (
+              <button type="button" onClick={() => setShowCc(true)} className="hover:text-gray-700">
+                Cc
+              </button>
+            )}
+            {!showBcc && (
+              <button type="button" onClick={() => setShowBcc(true)} className="hover:text-gray-700">
+                Bcc
+              </button>
+            )}
+          </div>
         </div>
+
+        {showCc && (
+          <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
+            <span className="text-gray-500 w-16">Cc:</span>
+            <input
+              type="text"
+              value={cc}
+              onChange={(e) => setCc(e.target.value)}
+              className="flex-1 focus:outline-none"
+              placeholder="cc@example.com, another@example.com"
+            />
+          </div>
+        )}
+
+        {showBcc && (
+          <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
+            <span className="text-gray-500 w-16">Bcc:</span>
+            <input
+              type="text"
+              value={bcc}
+              onChange={(e) => setBcc(e.target.value)}
+              className="flex-1 focus:outline-none"
+              placeholder="bcc@example.com, another@example.com"
+            />
+          </div>
+        )}
 
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-16">Subject:</span>

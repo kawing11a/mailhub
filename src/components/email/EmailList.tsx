@@ -203,6 +203,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       setComposeDraft({
         id: email.id,
         to: email.toAddresses?.[0]?.address || '',
+        cc: email.ccAddresses?.[0]?.address || '',
+        bcc: email.bccAddresses?.[0]?.address || '',
         subject: email.subject || '',
         bodyHtml: email.body?.bodyHtml || email.snippet || '',
       });

@@ -44,9 +44,19 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   try {
     const MailComposer = require('nodemailer/lib/mail-composer');
+    const joinAddresses = (json: unknown): string | undefined => {
+      if (!Array.isArray(json)) return undefined;
+      const addrs = json
+        .map((a) => (a as { address?: string })?.address)
+        .filter((a): a is string => !!a);
+      return addrs.length ? addrs.join(', ') : undefined;
+    };
+
     const composer = new MailComposer({
       from: `"${account.label}" <${account.emailAddress}>`,
-      to: (draft.toAddresses as any[])?.map((t: any) => t.address).join(', '),
+      to: joinAddresses(draft.toAddresses),
+      cc: joinAddresses(draft.ccAddresses),
+      bcc: joinAddresses(draft.bccAddresses),
       subject: draft.subject,
       html: draft.body?.bodyHtml,
       text: draft.body?.bodyText,

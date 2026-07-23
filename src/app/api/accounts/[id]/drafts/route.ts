@@ -7,6 +7,8 @@ import { z } from 'zod';
 const saveDraftSchema = z.object({
   draftId: z.string().optional(),
   to: z.string().optional(),
+  cc: z.string().optional(),
+  bcc: z.string().optional(),
   subject: z.string().optional(),
   bodyHtml: z.string().optional(),
   bodyText: z.string().optional(),
@@ -46,6 +48,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         data: {
           subject: data.subject || '',
           toAddresses: data.to ? [{ address: data.to, name: '' }] : [],
+          ccAddresses: data.cc ? [{ address: data.cc, name: '' }] : [],
+          bccAddresses: data.bcc ? [{ address: data.bcc, name: '' }] : [],
           body: {
             upsert: {
               create: {
@@ -70,6 +74,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           subject: data.subject || '',
           fromAddress: account.emailAddress,
           toAddresses: data.to ? [{ address: data.to, name: '' }] : [],
+          ccAddresses: data.cc ? [{ address: data.cc, name: '' }] : [],
+          bccAddresses: data.bcc ? [{ address: data.bcc, name: '' }] : [],
           isRead: true,
           isDraft: true,
           body: {
