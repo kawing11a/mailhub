@@ -186,6 +186,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
           setComposeDraft({
             id: undefined, // New draft
+            accountId: fullEmail.accountId || email.accountId,
             to,
             subject,
             bodyHtml,
@@ -198,15 +199,25 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     }
   };
 
-  const handleEmailClick = (email: any) => {
+  const handleEmailClick = async (email: any) => {
     if (email.isDraft) {
+      let draft = email;
+      try {
+        const res = await fetch(`/api/accounts/${email.accountId}/emails/${email.id}`);
+        if (res.ok) draft = await res.json();
+      } catch (error) {
+        console.error('Failed to load complete draft:', error);
+      }
+
       setComposeDraft({
-        id: email.id,
-        to: email.toAddresses?.[0]?.address || '',
-        cc: email.ccAddresses?.[0]?.address || '',
-        bcc: email.bccAddresses?.[0]?.address || '',
-        subject: email.subject || '',
-        bodyHtml: email.body?.bodyHtml || email.snippet || '',
+        id: draft.id,
+        accountId: draft.accountId
+          || (selectedAccountId !== 'all' ? selectedAccountId ?? undefined : undefined),
+        to: draft.toAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
+        cc: draft.ccAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
+        bcc: draft.bccAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
+        subject: draft.subject || '',
+        bodyHtml: draft.body?.bodyHtml || draft.snippet || '',
       });
       setComposeModalOpen(true);
       return;

@@ -9,6 +9,7 @@ interface AccountState {
   
   composeDraft: {
     id?: string;
+    accountId?: string;
     to: string;
     cc?: string;
     bcc?: string;

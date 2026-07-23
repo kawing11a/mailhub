@@ -78,6 +78,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       take: limit,
       select: {
         id: true,
+        accountId: true,
         messageId: true,
         threadId: true,
         folder: true,

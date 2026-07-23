@@ -8,6 +8,7 @@ import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, Paperclip, 
 import { format } from 'date-fns';
 import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { LabelBadge } from '@/components/labels/LabelBadge';
+import { formatStoredAddresses } from '@/lib/email/display-addresses';
 
 interface EmailViewerProps {
   emailId: string;
@@ -69,6 +70,11 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     return format(new Date(dateString), timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
   };
 
+  const toRecipients = formatStoredAddresses(email?.toAddresses);
+  const ccRecipients = formatStoredAddresses(email?.ccAddresses);
+  const bccRecipients = formatStoredAddresses(email?.bccAddresses);
+  const canShowBcc = email?.folder === 'SENT' || email?.isDraft;
+
   const formatSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
     if (bytes < 1024) return `${bytes} B`;
@@ -90,6 +96,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
     setComposeDraft({
+      accountId: email.accountId,
       to: email.fromAddress,
       subject: email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml
@@ -119,6 +126,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     const uniqueToAddresses = Array.from(new Set([replyTo, ...allTos, ...allCcs])).filter(Boolean).join(', ');
 
     setComposeDraft({
+      accountId: email.accountId,
       to: uniqueToAddresses,
       subject: email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml
@@ -143,6 +151,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
     setComposeDraft({
+      accountId: email.accountId,
       to: '',
       subject: email.subject?.startsWith('Fwd:') ? email.subject : `Fwd: ${email.subject || ''}`,
       bodyHtml: quoteHtml
@@ -226,8 +235,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
               {email.fromName} <span className="text-gray-500 text-sm font-normal">&lt;{email.fromAddress}&gt;</span>
             </div>
             <div className="text-sm text-gray-500 mt-0.5">
-              To: {email.toAddresses?.map((t: any) => t.address).join(', ')}
+              To: {toRecipients}
             </div>
+            {ccRecipients && (
+              <div className="text-sm text-gray-500 mt-0.5 break-words">
+                Cc: {ccRecipients}
+              </div>
+            )}
+            {canShowBcc && bccRecipients && (
+              <div className="text-sm text-gray-500 mt-0.5 break-words">
+                Bcc: {bccRecipients}
+              </div>
+            )}
             {email.emailLabels?.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {email.emailLabels.map((el: any) => (
