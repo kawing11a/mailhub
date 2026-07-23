@@ -10,6 +10,7 @@ import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker
 import { LabelBadge } from '@/components/labels/LabelBadge';
 import { formatStoredAddresses } from '@/lib/email/display-addresses';
 import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
+import { buildReplyAllRecipients } from '@/lib/email/addresses';
 
 interface EmailViewerProps {
   emailId: string;
@@ -120,16 +121,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
 
-    const replyTo = email.replyTo || email.fromAddress || '';
-    const allTos = Array.isArray(email.toAddresses) ? email.toAddresses.map((a: any) => a.address) : [];
-    const allCcs = Array.isArray(email.ccAddresses) ? email.ccAddresses.map((a: any) => a.address) : [];
-
-    // Combine unique addresses for the 'to' field since ComposeModal only has a single 'to' input
-    const uniqueToAddresses = Array.from(new Set([replyTo, ...allTos, ...allCcs])).filter(Boolean).join(', ');
+    const recipients = buildReplyAllRecipients({
+      replyTo: email.replyTo,
+      fromAddress: email.fromAddress,
+      toAddresses: email.toAddresses,
+      ccAddresses: email.ccAddresses,
+      currentAccountAddress: email.account?.emailAddress,
+    });
 
     setComposeDraft({
       accountId: email.accountId,
-      to: uniqueToAddresses,
+      to: recipients.to.join(', '),
+      cc: recipients.cc.join(', '),
       subject: email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml
     });

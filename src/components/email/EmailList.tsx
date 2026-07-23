@@ -9,6 +9,7 @@ import { Loader2, Search, Inbox, MailOpen, Mail, Star, StarOff, Trash2, Reply, R
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useSearch } from '@/hooks/useSearch';
 import toast from 'react-hot-toast';
+import { buildReplyAllRecipients } from '@/lib/email/addresses';
 
 interface ContextMenuState {
   x: number;
@@ -162,7 +163,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         try {
           // Need full email body for quoting
           const res = await fetch(`/api/accounts/${accountId}/emails/${email.id}`);
-          const fullEmail = res.ok ? await res.json() : email;
+          if (!res.ok) throw new Error('Failed to load full email');
+          const fullEmail = await res.json();
           
           let to = '';
           let cc = '';
@@ -173,10 +175,15 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             to = fullEmail.replyTo || fullEmail.fromAddress || '';
             subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
             if (action === 'replyAll') {
-              // Combine from and to minus our own address, but here we just simplify
-              const allTos = Array.isArray(fullEmail.toAddresses) ? fullEmail.toAddresses.map((a: any) => a.address).join(', ') : '';
-              const allCcs = Array.isArray(fullEmail.ccAddresses) ? fullEmail.ccAddresses.map((a: any) => a.address).join(', ') : '';
-              cc = allTos + (allCcs ? `, ${allCcs}` : '');
+              const recipients = buildReplyAllRecipients({
+                replyTo: fullEmail.replyTo,
+                fromAddress: fullEmail.fromAddress,
+                toAddresses: fullEmail.toAddresses,
+                ccAddresses: fullEmail.ccAddresses,
+                currentAccountAddress: fullEmail.account?.emailAddress,
+              });
+              to = recipients.to.join(', ');
+              cc = recipients.cc.join(', ');
             }
           } else if (action === 'forward') {
             to = '';
@@ -188,6 +195,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             id: undefined, // New draft
             accountId: fullEmail.accountId || email.accountId,
             to,
+            cc,
             subject,
             bodyHtml,
           });
