@@ -5,7 +5,7 @@ import { X, Send, Paperclip, Trash2, Maximize2, Minimize2 } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { useAccounts } from '@/hooks/useFavouriteMutations';
 import { FromAddressSelect } from './FromAddressSelect';
@@ -24,6 +24,17 @@ export function ComposeModal() {
   // Chosen "From" account for THIS message (null = fall back to the active account).
   const [fromId, setFromId] = useState<string | null>(null);
 
+  // The id of the draft this compose is auto-saving to. Kept in a ref (not in the
+  // store) so that receiving a fresh draftId from the server never re-renders or
+  // re-hydrates the editor and wipes what the user is typing.
+  const draftIdRef = useRef<string | null>(null);
+  // Guards the one-time editor hydration so it runs only when the modal opens,
+  // never again while the user is typing.
+  const hasHydratedRef = useRef(false);
+  // Bumped on every editor change; used to (re)arm the debounced auto-save for
+  // body-only edits without putting the live HTML in a dependency array.
+  const [bodyVersion, setBodyVersion] = useState(0);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -31,6 +42,7 @@ export function ComposeModal() {
     ],
     content: '',
     immediatelyRender: false,
+    onUpdate: () => setBodyVersion((v) => v + 1),
     editorProps: {
       attributes: {
         class: 'prose prose-sm sm:prose max-w-none focus:outline-none min-h-[200px] h-full px-4 py-3',
@@ -38,26 +50,36 @@ export function ComposeModal() {
     },
   });
 
+  // Seed the header fields once when the modal opens, and reset the hydration
+  // guard when it closes. Callers set composeDraft and open the modal together,
+  // so composeDraft is already current on the render that flips isComposeModalOpen.
   useEffect(() => {
-    if (isComposeModalOpen && composeDraft) {
-      setTo(composeDraft.to || '');
-      setCc(composeDraft.cc || '');
-      setBcc(composeDraft.bcc || '');
+    if (isComposeModalOpen) {
+      setTo(composeDraft?.to || '');
+      setCc(composeDraft?.cc || '');
+      setBcc(composeDraft?.bcc || '');
       // Reveal Cc/Bcc rows when the draft carries them.
-      setShowCc(!!composeDraft.cc);
-      setShowBcc(!!composeDraft.bcc);
-      setSubject(composeDraft.subject || '');
-      // We can't use editor inside this useEffect directly if editor is initialized after.
-      // But editor is created with useEditor above, so it is available.
+      setShowCc(!!composeDraft?.cc);
+      setShowBcc(!!composeDraft?.bcc);
+      setSubject(composeDraft?.subject || '');
+      draftIdRef.current = composeDraft?.id ?? null;
+    } else {
+      hasHydratedRef.current = false;
     }
-  }, [isComposeModalOpen, composeDraft]);
+    // Intentionally keyed on open/close only, reading composeDraft at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComposeModalOpen]);
 
-  // Sync editor content separately since editor might be null initially
+  // Hydrate the editor body exactly once per open (editor may be null on the
+  // first render because of immediatelyRender: false). emitUpdate is disabled so
+  // seeding the draft doesn't trip the auto-save.
   useEffect(() => {
-    if (isComposeModalOpen && composeDraft && editor) {
-      editor.commands.setContent(composeDraft.bodyHtml || '');
+    if (isComposeModalOpen && editor && !hasHydratedRef.current) {
+      editor.commands.setContent(composeDraft?.bodyHtml || '', { emitUpdate: false });
+      hasHydratedRef.current = true;
     }
-  }, [isComposeModalOpen, composeDraft, editor]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isComposeModalOpen, editor]);
 
   // Shared accounts query (typed, with favourites metadata) for the From picker.
   const { data: accounts = [] } = useAccounts();
@@ -69,23 +91,26 @@ export function ComposeModal() {
   // The account we actually send/save from: the user's pick, else the active one.
   const fromAccount = accounts.find((a) => a.id === fromId) ?? activeAccount;
 
-  // Debounced auto-save
+  // Debounced auto-save. Re-arms whenever a field or the body (bodyVersion)
+  // changes. The body HTML is read at fire time, and the returned draftId is
+  // stored in a ref — never pushed back into the store — so the editor is never
+  // re-hydrated out from under the user.
   useEffect(() => {
     if (!isComposeModalOpen || !fromAccount) return;
 
     // Don't auto-save if completely empty to avoid spamming empty drafts
     if (!to && !cc && !bcc && !subject && (!editor || editor.isEmpty)) return;
 
-    const bodyHtml = editor?.getHTML() || '';
-    const bodyText = editor?.getText() || '';
-
     const timer = setTimeout(async () => {
+      const bodyHtml = editor?.getHTML() || '';
+      const bodyText = editor?.getText() || '';
+
       try {
         const res = await fetch(`/api/accounts/${fromAccount.id}/drafts`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            draftId: composeDraft?.id,
+            draftId: draftIdRef.current ?? undefined,
             to,
             cc,
             bcc,
@@ -97,17 +122,8 @@ export function ComposeModal() {
 
         if (res.ok) {
           const data = await res.json();
-          // Update the draft id in the store if it's new, so we keep updating the same draft
-          if (data.draftId && data.draftId !== composeDraft?.id) {
-            setComposeDraft({
-              id: data.draftId,
-              to,
-              cc,
-              bcc,
-              subject,
-              bodyHtml
-            });
-          }
+          // Keep saving to the same draft on subsequent auto-saves.
+          if (data.draftId) draftIdRef.current = data.draftId;
         }
       } catch (err) {
         console.error('Auto-save failed:', err);
@@ -115,7 +131,8 @@ export function ComposeModal() {
     }, 3000);
 
     return () => clearTimeout(timer);
-  }, [to, cc, bcc, subject, editor?.getHTML(), isComposeModalOpen, fromAccount?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [to, cc, bcc, subject, bodyVersion, isComposeModalOpen, fromAccount?.id]);
 
   if (!isComposeModalOpen) return null;
 
@@ -140,7 +157,7 @@ export function ComposeModal() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          draftId: composeDraft?.id,
+          draftId: draftIdRef.current ?? undefined,
           to: toList,
           ...(ccList.length ? { cc: ccList } : {}),
           ...(bccList.length ? { bcc: bccList } : {}),
@@ -154,6 +171,8 @@ export function ComposeModal() {
 
       setComposeModalOpen(false);
       setComposeDraft(null);
+      draftIdRef.current = null;
+      hasHydratedRef.current = false;
       setTo('');
       setCc('');
       setBcc('');
@@ -171,12 +190,12 @@ export function ComposeModal() {
   };
 
   const handleClose = () => {
-    if (composeDraft?.id && fromAccount) {
+    if (draftIdRef.current && fromAccount) {
       // Sync final draft to IMAP asynchronously when closing
       fetch(`/api/accounts/${fromAccount.id}/drafts/sync`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ draftId: composeDraft.id }),
+        body: JSON.stringify({ draftId: draftIdRef.current }),
       }).catch(console.error);
     }
 
@@ -188,6 +207,8 @@ export function ComposeModal() {
     setSubject('');
     setFromId(null);
     editor?.commands.clearContent();
+    draftIdRef.current = null;
+    hasHydratedRef.current = false;
     setComposeDraft(null);
     setComposeModalOpen(false);
   };
