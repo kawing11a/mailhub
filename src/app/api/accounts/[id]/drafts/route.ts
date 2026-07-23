@@ -3,10 +3,13 @@ import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import { parseAddresses } from '@/lib/email/addresses';
 
 const saveDraftSchema = z.object({
   draftId: z.string().optional(),
   to: z.string().optional(),
+  cc: z.string().optional(),
+  bcc: z.string().optional(),
   subject: z.string().optional(),
   bodyHtml: z.string().optional(),
   bodyText: z.string().optional(),
@@ -24,7 +27,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
+    where: {
+      id: accountId,
+      organizationId: auth.organizationId,
+      ...(auth.role !== 'admin'
+        ? { memberAccess: { some: { userId: auth.userId } } }
+        : {}),
+    },
     select: { id: true, emailAddress: true },
   });
 
@@ -38,14 +47,37 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   try {
     let emailId = data.draftId;
+    const toAddresses = parseAddresses(data.to || '').map((address) => ({ address, name: '' }));
+    const ccAddresses = parseAddresses(data.cc || '').map((address) => ({ address, name: '' }));
+    const bccAddresses = parseAddresses(data.bcc || '').map((address) => ({ address, name: '' }));
 
     if (emailId) {
-      // Update existing draft
+      const existingDraft = await prisma.email.findFirst({
+        where: {
+          id: emailId,
+          isDraft: true,
+          account: {
+            organizationId: auth.organizationId,
+            ...(auth.role !== 'admin'
+              ? { memberAccess: { some: { userId: auth.userId } } }
+              : {}),
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!existingDraft) return apiError('Draft not found', 404);
+
+      // Updating accountId moves the local draft when the user changes From.
       await prisma.email.update({
-        where: { id: emailId, accountId },
+        where: { id: emailId },
         data: {
+          accountId,
+          fromAddress: account.emailAddress,
           subject: data.subject || '',
-          toAddresses: data.to ? [{ address: data.to, name: '' }] : [],
+          toAddresses,
+          ccAddresses,
+          bccAddresses,
           body: {
             upsert: {
               create: {
@@ -69,7 +101,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
           folder: 'Drafts',
           subject: data.subject || '',
           fromAddress: account.emailAddress,
-          toAddresses: data.to ? [{ address: data.to, name: '' }] : [],
+          toAddresses,
+          ccAddresses,
+          bccAddresses,
           isRead: true,
           isDraft: true,
           body: {
@@ -83,7 +117,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       emailId = newDraft.id;
     }
 
-    return apiResponse({ success: true, draftId: emailId });
+    return apiResponse({ success: true, draftId: emailId, accountId });
   } catch (error) {
     console.error('Save draft error:', error);
     return apiError('Failed to save draft', 500);

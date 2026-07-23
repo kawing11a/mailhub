@@ -8,6 +8,9 @@ import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, Paperclip, 
 import { format } from 'date-fns';
 import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { LabelBadge } from '@/components/labels/LabelBadge';
+import { formatStoredAddresses } from '@/lib/email/display-addresses';
+import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
+import { buildReplyAllRecipients } from '@/lib/email/addresses';
 
 interface EmailViewerProps {
   emailId: string;
@@ -64,10 +67,16 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     [email?.emailLabels]
   );
 
-  const getFormattedDate = (dateString?: string) => {
-    if (!dateString) return '';
-    return format(new Date(dateString), timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
+  const getFormattedDate = (date?: Date | null) => {
+    if (!date) return '';
+    return format(date, timeFormat === '24h' ? 'MMM d, yyyy, HH:mm' : 'MMM d, yyyy, h:mm a');
   };
+
+  const toRecipients = formatStoredAddresses(email?.toAddresses);
+  const ccRecipients = formatStoredAddresses(email?.ccAddresses);
+  const bccRecipients = formatStoredAddresses(email?.bccAddresses);
+  const canShowBcc = email?.folder === 'SENT' || email?.isDraft;
+  const displayTimestamp = email ? getEmailDisplayTimestamp(email) : null;
 
   const formatSize = (bytes?: number) => {
     if (!bytes) return 'Unknown size';
@@ -79,7 +88,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleReply = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote" style="border-left: 1px solid #ccc; margin: 0 0 0 .8ex; padding-left: 1ex;">
@@ -90,6 +99,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
     setComposeDraft({
+      accountId: email.accountId,
       to: email.fromAddress,
       subject: email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml
@@ -100,7 +110,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleReplyAll = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote" style="border-left: 1px solid #ccc; margin: 0 0 0 .8ex; padding-left: 1ex;">
@@ -111,15 +121,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
 
-    const replyTo = email.replyTo || email.fromAddress || '';
-    const allTos = Array.isArray(email.toAddresses) ? email.toAddresses.map((a: any) => a.address) : [];
-    const allCcs = Array.isArray(email.ccAddresses) ? email.ccAddresses.map((a: any) => a.address) : [];
-
-    // Combine unique addresses for the 'to' field since ComposeModal only has a single 'to' input
-    const uniqueToAddresses = Array.from(new Set([replyTo, ...allTos, ...allCcs])).filter(Boolean).join(', ');
+    const recipients = buildReplyAllRecipients({
+      replyTo: email.replyTo,
+      fromAddress: email.fromAddress,
+      toAddresses: email.toAddresses,
+      ccAddresses: email.ccAddresses,
+      currentAccountAddress: email.account?.emailAddress,
+    });
 
     setComposeDraft({
-      to: uniqueToAddresses,
+      accountId: email.accountId,
+      to: recipients.to.join(', '),
+      cc: recipients.cc.join(', '),
       subject: email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml
     });
@@ -129,7 +142,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleForward = () => {
     if (!email) return;
     const fromStr = email.fromName ? `${email.fromName} <${email.fromAddress}>` : email.fromAddress;
-    const dateStr = getFormattedDate(email.receivedAt);
+    const dateStr = getFormattedDate(getEmailDisplayTimestamp(email));
     const quoteHtml = `
       <br/><br/>
       <div class="gmail_quote">
@@ -143,6 +156,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       </div>
     `;
     setComposeDraft({
+      accountId: email.accountId,
       to: '',
       subject: email.subject?.startsWith('Fwd:') ? email.subject : `Fwd: ${email.subject || ''}`,
       bodyHtml: quoteHtml
@@ -226,8 +240,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
               {email.fromName} <span className="text-gray-500 text-sm font-normal">&lt;{email.fromAddress}&gt;</span>
             </div>
             <div className="text-sm text-gray-500 mt-0.5">
-              To: {email.toAddresses?.map((t: any) => t.address).join(', ')}
+              To: {toRecipients}
             </div>
+            {ccRecipients && (
+              <div className="text-sm text-gray-500 mt-0.5 break-words">
+                Cc: {ccRecipients}
+              </div>
+            )}
+            {canShowBcc && bccRecipients && (
+              <div className="text-sm text-gray-500 mt-0.5 break-words">
+                Bcc: {bccRecipients}
+              </div>
+            )}
             {email.emailLabels?.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {email.emailLabels.map((el: any) => (
@@ -238,7 +262,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           </div>
         </div>
         <div className="text-sm text-gray-500 whitespace-nowrap">
-          {getFormattedDate(email.receivedAt)}
+          {getFormattedDate(displayTimestamp)}
         </div>
       </div>
 

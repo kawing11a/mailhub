@@ -6,6 +6,7 @@ import { Paperclip, User, Check } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
 import { LabelBadge } from '@/components/labels/LabelBadge';
+import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
 
 interface EmailRowProps {
   email: any;
@@ -32,15 +33,16 @@ export function EmailRow({
 }: EmailRowProps) {
   const isUnread = !email.isRead;
   const { showAvatars, timeFormat } = useUIStore();
+  const snippet = typeof email.snippet === 'string' ? email.snippet.trim() : '';
 
   const formattedTime = useMemo(() => {
-    if (!email.receivedAt) return '';
-    const date = new Date(email.receivedAt);
+    const date = getEmailDisplayTimestamp(email);
+    if (!date) return '';
     if (isToday(date)) {
       return format(date, timeFormat === '24h' ? 'HH:mm' : 'h:mm a');
     }
     return format(date, timeFormat === '24h' ? 'MMM d, HH:mm' : 'MMM d, h:mm a');
-  }, [email.receivedAt, timeFormat]);
+  }, [email.folder, email.sentAt, email.receivedAt, email.createdAt, timeFormat]);
 
   return (
     <div
@@ -109,9 +111,11 @@ export function EmailRow({
             <span className={clsx('mr-2', isUnread ? 'text-gray-900' : 'text-gray-700')}>
               {email.subject || '(No Subject)'}
             </span>
-            <span className="text-gray-500 font-normal truncate hidden sm:inline">
-              — {email.snippet || ''}
-            </span>
+            {snippet && (
+              <span className="text-gray-500 font-normal truncate hidden sm:inline">
+                — {snippet}
+              </span>
+            )}
           </span>
           {email.emailLabels?.length > 0 && (
             <span className="hidden sm:flex items-center gap-1 ml-2 flex-shrink-0">

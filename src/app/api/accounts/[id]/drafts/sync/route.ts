@@ -22,7 +22,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
+    where: {
+      id: accountId,
+      organizationId: auth.organizationId,
+      ...(auth.role !== 'admin'
+        ? { memberAccess: { some: { userId: auth.userId } } }
+        : {}),
+    },
   });
 
   if (!account) return apiError('Account not found', 404);
@@ -43,10 +49,21 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
+    let warning: string | undefined;
     const MailComposer = require('nodemailer/lib/mail-composer');
+    const joinAddresses = (json: unknown): string | undefined => {
+      if (!Array.isArray(json)) return undefined;
+      const addrs = json
+        .map((a) => (a as { address?: string })?.address)
+        .filter((a): a is string => !!a);
+      return addrs.length ? addrs.join(', ') : undefined;
+    };
+
     const composer = new MailComposer({
       from: `"${account.label}" <${account.emailAddress}>`,
-      to: (draft.toAddresses as any[])?.map((t: any) => t.address).join(', '),
+      to: joinAddresses(draft.toAddresses),
+      cc: joinAddresses(draft.ccAddresses),
+      bcc: joinAddresses(draft.bccAddresses),
       subject: draft.subject,
       html: draft.body?.bodyHtml,
       text: draft.body?.bodyText,
@@ -59,6 +76,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         await syncDraftRaw(accessToken, rawBuffer);
       } catch (e: any) {
         console.error('Failed to sync draft to Gmail:', e.message);
+        warning = 'Failed to sync draft to Gmail';
       }
     } else {
       if (account.imapHost && account.passwordEncrypted) {
@@ -79,7 +97,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return apiResponse({ success: true });
+    return apiResponse({ success: true, ...(warning ? { warning } : {}) });
   } catch (error) {
     console.error('IMAP sync draft error:', error);
     // Don't fail the API call if IMAP sync fails, as local save succeeded
