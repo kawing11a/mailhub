@@ -165,7 +165,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
           const res = await fetch(`/api/accounts/${accountId}/emails/${email.id}`);
           if (!res.ok) throw new Error('Failed to load full email');
           const fullEmail = await res.json();
-          
+
           let to = '';
           let cc = '';
           let subject = fullEmail.subject || '';
@@ -294,23 +294,23 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     ? accounts?.find((a: any) => a.id === selectedAccountId)
     : null;
 
-  const { 
-    data, 
-    isLoading, 
-    fetchNextPage, 
-    hasNextPage, 
-    isFetchingNextPage 
+  const {
+    data,
+    isLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage
   } = useInfiniteQuery({
     queryKey: ['emails', selectedAccountId, selectedFolder],
     queryFn: async ({ pageParam = 1 }) => {
       let url = `/api/accounts/${selectedAccountId}/emails`;
-        
+
       if (selectedAccountId === 'new-emails') {
         url = '/api/emails/new';
       } else {
         url += `?folder=${selectedFolder}&page=${pageParam}&limit=20`;
       }
-        
+
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch emails');
       return res.json();
@@ -385,8 +385,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               ) : (
                 <>
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                    <div 
-                      className="w-3 h-3 rounded-full flex-shrink-0" 
+                    <div
+                      className="w-3 h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: activeAccount?.color || '#3B82F6' }}
                     />
                     <span className="truncate">{activeAccount?.label || activeAccount?.emailAddress}</span>
@@ -481,8 +481,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
       {contextMenu && (
         <>
-          <div 
-            className="fixed inset-0 z-40" 
+          <div
+            className="fixed inset-0 z-40"
             onClick={() => setContextMenu(null)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -498,21 +498,21 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <button 
+            <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
               onClick={() => handleContextAction('reply')}
             >
               <Reply className="w-4 h-4 text-gray-500" />
               <span>Reply</span>
             </button>
-            <button 
+            <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
               onClick={() => handleContextAction('replyAll')}
             >
               <ReplyAll className="w-4 h-4 text-gray-500" />
               <span>Reply All</span>
             </button>
-            <button 
+            <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
               onClick={() => handleContextAction('forward')}
             >
@@ -521,7 +521,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             </button>
             <div className="border-t border-gray-100 my-1"></div>
             {contextMenu.email.isRead ? (
-              <button 
+              <button
                 className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
                 onClick={() => handleContextAction('unread')}
               >
@@ -529,7 +529,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
                 <span>Mark as unread</span>
               </button>
             ) : (
-              <button 
+              <button
                 className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
                 onClick={() => handleContextAction('read')}
               >
@@ -537,7 +537,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
                 <span>Mark as read</span>
               </button>
             )}
-            <button 
+            <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
               onClick={() => handleContextAction('star')}
             >
@@ -554,7 +554,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               )}
             </button>
             <div className="border-t border-gray-100 my-1"></div>
-            <button 
+            <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2 text-red-600"
               onClick={() => handleContextAction('delete')}
             >
