@@ -28,16 +28,10 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # Doing this before copying source code caches this layer
 RUN npm install -g tsx
 
-# Copy files that rarely change first
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/tsconfig.json ./tsconfig.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
-
 # Copy files that change frequently last to maximize layer caching
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 COPY --from=builder /app/src ./src
 
 EXPOSE 3000

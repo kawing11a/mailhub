@@ -8,13 +8,13 @@ A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMT
 |---|---|
 | **Framework** | Next.js 16 (App Router) |
 | **Language** | TypeScript 5 |
-| **PWA / Client** | Service Worker, Web App Manifest, `@dnd-kit` (Drag & Drop) |
+| **PWA / Client** | Service Worker, Web App Manifest, `usePWAInstall` hook, `@dnd-kit` (Drag & Drop) |
 | **Database** | PostgreSQL 16 + Prisma ORM 7 (`@prisma/adapter-pg`) |
 | **Search** | Meilisearch |
 | **Queue / Cache** | Redis 7 + BullMQ |
 | **Auth** | JWT (`jose`) + `bcryptjs` |
 | **Email Protocols** | IMAP (`imapflow`) · SMTP (`nodemailer`) · Gmail OAuth 2.0 · Outlook OAuth 2.0 |
-| **UI** | React 19, Tailwind CSS 4, Lucide Icons, TipTap editor |
+| **UI** | React 19, Tailwind CSS 4, Lucide Icons, TipTap editor, Local `geist` fonts |
 | **State** | Zustand + TanStack React Query |
 | **Notifications** | Web Push (`web-push` + VAPID) |
 | **Testing** | Jest + `ts-jest` |
@@ -27,7 +27,7 @@ A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMT
 - ⚡ **Realtime Email Sync**: High-throughput background sync powered by BullMQ workers with automatic SPAM detection and Meilisearch indexation.
 - 🔍 **Instant Full-Text Search**: Search headers, body content, and senders seamlessly across all connected accounts.
 - 🏷️ **Drag & Drop Label Management**: Organize emails using customizable organization labels and interactive drag-and-drop actions.
-- 📱 **Progressive Web App (PWA)**: Installable desktop/mobile experience with offline Service Worker caching and automated background update polling.
+- 📱 **Progressive Web App (PWA)**: Installable desktop/mobile experience with offline Service Worker caching, automated background update polling, system installation detection, and dynamic UI install buttons.
 - 🔔 **Real-Time SSE & Push Notifications**: Instant inbox updates via Server-Sent Events (SSE) and native Web Push notifications.
 
 ## Architecture
@@ -182,28 +182,11 @@ npm run worker
 | `/activity` | System audit and activity logs |
 | `/testing` | Integration test sandbox |
 
-## Scripts
+## Progressive Web App (PWA) Features
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server with HTTPS |
-| `npm run build` | Production build |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
-| `npm test` | Run Jest tests |
-| `npm run test:watch` | Run Jest in watch mode |
-| `npm run worker` | Start background email sync worker |
-| `npm run services:up` | Docker Compose up (Postgres, Redis, Meilisearch) |
-| `npm run services:down` | Stop Docker Compose services |
-| `npm run db:seed` | Seed database with initial test data |
-
-## PWA Asset Generation
-
-To generate PWA icons for web app installation:
-
-```bash
-node scripts/generate-pwa-icons.js
-```
+- **System Installation Check**: Utilizes `navigator.getInstalledRelatedApps()` and display mode media queries (`standalone`, `window-controls-overlay`) to detect if MailHub is installed on the user's OS.
+- **Smart Install UI**: Displays an **Install MailHub App** button in the sidebar for browser tabs; automatically hides when accessed inside the installed PWA app or system.
+- **Icon Generation**: Generated app icon suite available via `node scripts/generate-pwa-icons.js`.
 
 ## Docker
 
@@ -241,16 +224,17 @@ src/
 │   │   ├── org/         # Organization & team member management
 │   │   ├── realtime/    # Server-Sent Events stream
 │   │   └── version/     # PWA / App version check
-│   ├── layout.tsx       # Root layout
+│   ├── layout.tsx       # Root layout with local Geist font loading
 │   └── manifest.ts      # Web App Manifest for PWA
 ├── components/
 │   ├── email/           # Email list, thread viewer, compose modal, context menu
 │   ├── labels/          # Label assignment picker & list components
 │   ├── providers/       # OAuth provider integration components
+│   ├── pwa/             # PWA Install button & instruction modal
 │   ├── search/          # Meilisearch query bar
 │   ├── settings/        # Settings, account access modal, accounts list
-│   └── sidebar/         # Dynamic navigation sidebar
-├── hooks/               # Custom React hooks (PWA updates, SSE, queries)
+│   └── sidebar/         # Dynamic navigation sidebar with PWA install integration
+├── hooks/               # Custom React hooks (usePWAInstall, PWA updates, SSE, queries)
 ├── lib/
 │   ├── accounts/        # Account management logic
 │   ├── auth/            # JWT + session utilities
