@@ -258,6 +258,61 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           {getFormattedDate(displayTimestamp)}
         </div>
       </div>
+      {/* Attachments Section — pinned under the addresses, above the body */}
+      {email.attachments && email.attachments.length > 0 ? (
+        <div className="px-6 py-4 border-b border-gray-100 max-h-56 overflow-y-auto flex-shrink-0">
+          <h3 className="text-sm font-medium text-gray-900 flex items-center mb-4">
+            <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
+            Attachments ({email.attachments.length})
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {email.attachments.map((att: any) => {
+              const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
+              const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
+
+              return (
+                <div key={att.id} className="flex items-center p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex-1 min-w-0 mr-3">
+                    <p className="text-sm font-medium text-gray-900 truncate" title={att.filename}>
+                      {att.filename || 'Unnamed attachment'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {formatSize(att.sizeBytes)}
+                    </p>
+                  </div>
+                  <a
+                    href={downloadUrl}
+                    download
+                    onClick={(e) => {
+                      if (isSpam) {
+                        e.preventDefault();
+                        setPendingDownloadUrl(downloadUrl);
+                        setDownloadConfirmStep(1);
+                      }
+                    }}
+                    className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
+                    title="Download"
+                  >
+                    <Download className="w-4 h-4" />
+                  </a>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : email.hasAttachments ? (
+        <div className="px-6 py-4 border-b border-gray-100 flex-shrink-0">
+          <h3 className="text-sm font-medium text-gray-900 flex items-center mb-2">
+            <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
+            Attachments
+          </h3>
+          <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+            This email has attachments, but they were not saved to the server during the initial sync.
+            Only newly synced emails will have their attachments available for download.
+          </div>
+        </div>
+      ) : null}
+
       {/* Security Warning Banner if High Risk */}
       {email.isHighRisk && (
         <div className="mx-6 mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start space-x-3 text-amber-900 shadow-sm">
@@ -288,61 +343,6 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             {email.body?.bodyText || 'Empty message.'}
           </div>
         )}
-
-        {/* Attachments Section */}
-        {email.attachments && email.attachments.length > 0 ? (
-          <div className="mt-8 border-t border-gray-100 pt-6">
-            <h3 className="text-sm font-medium text-gray-900 flex items-center mb-4">
-              <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
-              Attachments ({email.attachments.length})
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {email.attachments.map((att: any) => {
-                const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
-                const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
-
-                return (
-                  <div key={att.id} className="flex items-center p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                    <div className="flex-1 min-w-0 mr-3">
-                      <p className="text-sm font-medium text-gray-900 truncate" title={att.filename}>
-                        {att.filename || 'Unnamed attachment'}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {formatSize(att.sizeBytes)}
-                      </p>
-                    </div>
-                    <a
-                      href={downloadUrl}
-                      download
-                      onClick={(e) => {
-                        if (isSpam) {
-                          e.preventDefault();
-                          setPendingDownloadUrl(downloadUrl);
-                          setDownloadConfirmStep(1);
-                        }
-                      }}
-                      className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
-                      title="Download"
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : email.hasAttachments ? (
-          <div className="mt-8 border-t border-gray-100 pt-6">
-            <h3 className="text-sm font-medium text-gray-900 flex items-center mb-2">
-              <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
-              Attachments
-            </h3>
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-              This email has attachments, but they were not saved to the server during the initial sync.
-              Only newly synced emails will have their attachments available for download.
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {/* Playful Spam Warning Modal */}

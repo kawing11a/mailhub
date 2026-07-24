@@ -114,6 +114,9 @@ export function useSSE() {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['labels'] });
+      // Without these the sidebar unread badges lag behind pushed mail by up to 30s
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
     });
 
     es.addEventListener('initial_sync_complete', (event) => {
@@ -122,6 +125,8 @@ export function useSSE() {
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
     });
 
     es.addEventListener('sync_progress', (event) => {

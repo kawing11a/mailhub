@@ -264,16 +264,41 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       // Opening the email marks it read server-side (GET side-effect), so keep the
       // sidebar unread badges in sync optimistically. Invalidating here would race
       // against that server write, so update the caches directly instead.
-      if (selectedAccountId && selectedAccountId !== 'new-emails' && email.folder === 'INBOX') {
-        queryClient.setQueryData(['accountStats', selectedAccountId], (oldData: any) =>
+      const readAccountId =
+        (selectedAccountId === 'all' || selectedAccountId === 'new-emails')
+          ? email.accountId
+          : selectedAccountId;
+
+      if (readAccountId && email.folder === 'INBOX') {
+        queryClient.setQueryData(['accountStats', readAccountId], (oldData: any) =>
           oldData
             ? { ...oldData, unreadCount: Math.max(0, (oldData.unreadCount || 0) - 1) }
             : oldData
         );
       }
       queryClient.setQueryData(['new-emails-count'], (oldData: any) => {
-        if (!oldData?.emails) return oldData;
-        return { ...oldData, emails: oldData.emails.filter((e: any) => e.id !== email.id) };
+        if (!oldData) return oldData;
+
+        const next = { ...oldData };
+
+        if (next.emails) {
+          next.emails = next.emails.filter((e: any) => e.id !== email.id);
+        }
+
+        // The sidebar account badge reads countsByAccount first and only falls back
+        // to `emails`, so the filter above alone leaves it stale until the 30s poll.
+        if (next.countsByAccount && readAccountId && email.folder === 'INBOX') {
+          const counts = { ...next.countsByAccount };
+          const remaining = (counts[readAccountId] || 0) - 1;
+          if (remaining > 0) {
+            counts[readAccountId] = remaining;
+          } else {
+            delete counts[readAccountId];
+          }
+          next.countsByAccount = counts;
+        }
+
+        return next;
       });
     }
 

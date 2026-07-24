@@ -191,12 +191,13 @@ export function AccountLabelList({ accountId, readOnly = false }: AccountLabelLi
               'inline-flex items-center gap-1 rounded-full text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500',
               accountLabels.length === 0
                 ? 'border border-dashed border-gray-300 bg-white px-2.5 py-0.5 text-gray-500 hover:border-gray-400 hover:text-gray-700'
-                : 'border border-gray-200 bg-gray-50 px-2 py-0.5 text-gray-600 hover:bg-gray-100'
+                : 'border border-gray-200 bg-gray-50 p-1 text-gray-600 hover:bg-gray-100'
             )}
             title="Assign label to account"
+            aria-label="Assign label to account"
           >
             <Plus className="h-3 w-3 text-gray-400" />
-            <span>{accountLabels.length === 0 ? 'Add label' : 'Tag'}</span>
+            {accountLabels.length === 0 && <span>Add label</span>}
           </button>
 
           {isOpen && (
