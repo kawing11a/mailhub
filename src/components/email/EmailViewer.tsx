@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 
 interface EmailViewerProps {
   emailId: string;
@@ -56,6 +57,42 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
 
   const handleMarkUnread = () => {
     updateEmailMutation.mutate({ isRead: false });
+  };
+
+  const deleteEmailMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/accounts/${selectedAccountId}/emails/${emailId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error('Failed to delete email');
+      return res.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+
+      if (result?.serverSynced === false) {
+        toast.error('Removed locally, but the mail server could not be updated');
+      } else {
+        toast.success(result?.permanent ? 'Email permanently deleted' : 'Email moved to trash');
+      }
+      if (onBack) onBack();
+    },
+    onError: () => toast.error('Failed to delete email'),
+  });
+
+  const handleDelete = () => {
+    // Deleting from trash is permanent and propagates to the mail server.
+    if (email?.folder === 'TRASH') {
+      const confirmed = window.confirm(
+        `Permanently delete "${email.subject || '(no subject)'}"?\n\nThis removes it from the mail server too and cannot be undone.`
+      );
+      if (!confirmed) return;
+    }
+    deleteEmailMutation.mutate();
   };
 
   const labelCounts = useMemo(
@@ -214,8 +251,17 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             {updateEmailMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
-          <button className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors" title="Delete">
-            <Trash2 className="w-5 h-5" />
+          <button
+            onClick={handleDelete}
+            disabled={deleteEmailMutation.isPending}
+            className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+            title={email?.folder === 'TRASH' ? 'Delete permanently' : 'Delete'}
+          >
+            {deleteEmailMutation.isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Trash2 className="w-5 h-5" />
+            )}
           </button>
         </div>
       </div>
