@@ -499,7 +499,6 @@ export function AccountsSection() {
       {labels.length > 0 && (
         <div className="flex-none px-1 pb-2">
           <LabelFilterChips
-            wrap
             labels={labels}
             selectedLabelId={effectiveSelectedLabelId}
             onSelect={setSelectedLabelId}
