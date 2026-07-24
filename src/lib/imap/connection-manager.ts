@@ -321,8 +321,6 @@ export class IMAPConnectionManager {
         if (aiCheck.isHighRisk) {
           isHighRisk = true;
           riskReason = aiCheck.reason || 'Flagged by local LLM';
-          finalFolder = 'SPAM';
-          skipNotifications = true; // Suppress notifications for SPAM
         }
       }
 
