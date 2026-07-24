@@ -15,6 +15,7 @@ import {
   Search,
   Send,
   Settings,
+  Settings2,
   Star,
   Trash2,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ import {
   useLabels,
 } from '@/components/accounts/LabelFilterMenu';
 import { LabelFilterChips } from '@/components/accounts/LabelFilterChips';
+import { EditAccountModal } from '@/components/settings/EditAccountModal';
 
 const FOLDERS = [
   { id: 'INBOX', name: 'Inbox', icon: Inbox },
@@ -304,11 +306,22 @@ export function AccountsSection() {
     return map;
   }, [newEmailsData]);
 
+  const { data: authData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
+  const isAdmin = authData?.role === 'admin';
+
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
     account: SidebarAccount;
   } | null>(null);
+  const [settingsAccount, setSettingsAccount] = useState<SidebarAccount | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
@@ -373,6 +386,9 @@ export function AccountsSection() {
           await navigator.clipboard.writeText(account.emailAddress);
           toast.success('Email address copied to clipboard');
         }
+        break;
+      case 'accountSettings':
+        setSettingsAccount(account);
         break;
       case 'settings':
         router.push('/settings/accounts');
@@ -645,6 +661,16 @@ export function AccountsSection() {
 
               <div className="border-t border-gray-100 my-1" />
 
+              {isAdmin && (
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center space-x-2.5 transition-colors text-xs font-medium text-gray-700"
+                  onClick={() => handleContextAction('accountSettings')}
+                >
+                  <Settings2 className="w-4 h-4 text-gray-500" />
+                  <span>Account Settings</span>
+                </button>
+              )}
+
               <button
                 className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center space-x-2.5 transition-colors text-xs font-medium text-gray-700"
                 onClick={() => handleContextAction('settings')}
@@ -656,6 +682,12 @@ export function AccountsSection() {
           </div>
         </>
       )}
+
+      <EditAccountModal
+        isOpen={!!settingsAccount}
+        account={settingsAccount}
+        onClose={() => setSettingsAccount(null)}
+      />
 
       {/* Folder bar: Single row of 5 icons with hover tooltips at the beginning */}
       <div className="flex-none">

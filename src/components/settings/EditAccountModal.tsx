@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Loader2, Mail, AlertTriangle, Server } from 'lucide-react';
 import { updateAccountSchema, type UpdateAccountInput } from '@/lib/validation/schemas';
 import toast from 'react-hot-toast';
@@ -38,21 +38,36 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
     },
   });
 
-  // Pre-fill form when account changes
+  // Fetch the full account (the list query that supplies `account` omits
+  // IMAP/SMTP host/port and username, so those must come from the single-account endpoint).
+  const { data: fetchedAccount, isLoading: isLoadingAccount } = useQuery({
+    queryKey: ['account', account?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/accounts/${account.id}`);
+      if (!res.ok) throw new Error('Failed to fetch account details');
+      return res.json();
+    },
+    enabled: isOpen && !!account?.id,
+  });
+
+  // Prefer the fully-hydrated account; fall back to the passed prop while it loads.
+  const fullAccount = fetchedAccount || account;
+
+  // Pre-fill form once the full account (with IMAP/SMTP settings) is available.
   useEffect(() => {
-    if (account) {
+    if (fullAccount) {
       resetImap({
-        label: account.label || '',
-        color: account.color || '',
-        imapHost: account.imapHost || '',
-        imapPort: account.imapPort || 993,
-        smtpHost: account.smtpHost || '',
-        smtpPort: account.smtpPort || 465,
-        username: account.username || account.emailAddress || '',
+        label: fullAccount.label || '',
+        color: fullAccount.color || '',
+        imapHost: fullAccount.imapHost || '',
+        imapPort: fullAccount.imapPort || 993,
+        smtpHost: fullAccount.smtpHost || '',
+        smtpPort: fullAccount.smtpPort || 465,
+        username: fullAccount.username || fullAccount.emailAddress || '',
         password: '', // Password is blank for security
       });
     }
-  }, [account, resetImap]);
+  }, [fullAccount, resetImap]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateAccountInput) => {
@@ -84,17 +99,17 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
   });
 
   const handleOauthReauthorize = () => {
-    if (!account) return;
-    
-    if (account.provider === 'gmail' || account.oauthProvider === 'google') {
+    if (!fullAccount) return;
+
+    if (fullAccount.provider === 'gmail' || fullAccount.oauthProvider === 'google') {
       const initUrl = new URL('/api/accounts/oauth/google/init', window.location.origin);
-      initUrl.searchParams.set('emailAddress', account.emailAddress);
-      initUrl.searchParams.set('label', account.label);
+      initUrl.searchParams.set('emailAddress', fullAccount.emailAddress);
+      initUrl.searchParams.set('label', fullAccount.label);
       window.location.href = initUrl.toString();
-    } else if (account.provider === 'outlook' || account.oauthProvider === 'microsoft') {
+    } else if (fullAccount.provider === 'outlook' || fullAccount.oauthProvider === 'microsoft') {
       const initUrl = new URL('/api/accounts/oauth/microsoft/init', window.location.origin);
-      initUrl.searchParams.set('emailAddress', account.emailAddress);
-      initUrl.searchParams.set('label', account.label);
+      initUrl.searchParams.set('emailAddress', fullAccount.emailAddress);
+      initUrl.searchParams.set('label', fullAccount.label);
       window.location.href = initUrl.toString();
     } else {
       setSubmitError('Reauthorization for this provider is not yet implemented');
@@ -129,7 +144,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
 
   if (!isOpen || !account) return null;
 
-  const isOauth = account.oauthProvider != null || account.provider === 'gmail';
+  const isOauth = fullAccount.oauthProvider != null || fullAccount.provider === 'gmail';
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -145,7 +160,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
             {/* Header */}
             <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
               <h3 className="text-lg font-semibold leading-6 text-gray-900">
-                Manage Connection: {account.emailAddress}
+                Manage Connection: {fullAccount.emailAddress}
               </h3>
               <div className="flex items-center space-x-3">
                 <button
@@ -171,7 +186,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
               </div>
             )}
 
-            {!account.isActive && (
+            {!isLoadingAccount && !fullAccount.isActive && (
               <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -179,16 +194,16 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-yellow-700 font-medium">
-                      This account is currently inactive due to connection or authentication issues. 
+                      This account is currently inactive due to connection or authentication issues.
                     </p>
-                    {account.authError && (
+                    {fullAccount.authError && (
                       <p className="mt-1 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-100">
-                        <span className="font-semibold">Error:</span> {account.authError}
+                        <span className="font-semibold">Error:</span> {fullAccount.authError}
                       </p>
                     )}
                     <p className="mt-2 text-sm text-yellow-700">
-                      {isOauth 
-                        ? 'Reauthorize with your provider to restore the connection.' 
+                      {isOauth
+                        ? 'Reauthorize with your provider to restore the connection.'
                         : 'Please update your IMAP/SMTP credentials below to restore the connection.'}
                     </p>
                   </div>
@@ -196,18 +211,22 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
               </div>
             )}
 
-            {isOauth ? (
+            {isLoadingAccount && !fetchedAccount ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : isOauth ? (
               <div className="space-y-6">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
                   <div className="w-12 h-12 flex-shrink-0 bg-white border border-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                    {account.oauthProvider === 'google' || account.provider === 'gmail' ? (
+                    {fullAccount.oauthProvider === 'google' || fullAccount.provider === 'gmail' ? (
                       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                         <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
                         <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                         <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                       </svg>
-                    ) : account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? (
+                    ) : fullAccount.oauthProvider === 'microsoft' || fullAccount.provider === 'outlook' ? (
                       <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M11.55 3.3L1.5 4.8C1.2 4.85 1 5.1 1 5.4V18.6C1 18.9 1.25 19.15 1.5 19.2L11.55 20.7C11.8 20.75 12 20.55 12 20.3V3.7C12 3.45 11.8 3.25 11.55 3.3z" fill="#0078D4"/>
                         <path d="M22.5 5H12V19H22.5C22.75 19 23 18.75 23 18.5V5.5C23 5.25 22.75 5 22.5 5z" fill="#005A9E"/>
@@ -219,14 +238,14 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                   </div>
                   <h4 className="text-md font-medium text-gray-900 mb-1">OAuth Connection</h4>
                   <p className="text-sm text-gray-500 mb-6">
-                    This account is connected securely via {account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? 'Microsoft' : (account.oauthProvider || (account.provider === 'gmail' ? 'Google' : 'OAuth'))}. To fix connection issues, you must reauthorize access directly through them.
+                    This account is connected securely via {fullAccount.oauthProvider === 'microsoft' || fullAccount.provider === 'outlook' ? 'Microsoft' : (fullAccount.oauthProvider || (fullAccount.provider === 'gmail' ? 'Google' : 'OAuth'))}. To fix connection issues, you must reauthorize access directly through them.
                   </p>
                   <button
                     type="button"
                     onClick={handleOauthReauthorize}
                     className="inline-flex items-center justify-center rounded-md border border-transparent bg-accent-600 px-6 py-3 text-sm font-medium text-white shadow-sm hover:bg-accent-700"
                   >
-                    {account.oauthProvider === 'google' || account.provider === 'gmail' ? 'Reauthorize with Gmail' : account.oauthProvider === 'microsoft' || account.provider === 'outlook' ? 'Reauthorize with Microsoft' : 'Reauthorize Account'}
+                    {fullAccount.oauthProvider === 'google' || fullAccount.provider === 'gmail' ? 'Reauthorize with Gmail' : fullAccount.oauthProvider === 'microsoft' || fullAccount.provider === 'outlook' ? 'Reauthorize with Microsoft' : 'Reauthorize Account'}
                   </button>
                 </div>
               </div>
