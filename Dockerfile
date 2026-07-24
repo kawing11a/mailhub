@@ -28,11 +28,10 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # Doing this before copying source code caches this layer
 RUN npm install -g tsx
 
-# Copy files that change frequently last to maximize layer caching
+# Copy standalone files and static/public assets
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/src ./src
 
 EXPOSE 3000
 ENV PORT 3000
