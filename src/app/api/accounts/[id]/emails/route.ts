@@ -93,6 +93,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         isRead: true,
         isStarred: true,
         isDraft: true,
+        isHighRisk: true,
+        riskReason: true,
         hasAttachments: true,
         receivedAt: true,
         sentAt: true,

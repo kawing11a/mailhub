@@ -1,3 +1,3 @@
-- `[x]` Task 1: Create the API Endpoint
-- `[x]` Task 2: Create the Dedicated Inbox View
-- `[x]` Task 3: Update Sidebar Navigation
+| Task | Status | Description |
+| --- | --- | --- |
+| Task 1: Enhance `AccountLabelList` with Quick Label Assignment & Popover Picker | done | Add quick label assignment dropdown popover, hover-unassign buttons, and optimistic React Query mutations to `AccountLabelList.tsx` |

@@ -2,7 +2,7 @@
 
 import { format, isToday } from 'date-fns';
 import clsx from 'clsx';
-import { Paperclip, User, Check } from 'lucide-react';
+import { Paperclip, User, Check, AlertTriangle } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
 import { LabelBadge } from '@/components/labels/LabelBadge';
@@ -98,8 +98,17 @@ export function EmailRow({
 
       <div className={clsx("flex-1 min-w-0 pr-4", !showAvatars && "pl-[var(--spacing-density-col)]")}>
         <div className="flex items-center justify-between mb-0.5">
-          <span className={clsx("truncate text-sm", isUnread ? "text-gray-900 font-bold" : "text-gray-900 font-medium")}>
-            {email.fromName || email.fromAddress}
+          <span className={clsx("truncate text-sm flex items-center gap-1.5", isUnread ? "text-gray-900 font-bold" : "text-gray-900 font-medium")}>
+            <span className="truncate">{email.fromName || email.fromAddress}</span>
+            {email.isHighRisk && (
+              <span
+                title={email.riskReason || 'Flagged as high risk'}
+                className="inline-flex items-center space-x-1 px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold flex-shrink-0"
+              >
+                <AlertTriangle className="w-3 h-3 text-amber-600" />
+                <span>High Risk</span>
+              </span>
+            )}
           </span>
           <span className="text-xs whitespace-nowrap text-gray-500 ml-2">
             {formattedTime}

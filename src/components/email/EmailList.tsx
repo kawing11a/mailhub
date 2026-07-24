@@ -1,15 +1,14 @@
 'use client';
 
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAccountStore } from '@/stores/accountStore';
-import { EmailRow } from './EmailRow';
-import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { AccountLabelList } from '@/components/labels/AccountLabelList';
-import { Loader2, Search, Inbox, MailOpen, Mail, Star, StarOff, Trash2, Reply, ReplyAll, Forward, X } from 'lucide-react';
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useSearch } from '@/hooks/useSearch';
-import toast from 'react-hot-toast';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
+import { useAccountStore } from '@/stores/accountStore';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, Search, Star, StarOff, Trash2, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
+import { EmailRow } from './EmailRow';
 
 interface ContextMenuState {
   x: number;
@@ -379,9 +378,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
           {activeAccount || selectedAccountId === 'new-emails' ? (
             <>
               {selectedAccountId === 'new-emails' ? (
-                 <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                   <span>New Emails</span>
-                 </h2>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                  <span>New Emails</span>
+                </h2>
               ) : (
                 <>
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
@@ -430,13 +429,6 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               {selectedEmails.length} selected
             </span>
           </div>
-          <LabelAssignmentPicker
-            emailIds={selectedEmailIds}
-            labelCounts={selectionLabelCounts}
-            align="right"
-            showButtonText
-            buttonClassName="flex items-center px-3 py-1.5 bg-accent-600 hover:bg-accent-700 text-white rounded-md text-sm font-medium shadow-sm transition-colors"
-          />
         </div>
       )}
 

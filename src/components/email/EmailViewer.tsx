@@ -1,16 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAccountStore } from '@/stores/accountStore';
-import { useUIStore } from '@/stores/uiStore';
-import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail, Paperclip, Download } from 'lucide-react';
-import { format } from 'date-fns';
-import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
 import { LabelBadge } from '@/components/labels/LabelBadge';
+import { buildReplyAllRecipients } from '@/lib/email/addresses';
 import { formatStoredAddresses } from '@/lib/email/display-addresses';
 import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
-import { buildReplyAllRecipients } from '@/lib/email/addresses';
+import { useAccountStore } from '@/stores/accountStore';
+import { useUIStore } from '@/stores/uiStore';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { format } from 'date-fns';
+import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 interface EmailViewerProps {
   emailId: string;
@@ -196,12 +195,6 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
 
         <div className="flex items-center space-x-2">
-          <LabelAssignmentPicker
-            emailIds={[emailId]}
-            labelCounts={labelCounts}
-            align="right"
-            allowRemoval={false}
-          />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
           </button>
@@ -265,6 +258,20 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           {getFormattedDate(displayTimestamp)}
         </div>
       </div>
+      {/* Security Warning Banner if High Risk */}
+      {email.isHighRisk && (
+        <div className="mx-6 mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start space-x-3 text-amber-900 shadow-sm">
+          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <span className="font-semibold">Security Warning:</span> This message was flagged as high risk by automated spam check.
+            {email.riskReason && (
+              <p className="mt-1 text-xs text-amber-800 bg-amber-100/60 p-2 rounded border border-amber-200 font-mono">
+                <span className="font-semibold font-sans">Reason:</span> {email.riskReason}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Body Content */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -281,7 +288,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             {email.body?.bodyText || 'Empty message.'}
           </div>
         )}
-        
+
         {/* Attachments Section */}
         {email.attachments && email.attachments.length > 0 ? (
           <div className="mt-8 border-t border-gray-100 pt-6">
@@ -293,7 +300,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
               {email.attachments.map((att: any) => {
                 const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
                 const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
-                
+
                 return (
                   <div key={att.id} className="flex items-center p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                     <div className="flex-1 min-w-0 mr-3">
@@ -331,13 +338,13 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
               Attachments
             </h3>
             <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-              This email has attachments, but they were not saved to the server during the initial sync. 
+              This email has attachments, but they were not saved to the server during the initial sync.
               Only newly synced emails will have their attachments available for download.
             </div>
           </div>
         ) : null}
       </div>
-      
+
       {/* Playful Spam Warning Modal */}
       {downloadConfirmStep > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -368,7 +375,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
                 </>
               )}
             </div>
-            
+
             <div className="flex justify-center space-x-3">
               <button
                 onClick={() => {
@@ -399,9 +406,9 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
                 }}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium transition-colors"
               >
-                {downloadConfirmStep === 1 ? "I know what I'm doing 😎" : 
-                 downloadConfirmStep === 2 ? "Yes, I like living dangerously 🎲" : 
-                 "GIVE ME THE FILE! 📥"}
+                {downloadConfirmStep === 1 ? "I know what I'm doing 😎" :
+                  downloadConfirmStep === 2 ? "Yes, I like living dangerously 🎲" :
+                    "GIVE ME THE FILE! 📥"}
               </button>
             </div>
           </div>

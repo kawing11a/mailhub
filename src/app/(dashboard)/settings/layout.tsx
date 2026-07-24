@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Users, Shield, CreditCard, Mail, Settings, Tag } from 'lucide-react';
+import { Users, Shield, CreditCard, Mail, Settings, Tag, LogOut } from 'lucide-react';
 
 export default function SettingsLayout({
   children,
@@ -12,6 +12,17 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   const { data: authData } = useQuery({
     queryKey: ['auth-me'],
@@ -38,7 +49,7 @@ export default function SettingsLayout({
     <div className="flex flex-1 h-full bg-gray-50 overflow-hidden">
       <div className="w-64 border-r border-gray-200 bg-white h-full flex flex-col p-4">
         <h2 className="text-lg font-bold text-gray-900 mb-4 px-2">Settings</h2>
-        <nav className="space-y-1">
+        <nav className="space-y-1 flex-1">
           {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
             const Icon = item.icon;
@@ -59,6 +70,15 @@ export default function SettingsLayout({
             );
           })}
         </nav>
+        <div className="pt-4 border-t border-gray-200 mt-auto">
+          <button
+            onClick={handleLogout}
+            className="flex items-center space-x-3 px-3 py-2 w-full rounded-md transition-colors text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-8">
