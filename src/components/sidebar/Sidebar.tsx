@@ -74,14 +74,14 @@ export function Sidebar() {
           >
             <Search className="w-4 h-4" />
           </button>
-          <Link 
-            href="/overview" 
+          <Link
+            href="/overview"
             className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
             title="Dashboard Overview"
           >
             <LayoutDashboard className="w-4 h-4" />
           </Link>
-          <Link 
+          <Link
             href="/settings/members"
             className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
             title="Settings"
