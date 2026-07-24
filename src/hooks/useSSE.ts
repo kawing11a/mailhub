@@ -51,7 +51,7 @@ export function useSSE() {
         if (!subscription) {
           const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
           if (!publicVapidKey) {
-            console.error('VAPID public key not found');
+            console.warn('Web Push notification registration skipped: NEXT_PUBLIC_VAPID_PUBLIC_KEY is not configured in environment variables.');
             return;
           }
 

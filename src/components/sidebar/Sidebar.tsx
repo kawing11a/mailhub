@@ -9,6 +9,8 @@ import { useUIStore } from '@/stores/uiStore';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 
+import { InstallPWAButton } from '@/components/pwa/InstallPWAButton';
+
 export function Sidebar() {
   const { setComposeModalOpen } = useAccountStore();
   const pathname = usePathname();
@@ -62,28 +64,31 @@ export function Sidebar() {
         <AccountsSection />
       </div>
 
-      <div className="flex-none p-3 border-t border-gray-200 flex items-center justify-end space-x-1">
-        <button
-          onClick={() => useUIStore.getState().setSearchOpen(true)}
-          className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
-          title="Search (⌘K)"
-        >
-          <Search className="w-4 h-4" />
-        </button>
-        <Link 
-          href="/overview" 
-          className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
-          title="Dashboard Overview"
-        >
-          <LayoutDashboard className="w-4 h-4" />
-        </Link>
-        <Link 
-          href="/settings/members"
-          className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
-          title="Settings"
-        >
-          <Settings className="w-4 h-4" />
-        </Link>
+      <div className="flex-none p-3 border-t border-gray-200 space-y-2">
+        <InstallPWAButton variant="sidebar" />
+        <div className="flex items-center justify-end space-x-1">
+          <button
+            onClick={() => useUIStore.getState().setSearchOpen(true)}
+            className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
+            title="Search (⌘K)"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          <Link 
+            href="/overview" 
+            className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
+            title="Dashboard Overview"
+          >
+            <LayoutDashboard className="w-4 h-4" />
+          </Link>
+          <Link 
+            href="/settings/members"
+            className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </Link>
+        </div>
       </div>
     </div>
   );
