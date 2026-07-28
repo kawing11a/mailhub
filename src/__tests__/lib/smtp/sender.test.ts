@@ -27,7 +27,7 @@ describe('sendEmail sender', () => {
       emailAddress: 'user@outlook.com',
       provider: 'outlook',
       oauthProvider: 'microsoft',
-      smtpHost: 'smtp.office365.com',
+      smtpHost: 'smtp-mail.outlook.com',
       smtpPort: 587,
       smtpSecure: false,
       decryptedPassword: null,
@@ -41,7 +41,7 @@ describe('sendEmail sender', () => {
 
     expect(mockGetValidOAuthAccessToken).toHaveBeenCalledWith('acc-outlook-1');
     expect(mockCreateTransport).toHaveBeenCalledWith({
-      host: 'smtp.office365.com',
+      host: 'smtp-mail.outlook.com',
       port: 587,
       secure: false,
       auth: {

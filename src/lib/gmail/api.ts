@@ -1,6 +1,5 @@
+import { decrypt, encrypt } from '@/lib/crypto';
 import { prisma } from '@/lib/db/prisma';
-import { encrypt, decrypt } from '@/lib/crypto';
-import type { EmailAccount } from '@prisma/client';
 
 
 
@@ -18,19 +17,19 @@ export class GmailApiError extends Error {
 export async function gmailFetch(url: string | URL, options?: RequestInit, maxRetries = 5): Promise<Response> {
   let retries = 0;
   const maxBackoff = 32000;
-  
+
   while (true) {
     const res = await fetch(url.toString(), options);
-    
+
     // Check if it's a rate limit error (429) or a 5xx server error
     if (res.status === 429 || res.status >= 500) {
       if (retries >= maxRetries) {
         return res; // Max retries reached, return the failed response
       }
-      
+
       const randomMs = Math.floor(Math.random() * 1000);
       const backoffMs = Math.min((Math.pow(2, retries) * 1000) + randomMs, maxBackoff);
-      
+
       // Consume the response body to avoid potential memory leaks before retrying
       await res.text().catch(() => null);
 
@@ -43,14 +42,63 @@ export async function gmailFetch(url: string | URL, options?: RequestInit, maxRe
   }
 }
 
-import { getValidOAuthAccessToken } from '@/lib/accounts/tokens';
-
 /**
  * Gets a valid access token for the given account.
  * Refreshes it if expired.
  */
 export async function getValidAccessToken(accountId: string): Promise<string> {
-  return getValidOAuthAccessToken(accountId);
+  const account = await prisma.emailAccount.findUnique({
+    where: { id: accountId },
+  });
+
+  if (!account || !account.oauthAccessToken) {
+    throw new Error(`Account ${accountId} does not have an OAuth access token.`);
+  }
+
+  const now = new Date();
+
+  // If token is still valid (add 1 minute buffer), return decrypted token
+  if (account.oauthTokenExpiry && account.oauthTokenExpiry > new Date(now.getTime() + 60000)) {
+    return decrypt(account.oauthAccessToken);
+  }
+
+  // Token expired, refresh it
+  if (!account.oauthRefreshToken) {
+    throw new Error(`Account ${accountId} access token expired and has no refresh token.`);
+  }
+
+  const refreshToken = decrypt(account.oauthRefreshToken);
+
+  const res = await gmailFetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID || '',
+      client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => null);
+    throw new GmailApiError('Failed to refresh Google OAuth token', res.status, errorData);
+  }
+
+  const data = await res.json();
+  const newAccessToken = data.access_token;
+  const newExpiry = new Date(Date.now() + (data.expires_in * 1000));
+
+  // Update DB
+  await prisma.emailAccount.update({
+    where: { id: accountId },
+    data: {
+      oauthAccessToken: encrypt(newAccessToken),
+      oauthTokenExpiry: newExpiry,
+    },
+  });
+
+  return newAccessToken;
 }
 
 export interface GmailMessageListParams {
@@ -75,7 +123,7 @@ export async function fetchMessagesList(
   params: GmailMessageListParams = {}
 ): Promise<GmailMessageListResult> {
   const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
-  
+
   if (params.maxResults) url.searchParams.set('maxResults', params.maxResults.toString());
   if (params.pageToken) url.searchParams.set('pageToken', params.pageToken);
   if (params.q) url.searchParams.set('q', params.q);
@@ -119,7 +167,7 @@ export async function fetchMessageRaw(
   }
 
   const data = await res.json();
-  
+
   // Gmail returns raw as base64url encoded string
   const base64Str = data.raw.replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(base64Str, 'base64');
@@ -134,10 +182,10 @@ export async function sendMessageRaw(
 ): Promise<{ id: string; threadId: string; labelIds: string[] }> {
   // Base64url encode the buffer
   const base64Str = rawMessage.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  
+
   const res = await gmailFetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
-    headers: { 
+    headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
@@ -160,10 +208,10 @@ export async function syncDraftRaw(
   rawMessage: Buffer
 ): Promise<{ id: string; message: { id: string; threadId: string } }> {
   const base64Str = rawMessage.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  
+
   const res = await gmailFetch('https://gmail.googleapis.com/gmail/v1/users/me/drafts', {
     method: 'POST',
-    headers: { 
+    headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     },
