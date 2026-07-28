@@ -43,63 +43,14 @@ export async function gmailFetch(url: string | URL, options?: RequestInit, maxRe
   }
 }
 
+import { getValidOAuthAccessToken } from '@/lib/accounts/tokens';
+
 /**
  * Gets a valid access token for the given account.
  * Refreshes it if expired.
  */
 export async function getValidAccessToken(accountId: string): Promise<string> {
-  const account = await prisma.emailAccount.findUnique({
-    where: { id: accountId },
-  });
-
-  if (!account || !account.oauthAccessToken) {
-    throw new Error(`Account ${accountId} does not have an OAuth access token.`);
-  }
-
-  const now = new Date();
-  
-  // If token is still valid (add 1 minute buffer), return decrypted token
-  if (account.oauthTokenExpiry && account.oauthTokenExpiry > new Date(now.getTime() + 60000)) {
-    return decrypt(account.oauthAccessToken);
-  }
-
-  // Token expired, refresh it
-  if (!account.oauthRefreshToken) {
-    throw new Error(`Account ${accountId} access token expired and has no refresh token.`);
-  }
-
-  const refreshToken = decrypt(account.oauthRefreshToken);
-  
-  const res = await gmailFetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLIENT_ID || '',
-      client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => null);
-    throw new GmailApiError('Failed to refresh Google OAuth token', res.status, errorData);
-  }
-
-  const data = await res.json();
-  const newAccessToken = data.access_token;
-  const newExpiry = new Date(Date.now() + (data.expires_in * 1000));
-  
-  // Update DB
-  await prisma.emailAccount.update({
-    where: { id: accountId },
-    data: {
-      oauthAccessToken: encrypt(newAccessToken),
-      oauthTokenExpiry: newExpiry,
-    },
-  });
-
-  return newAccessToken;
+  return getValidOAuthAccessToken(accountId);
 }
 
 export interface GmailMessageListParams {

@@ -200,6 +200,17 @@ function EmailAccountsContent() {
                         <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                           {account.isActive ? 'Active' : 'Inactive'}
                         </span>
+                        {!account.isActive && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingAccount(account);
+                            }}
+                            className="text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-0.5 rounded-md transition-colors"
+                          >
+                            Reauthorize
+                          </button>
+                        )}
                         {account.authError && (
                           <span className="flex items-center text-red-600 text-xs font-medium" title={account.authError}>
                             <AlertTriangle className="w-3.5 h-3.5 mr-1" />

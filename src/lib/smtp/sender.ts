@@ -1,7 +1,8 @@
 import { createTransport, Transporter } from 'nodemailer';
 import { getDecryptedAccount } from '@/lib/accounts/service';
+import { getValidOAuthAccessToken } from '@/lib/accounts/tokens';
 import type { SendEmailInput } from '@/lib/validation';
-import { getValidAccessToken, sendMessageRaw } from '@/lib/gmail/api';
+import { sendMessageRaw } from '@/lib/gmail/api';
 
 export async function sendEmail(
   accountId: string,
@@ -27,11 +28,32 @@ export async function sendEmail(
     const composer = new MailComposer(mailOptions);
     const rawBuffer = await composer.compile().build();
 
-    const accessToken = await getValidAccessToken(account.id);
+    const accessToken = await getValidOAuthAccessToken(account.id);
     const result = await sendMessageRaw(accessToken, rawBuffer);
     
     // Attempt to queue the email to be fully indexed immediately or just rely on the sync worker
     return { messageId: result.id || `<gmail-${Date.now()}>` };
+  } else if (
+    account.provider === 'outlook' ||
+    account.oauthProvider === 'microsoft' ||
+    (account.oauthAccessToken && !account.decryptedPassword)
+  ) {
+    // For Outlook / Microsoft OAuth accounts, send via SMTP using XOAUTH2
+    const accessToken = await getValidOAuthAccessToken(account.id);
+
+    const transporter: Transporter = createTransport({
+      host: account.smtpHost || 'smtp.office365.com',
+      port: account.smtpPort || 587,
+      secure: account.smtpSecure ?? false,
+      auth: {
+        type: 'OAuth2',
+        user: account.username || account.emailAddress,
+        accessToken: accessToken,
+      },
+    });
+
+    const info = await transporter.sendMail(mailOptions);
+    return { messageId: info.messageId || `<outlook-${Date.now()}>` };
   } else {
     // For other providers (custom IMAP/SMTP)
     if (!account.smtpHost || !account.decryptedPassword) {
@@ -52,3 +74,4 @@ export async function sendEmail(
     return { messageId: info.messageId };
   }
 }
+
