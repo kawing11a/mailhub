@@ -152,6 +152,23 @@ export default function TestingSuitePage() {
     }
   };
 
+  const handleReauthorize = (acc: Account) => {
+    const p = (acc.provider || '').toLowerCase();
+    if (p === 'gmail' || p === 'google') {
+      const initUrl = new URL('/api/accounts/oauth/google/init', window.location.origin);
+      initUrl.searchParams.set('emailAddress', acc.emailAddress);
+      initUrl.searchParams.set('label', acc.label);
+      window.location.href = initUrl.toString();
+    } else if (p === 'outlook' || p === 'microsoft' || p === 'office365') {
+      const initUrl = new URL('/api/accounts/oauth/microsoft/init', window.location.origin);
+      initUrl.searchParams.set('emailAddress', acc.emailAddress);
+      initUrl.searchParams.set('label', acc.label);
+      window.location.href = initUrl.toString();
+    } else {
+      toast.error('Reauthorization for custom IMAP accounts can be done in Settings > Accounts.');
+    }
+  };
+
   // Metrics for Connection Tester
   const testedCount = Object.values(testStates).filter(s => s.status === 'success' || s.status === 'error').length;
   const successCount = Object.values(testStates).filter(s => s.status === 'success').length;
@@ -385,12 +402,22 @@ export default function TestingSuitePage() {
                         {isExpanded && (state.result || state.error) && (
                           <div className="border-t border-gray-100 p-4 sm:p-5 bg-white/80 rounded-b-xl space-y-3 text-xs">
                             {state.status === 'error' && (
-                              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg flex items-start space-x-2.5">
-                                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                                <div className="space-y-1">
-                                  <h4 className="font-semibold text-rose-900">Connection Failed</h4>
-                                  <p className="font-mono text-rose-700 break-all">{state.error}</p>
+                              <div className="p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div className="flex items-start space-x-2.5">
+                                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                                  <div className="space-y-1">
+                                    <h4 className="font-semibold text-rose-900">Connection Failed</h4>
+                                    <p className="font-mono text-rose-700 break-all">{state.error}</p>
+                                  </div>
                                 </div>
+                                {(['gmail', 'google', 'outlook', 'microsoft', 'office365'].includes((acc.provider || '').toLowerCase())) && (
+                                  <button
+                                    onClick={() => handleReauthorize(acc)}
+                                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-medium rounded-md text-xs transition-colors self-end sm:self-center flex-shrink-0 shadow-sm"
+                                  >
+                                    Reauthorize OAuth
+                                  </button>
+                                )}
                               </div>
                             )}
 
