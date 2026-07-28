@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
           provider: 'outlook',
           imapHost: 'outlook.office365.com',
           imapPort: 993,
-          smtpHost: 'smtp.office365.com',
+          smtpHost: 'smtp-mail.outlook.com',
           smtpPort: 587,
           oauthProvider: 'microsoft',
           oauthAccessToken: encryptedAccessToken,
