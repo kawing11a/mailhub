@@ -1,0 +1,45 @@
+name: 💡 Feature Request
+description: Suggest a new feature or enhancement for MailHub
+title: "[FEATURE]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Please check [GitHub Discussions](https://github.com/kawing11a/mailhub/discussions) and existing issues first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear description of what the problem is (e.g. "I'm always frustrated when...").
+      placeholder: Describe the problem or inconvenience...
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution or feature you'd like to see added to MailHub.
+      placeholder: I would like MailHub to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: Alternatively, we could...
+    validations:
+      required: false
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any mockups, screenshots, UI diagrams, or context here.
+      placeholder: Any extra context...
+    validations:
+      required: false
