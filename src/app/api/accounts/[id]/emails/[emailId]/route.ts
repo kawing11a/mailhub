@@ -32,6 +32,12 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const email = await prisma.email.findFirst({
     where,
     include: {
+      account: {
+        select: {
+          id: true,
+          emailAddress: true,
+        },
+      },
       body: true,
       attachments: {
         select: {

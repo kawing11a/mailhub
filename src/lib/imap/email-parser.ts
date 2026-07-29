@@ -1,4 +1,5 @@
 import { simpleParser, ParsedMail, AddressObject } from 'mailparser';
+import { createEmailSnippet } from '@/lib/email/snippet';
 
 interface ParsedEmailData {
   messageId: string;
@@ -38,13 +39,9 @@ function extractAddresses(addr: AddressObject | AddressObject[] | undefined): Ar
   );
 }
 
-function makeSnippet(text: string | undefined, maxLength = 300): string {
-  if (!text) return '';
-  return text.replace(/\s+/g, ' ').trim().slice(0, maxLength);
-}
-
 export async function parseEmail(raw: Buffer | string): Promise<ParsedEmailData> {
   const parsed: ParsedMail = await simpleParser(raw);
+  const bodyHtml = (parsed.html as string | false) || null;
 
   const rawHeaders: Record<string, string> = {};
   if (parsed.headers) {
@@ -56,7 +53,7 @@ export async function parseEmail(raw: Buffer | string): Promise<ParsedEmailData>
   return {
     messageId: parsed.messageId || `<generated-${Date.now()}@mailhub>`,
     subject: parsed.subject || null,
-    snippet: makeSnippet(parsed.text),
+    snippet: createEmailSnippet({ bodyText: parsed.text, bodyHtml }),
     fromAddress: parsed.from?.value?.[0]?.address || null,
     fromName: parsed.from?.value?.[0]?.name || null,
     toAddresses: extractAddresses(parsed.to),
@@ -69,7 +66,7 @@ export async function parseEmail(raw: Buffer | string): Promise<ParsedEmailData>
           ? parsed.references.join(' ')
           : parsed.references)
       : null,
-    bodyHtml: (parsed.html as string | false) || null,
+    bodyHtml,
     bodyText: parsed.text || null,
     hasAttachments: (parsed.attachments?.length ?? 0) > 0,
     receivedAt: parsed.date || new Date(),
