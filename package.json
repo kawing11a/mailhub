@@ -73,7 +73,7 @@
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "@types/web-push": "^3.6.4",
-    "eslint": "^9",
+    "eslint": "^10",
     "eslint-config-next": "16.2.9",
     "jest": "^30.4.2",
     "prisma": "^7.8.0",
