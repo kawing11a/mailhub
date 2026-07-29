@@ -351,6 +351,10 @@ Contributions are always welcome! Whether you are reporting bugs, improving docu
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
+## Security Policy
+
+For security disclosures, supported versions, and vulnerability reporting procedures, please read our [Security Policy](SECURITY.md).
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE) - see the [LICENSE](LICENSE) file for details.
