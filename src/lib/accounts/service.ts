@@ -54,7 +54,7 @@ export async function createAccount(
 }
 
 export async function getDecryptedAccount(accountId: string): Promise<
-  EmailAccount & { decryptedPassword: string | null }
+  EmailAccount & { decryptedPassword: string | null; decryptedRefreshToken: string | null }
 > {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
@@ -65,6 +65,9 @@ export async function getDecryptedAccount(accountId: string): Promise<
     ...account,
     decryptedPassword: account.passwordEncrypted
       ? decrypt(account.passwordEncrypted)
+      : null,
+    decryptedRefreshToken: account.oauthRefreshToken
+      ? decrypt(account.oauthRefreshToken)
       : null,
   };
 }

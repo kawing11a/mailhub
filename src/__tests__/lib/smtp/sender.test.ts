@@ -16,10 +16,50 @@ describe('sendEmail sender', () => {
     jest.clearAllMocks();
   });
 
-  it('sends email using OAuth2 transport for Outlook accounts', async () => {
-    const mockSendMail = jest.fn().mockResolvedValue({ messageId: '<outlook-msg-123>' });
-    mockCreateTransport.mockReturnValue({ sendMail: mockSendMail });
-    mockGetValidOAuthAccessToken.mockResolvedValue('mock_outlook_access_token');
+  it('sends email using Microsoft Graph API for Outlook accounts', async () => {
+    mockGetValidOAuthAccessToken.mockResolvedValue('mock.outlook.jwt_access_token');
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-outlook-1',
+      label: 'Outlook Account',
+      emailAddress: 'user@outlook.com',
+      provider: 'outlook',
+      oauthProvider: 'microsoft',
+      smtpHost: 'smtp.office365.com',
+      smtpPort: 587,
+      smtpSecure: false,
+      decryptedPassword: null,
+      decryptedRefreshToken: 'mock_refresh_token',
+    });
+
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({}),
+      text: jest.fn().mockResolvedValue(''),
+    });
+    global.fetch = fetchMock;
+
+    const result = await sendEmail('acc-outlook-1', {
+      to: ['recipient@example.com'],
+      subject: 'Test Outlook Email',
+      bodyText: 'Hello from Outlook Graph API',
+    });
+
+    expect(mockGetValidOAuthAccessToken).toHaveBeenCalledWith('acc-outlook-1', 'https://graph.microsoft.com/.default offline_access');
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://graph.microsoft.com/v1.0/me/sendMail',
+      expect.objectContaining({
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer mock.outlook.jwt_access_token',
+          'Content-Type': 'application/json',
+        },
+      })
+    );
+    expect(result.messageId).toContain('graph-');
+  });
+
+  it('throws an error if Microsoft Graph API fails for Outlook accounts', async () => {
+    mockGetValidOAuthAccessToken.mockResolvedValue('mock.outlook.jwt_access_token');
 
     mockGetDecryptedAccount.mockResolvedValue({
       id: 'acc-outlook-1',
@@ -27,31 +67,27 @@ describe('sendEmail sender', () => {
       emailAddress: 'user@outlook.com',
       provider: 'outlook',
       oauthProvider: 'microsoft',
-      smtpHost: 'smtp-mail.outlook.com',
+      smtpHost: 'smtp.office365.com',
       smtpPort: 587,
       smtpSecure: false,
       decryptedPassword: null,
+      decryptedRefreshToken: 'mock_refresh_token',
     });
 
-    const result = await sendEmail('acc-outlook-1', {
-      to: ['recipient@example.com'],
-      subject: 'Test Outlook Email',
-      bodyText: 'Hello from Outlook',
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: jest.fn().mockResolvedValue('Graph error details'),
     });
+    global.fetch = fetchMock;
 
-    expect(mockGetValidOAuthAccessToken).toHaveBeenCalledWith('acc-outlook-1');
-    expect(mockCreateTransport).toHaveBeenCalledWith({
-      host: 'smtp-mail.outlook.com',
-      port: 587,
-      secure: false,
-      auth: {
-        type: 'OAuth2',
-        user: 'user@outlook.com',
-        accessToken: 'mock_outlook_access_token',
-      },
-    });
-    expect(mockSendMail).toHaveBeenCalled();
-    expect(result).toEqual({ messageId: '<outlook-msg-123>' });
+    await expect(
+      sendEmail('acc-outlook-1', {
+        to: ['recipient@example.com'],
+        subject: 'Test Outlook Email',
+        bodyText: 'Hello from Outlook',
+      })
+    ).rejects.toThrow('Graph API Error (400): Graph error details');
   });
 
   it('sends email using standard password SMTP for IMAP accounts', async () => {

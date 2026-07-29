@@ -5,7 +5,7 @@ import { encrypt, decrypt } from '@/lib/crypto';
  * Retrieves a valid OAuth access token for a given account ID (Gmail or Outlook/Microsoft).
  * Automatically refreshes the token using the refresh token if it is expired or near expiration.
  */
-export async function getValidOAuthAccessToken(accountId: string): Promise<string> {
+export async function getValidOAuthAccessToken(accountId: string, scope?: string): Promise<string> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: accountId },
   });
@@ -14,20 +14,20 @@ export async function getValidOAuthAccessToken(accountId: string): Promise<strin
     throw new Error(`Account ${accountId} does not have an OAuth access token.`);
   }
 
+  const isMicrosoft = account.oauthProvider === 'microsoft' || account.provider === 'outlook';
   const now = new Date();
 
-  // If token is still valid (1 minute buffer), return decrypted token
-  if (account.oauthTokenExpiry && account.oauthTokenExpiry > new Date(now.getTime() + 60000)) {
+  // If token is still valid (1 minute buffer) and no custom scope requested, return decrypted token
+  if (!scope && account.oauthTokenExpiry && account.oauthTokenExpiry > new Date(now.getTime() + 60000)) {
     return decrypt(account.oauthAccessToken);
   }
 
-  // Token expired, refresh it
+  // Token expired or custom scope requested, refresh it
   if (!account.oauthRefreshToken) {
     throw new Error(`Account ${accountId} access token is expired and has no refresh token.`);
   }
 
   const refreshToken = decrypt(account.oauthRefreshToken);
-  const isMicrosoft = account.oauthProvider === 'microsoft' || account.provider === 'outlook';
 
   const tokenUrl = isMicrosoft
     ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
@@ -41,15 +41,21 @@ export async function getValidOAuthAccessToken(accountId: string): Promise<strin
     ? process.env.MICROSOFT_CLIENT_SECRET || ''
     : process.env.GOOGLE_CLIENT_SECRET || '';
 
+  const params: Record<string, string> = {
+    client_id: clientId,
+    client_secret: clientSecret,
+    refresh_token: refreshToken,
+    grant_type: 'refresh_token',
+  };
+
+  if (scope && isMicrosoft) {
+    params.scope = scope;
+  }
+
   const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: refreshToken,
-      grant_type: 'refresh_token',
-    }),
+    body: new URLSearchParams(params),
   });
 
   if (!res.ok) {
