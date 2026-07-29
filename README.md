@@ -1,6 +1,6 @@
 # MailHub
 
-A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMTP, Gmail OAuth, or Outlook OAuth accounts, sync emails via background workers, and manage everything from a unified dashboard with full-text search, drag-and-drop labels, activity logs, spam risk detection, granular member access control, Progressive Web App (PWA) support, and Web Push notifications.
+A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMTP, Gmail OAuth, or Microsoft/Outlook OAuth accounts, sync emails via background workers, and manage everything from a unified dashboard with full-text search, drag-and-drop labels, activity logs, spam risk detection, granular member access control, Progressive Web App (PWA) support, and Web Push notifications.
 
 ## Tech Stack
 
@@ -13,7 +13,7 @@ A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMT
 | **Search** | Meilisearch |
 | **Queue / Cache** | Redis 7 + BullMQ |
 | **Auth** | JWT (`jose`) + `bcryptjs` |
-| **Email Protocols** | IMAP (`imapflow`) · SMTP (`nodemailer`) · Gmail OAuth 2.0 · Outlook OAuth 2.0 |
+| **Email Protocols** | IMAP (`imapflow`) · SMTP (`nodemailer`) · Gmail OAuth 2.0 API · Microsoft Outlook OAuth 2.0 API |
 | **UI** | React 19, Tailwind CSS 4, Lucide Icons, TipTap editor, Local `geist` fonts |
 | **State** | Zustand + TanStack React Query |
 | **Notifications** | Web Push (`web-push` + VAPID) |
@@ -22,10 +22,12 @@ A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMT
 
 ## Key Features
 
-- 📧 **Multi-Account & Multi-Tenant**: Connect multiple IMAP/SMTP, Gmail, or Outlook mailboxes across isolated organization workspaces.
+- 📧 **Multi-Account & Multi-Tenant**: Connect multiple IMAP/SMTP, Gmail OAuth, or Microsoft Outlook OAuth mailboxes across isolated organization workspaces.
 - 👥 **Granular Access Control**: Organization administrators can manage and grant per-member access permissions to specific email accounts.
 - ⚡ **Realtime Email Sync**: High-throughput background sync powered by BullMQ workers with automatic SPAM detection and Meilisearch indexation.
-- 🔍 **Instant Full-Text Search**: Search headers, body content, and senders seamlessly across all connected accounts.
+- 📤 **Multi-Provider Email Sender**: Send emails using native SMTP, Google Gmail API, or Microsoft Graph/Outlook API with automatic token refreshing.
+- 🗑️ **Trash & Restore Flow**: Full support for moving emails to Trash, restoring messages back to inbox/folders, and emptying trash per account.
+- 🔍 **Instant Full-Text Search**: Search headers, body content, and senders seamlessly across all connected accounts powered by Meilisearch.
 - 🏷️ **Drag & Drop Label Management**: Organize emails using customizable organization labels and interactive drag-and-drop actions.
 - 📱 **Progressive Web App (PWA)**: Installable desktop/mobile experience with offline Service Worker caching, automated background update polling, system installation detection, and dynamic UI install buttons.
 - 🔔 **Real-Time SSE & Push Notifications**: Instant inbox updates via Server-Sent Events (SSE) and native Web Push notifications.
@@ -100,8 +102,12 @@ Edit `.env` with your values. Required variables:
 | `MEILI_MASTER_KEY` | Meilisearch admin key |
 | `JWT_SECRET` | Secret for signing JWT tokens |
 | `ENCRYPTION_KEY` | 64-char hex key for encrypting stored credentials |
-
-For OAuth accounts, configure `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `AZURE_CLIENT_ID`, and `AZURE_CLIENT_SECRET`.
+| `NEXT_PUBLIC_APP_URL` | Base application URL (e.g. `https://localhost:3000`) |
+| `GOOGLE_CLIENT_ID` | OAuth 2.0 Client ID for Google Workspace / Gmail |
+| `GOOGLE_CLIENT_SECRET` | OAuth 2.0 Client Secret for Google Workspace / Gmail |
+| `AZURE_CLIENT_ID` | OAuth 2.0 Application (Client) ID for Microsoft Outlook |
+| `AZURE_CLIENT_SECRET` | OAuth 2.0 Client Secret for Microsoft Outlook |
+| `AZURE_TENANT_ID` | Azure Tenant ID (e.g., `common` or specific Directory ID) |
 
 ### 3. Start Services
 
@@ -151,11 +157,24 @@ npm run worker
 | GET | `/api/accounts` | List connected email accounts |
 | POST | `/api/accounts` | Add an email account (IMAP/SMTP or OAuth) |
 | DELETE | `/api/accounts/[id]` | Remove connected email account |
+| POST | `/api/accounts/[id]/test` | Test IMAP/SMTP connection settings |
 | POST | `/api/accounts/[id]/read-all` | Mark all emails in account as read |
 | POST | `/api/accounts/[id]/reindex` | Trigger Meilisearch reindexing for account |
 | GET | `/api/accounts/[id]/stats` | Fetch synchronization and message stats |
+| GET | `/api/accounts/[id]/emails` | Fetch emails for account folder |
+| POST | `/api/accounts/[id]/emails/send` | Send email via SMTP, Gmail, or Microsoft OAuth API |
+| GET/PATCH/DEL | `/api/accounts/[id]/emails/[emailId]` | Fetch details, update status/starred, or trash/delete email |
+| POST | `/api/accounts/[id]/emails/[emailId]/restore` | Restore email from trash to original folder |
+| GET | `/api/accounts/[id]/emails/[emailId]/attachments/[attachmentId]` | Download email attachment |
+| POST | `/api/accounts/[id]/emails/empty-trash` | Purge all emails in trash for account |
+| GET/POST | `/api/accounts/[id]/drafts` | Manage email drafts |
+| GET | `/api/accounts/oauth/google/init` | Initiate Google OAuth 2.0 authorization |
+| GET | `/api/accounts/oauth/google/callback` | Google OAuth 2.0 callback redirect |
+| GET | `/api/accounts/oauth/microsoft/init` | Initiate Microsoft Outlook OAuth 2.0 authorization |
+| GET | `/api/accounts/oauth/microsoft/callback` | Microsoft Outlook OAuth 2.0 callback redirect |
 | GET | `/api/emails/search` | Full-text search across emails (Meilisearch) |
 | GET | `/api/emails/thread` | Fetch email thread by thread ID |
+| POST | `/api/emails/labels` | Apply or remove labels from emails |
 | GET | `/api/labels` | List organization labels |
 | POST | `/api/labels` | Create a label |
 | GET | `/api/favourites` | Manage user favorite emails |
@@ -166,6 +185,7 @@ npm run worker
 | GET | `/api/dashboard` | Dashboard summary stats |
 | GET | `/api/realtime` | SSE stream for live updates |
 | GET | `/api/version` | Service Worker app version check |
+| GET | `/api/pwa` | Check PWA system status |
 | POST | `/api/notifications` | Register Web Push subscription |
 
 ## Dashboard Pages
@@ -213,15 +233,16 @@ src/
 │   │   ├── settings/    # Settings & team account access control
 │   │   └── testing/     # Testing sandbox
 │   ├── api/             # REST API routes
-│   │   ├── accounts/    # Email account CRUD & member access
+│   │   ├── accounts/    # Email account CRUD, OAuth, testing, and member access
 │   │   ├── activity/    # Activity audit log
 │   │   ├── auth/        # Auth endpoints (login, logout, me, password)
 │   │   ├── dashboard/   # Summary statistics
-│   │   ├── emails/      # Email search, threads, and actions
+│   │   ├── emails/      # Email search, threads, labels, and actions
 │   │   ├── favourites/  # Favorites management
 │   │   ├── labels/      # Label management
 │   │   ├── notifications/# Push subscriptions
 │   │   ├── org/         # Organization & team member management
+│   │   ├── pwa/         # PWA status check
 │   │   ├── realtime/    # Server-Sent Events stream
 │   │   └── version/     # PWA / App version check
 │   ├── layout.tsx       # Root layout with local Geist font loading
@@ -232,18 +253,18 @@ src/
 │   ├── providers/       # OAuth provider integration components
 │   ├── pwa/             # PWA Install button & instruction modal
 │   ├── search/          # Meilisearch query bar
-│   ├── settings/        # Settings, account access modal, accounts list
+│   ├── settings/        # Settings, account access modal, accounts list, edit account modal
 │   └── sidebar/         # Dynamic navigation sidebar with PWA install integration
 ├── hooks/               # Custom React hooks (usePWAInstall, PWA updates, SSE, queries)
 ├── lib/
-│   ├── accounts/        # Account management logic
+│   ├── accounts/        # Account management logic & OAuth tokens
 │   ├── auth/            # JWT + session utilities
 │   ├── db/              # Prisma client
-│   ├── gmail/           # Gmail OAuth integration
+│   ├── gmail/           # Gmail OAuth & API integration
 │   ├── imap/            # IMAP connection manager & sync logic
 │   ├── queue/           # BullMQ job definitions
 │   ├── search/          # Meilisearch client
-│   ├── smtp/            # SMTP sending client
+│   ├── smtp/            # Multi-provider email sender client (SMTP, Gmail API, Microsoft API)
 │   ├── crypto.ts        # AES credential encryption
 │   ├── redis.ts         # Redis client singleton
 │   └── validation/      # Zod validation schemas
@@ -258,3 +279,4 @@ prisma/
 ## License
 
 Private — all rights reserved.
+
