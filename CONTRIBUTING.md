@@ -6,7 +6,7 @@ Thank you for your interest in contributing to MailHub! We welcome contributions
 
 ## Code of Conduct
 
-Please be respectful, constructive, and polite in all interactions with fellow contributors, maintainers, and issue reporters.
+This project and everyone participating in it is governed by the [MailHub Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior or inappropriate conduct to project maintainers.
 
 ---
 

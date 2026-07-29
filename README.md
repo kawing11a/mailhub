@@ -343,7 +343,7 @@ If **MailHub** helps you or your organization manage email workflows effectively
 
 ## Contributing
 
-Contributions are always welcome! Whether you are reporting bugs, improving documentation, or submitting pull requests, please read our [Contributing Guide](CONTRIBUTING.md) to get started.
+Contributions are always welcome! Whether you are reporting bugs, improving documentation, or submitting pull requests, please read our [Contributing Guide](CONTRIBUTING.md) and review our [Code of Conduct](CODE_OF_CONDUCT.md) before getting started.
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
