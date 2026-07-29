@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Loader2, Mail, AlertTriangle, Server } from 'lucide-react';
 import { updateAccountSchema, type UpdateAccountInput } from '@/lib/validation/schemas';
 import toast from 'react-hot-toast';
@@ -38,26 +38,41 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
     },
   });
 
-  // Pre-fill form when account changes
+  // Fetch the full account (the list query that supplies `account` omits
+  // IMAP/SMTP host/port and username, so those must come from the single-account endpoint).
+  const { data: fetchedAccount, isLoading: isLoadingAccount } = useQuery({
+    queryKey: ['account', account?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/accounts/${account.id}`);
+      if (!res.ok) throw new Error('Failed to fetch account details');
+      return res.json();
+    },
+    enabled: isOpen && !!account?.id,
+  });
+
+  // Prefer the fully-hydrated account; fall back to the passed prop while it loads.
+  const fullAccount = fetchedAccount || account;
+
+  // Pre-fill form once the full account (with IMAP/SMTP settings) is available.
   useEffect(() => {
-    if (account) {
+    if (fullAccount) {
       resetImap({
-        label: account.label || '',
-        color: account.color || '',
-        imapHost: account.imapHost || '',
-        imapPort: account.imapPort || 993,
-        smtpHost: account.smtpHost || '',
-        smtpPort: account.smtpPort || 465,
-        username: account.username || account.emailAddress || '',
+        label: fullAccount.label || '',
+        color: fullAccount.color || '',
+        imapHost: fullAccount.imapHost || '',
+        imapPort: fullAccount.imapPort || 993,
+        smtpHost: fullAccount.smtpHost || '',
+        smtpPort: fullAccount.smtpPort || 465,
+        username: fullAccount.username || fullAccount.emailAddress || '',
         password: '', // Password is blank for security
       });
     }
-  }, [account, resetImap]);
+  }, [fullAccount, resetImap]);
 
   const updateMutation = useMutation({
     mutationFn: async (data: UpdateAccountInput) => {
       if (!account) return;
-      
+
       // Filter out empty password so we don't overwrite with blank
       const payload = { ...data };
       if (!payload.password) {
@@ -85,24 +100,24 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
 
   const handleOauthReauthorize = () => {
     if (!account) return;
-    
+
     const providerLower = (account.provider || '').toLowerCase();
     const oauthProviderLower = (account.oauthProvider || '').toLowerCase();
 
     if (providerLower === 'gmail' || providerLower === 'google' || oauthProviderLower === 'google') {
       const initUrl = new URL('/api/accounts/oauth/google/init', window.location.origin);
-      initUrl.searchParams.set('emailAddress', account.emailAddress);
-      initUrl.searchParams.set('label', account.label);
+      initUrl.searchParams.set('emailAddress', fullAccount.emailAddress);
+      initUrl.searchParams.set('label', fullAccount.label);
       window.location.href = initUrl.toString();
     } else if (
-      providerLower === 'outlook' || 
-      providerLower === 'microsoft' || 
-      providerLower === 'office365' || 
+      providerLower === 'outlook' ||
+      providerLower === 'microsoft' ||
+      providerLower === 'office365' ||
       oauthProviderLower === 'microsoft'
     ) {
       const initUrl = new URL('/api/accounts/oauth/microsoft/init', window.location.origin);
-      initUrl.searchParams.set('emailAddress', account.emailAddress);
-      initUrl.searchParams.set('label', account.label);
+      initUrl.searchParams.set('emailAddress', fullAccount.emailAddress);
+      initUrl.searchParams.set('label', fullAccount.label);
       window.location.href = initUrl.toString();
     } else {
       setSubmitError('Reauthorization for this provider is not yet implemented');
@@ -125,7 +140,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to trigger reindex');
-      
+
       toast.success(data.message);
     } catch (err: any) {
       setSubmitError(err.message);
@@ -147,18 +162,18 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
-        <div 
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
+        <div
+          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           onClick={handleClose}
         />
-        
+
         <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
           <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-            
+
             {/* Header */}
             <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
               <h3 className="text-lg font-semibold leading-6 text-gray-900">
-                Manage Connection: {account.emailAddress}
+                Manage Connection: {fullAccount.emailAddress}
               </h3>
               <div className="flex items-center space-x-3">
                 <button
@@ -184,7 +199,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
               </div>
             )}
 
-            {!account.isActive && (
+            {!isLoadingAccount && !fullAccount.isActive && (
               <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4">
                 <div className="flex">
                   <div className="flex-shrink-0">
@@ -192,16 +207,16 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-yellow-700 font-medium">
-                      This account is currently inactive due to connection or authentication issues. 
+                      This account is currently inactive due to connection or authentication issues.
                     </p>
-                    {account.authError && (
+                    {fullAccount.authError && (
                       <p className="mt-1 text-sm text-red-600 bg-red-50 p-2 rounded border border-red-100">
-                        <span className="font-semibold">Error:</span> {account.authError}
+                        <span className="font-semibold">Error:</span> {fullAccount.authError}
                       </p>
                     )}
                     <p className="mt-2 text-sm text-yellow-700">
-                      {isOauth 
-                        ? 'Reauthorize with your provider to restore the connection.' 
+                      {isOauth
+                        ? 'Reauthorize with your provider to restore the connection.'
                         : 'Please update your IMAP/SMTP credentials below to restore the connection.'}
                     </p>
                   </div>
@@ -209,7 +224,11 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
               </div>
             )}
 
-            {isOauth ? (
+            {isLoadingAccount && !fetchedAccount ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+              </div>
+            ) : isOauth ? (
               <div className="space-y-6">
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
                   <div className="w-12 h-12 flex-shrink-0 bg-white border border-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">

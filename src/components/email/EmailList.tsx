@@ -5,7 +5,7 @@ import { useSearch } from '@/hooks/useSearch';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
 import { useAccountStore } from '@/stores/accountStore';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, Search, Star, StarOff, Trash2, X } from 'lucide-react';
+import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { EmailRow } from './EmailRow';
@@ -108,7 +108,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       return res.json();
     },
     onSuccess: (updatedEmail) => {
-      queryClient.invalidateQueries({ queryKey: ['emails', selectedAccountId, selectedFolder] });
+      // Prefix key, not the exact triple: with the global 60s staleTime, the
+      // other folder/account lists would otherwise serve stale cached data.
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['accountStats'] });
@@ -116,6 +118,16 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     },
     onError: () => toast.error('Failed to update email'),
   });
+
+  const invalidateAfterMailboxChange = () => {
+    // Moving an email between folders changes *two* lists (source and target),
+    // so invalidate the whole ['emails'] prefix rather than just the active one.
+    queryClient.invalidateQueries({ queryKey: ['emails'] });
+    queryClient.invalidateQueries({ queryKey: ['search'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+    queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+  };
 
   const deleteEmailMutation = useMutation({
     mutationFn: async ({ emailId, accountId }: { emailId: string; accountId: string }) => {
@@ -125,15 +137,63 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       if (!res.ok) throw new Error('Failed to delete email');
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['emails', selectedAccountId, selectedFolder] });
-      queryClient.invalidateQueries({ queryKey: ['search'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
-      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
-      toast.success('Email moved to trash');
+    onSuccess: (result) => {
+      invalidateAfterMailboxChange();
+      // serverSynced is false only when a server copy existed and we couldn't
+      // reach it — a local-only email reports success with nothing to sync.
+      if (result?.serverSynced === false) {
+        toast.error(
+          result?.permanent
+            ? 'Deleted locally, but the mail server could not be updated'
+            : 'Moved to trash locally, but the mail server could not be updated'
+        );
+        return;
+      }
+      toast.success(result?.permanent ? 'Email permanently deleted' : 'Email moved to trash');
     },
     onError: () => toast.error('Failed to delete email'),
+  });
+
+  const restoreEmailMutation = useMutation({
+    mutationFn: async ({ emailId, accountId }: { emailId: string; accountId: string }) => {
+      const res = await fetch(`/api/accounts/${accountId}/emails/${emailId}/restore`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Failed to restore email');
+      return res.json();
+    },
+    onSuccess: (result) => {
+      invalidateAfterMailboxChange();
+      const folderName = result?.folder === 'SENT' ? 'Sent' : 'Inbox';
+      if (result?.serverSynced === false) {
+        toast.error(`Restored to ${folderName} locally, but the mail server could not be updated`);
+        return;
+      }
+      toast.success(`Email restored to ${folderName}`);
+    },
+    onError: () => toast.error('Failed to restore email'),
+  });
+
+  const emptyTrashMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/accounts/${selectedAccountId || 'all'}/emails/empty-trash`, {
+        method: 'POST',
+      });
+      if (!res.ok) throw new Error('Failed to empty trash');
+      return res.json();
+    },
+    onSuccess: (result) => {
+      invalidateAfterMailboxChange();
+      const count = result?.deleted ?? 0;
+      if (result?.serverFailed > 0) {
+        toast.error(
+          `Deleted ${count} ${count === 1 ? 'email' : 'emails'}, but ${result.serverFailed} could not be removed from the mail server`
+        );
+        return;
+      }
+      toast.success(`Deleted ${count} ${count === 1 ? 'email' : 'emails'}`);
+    },
+    onError: () => toast.error('Failed to empty trash'),
   });
 
   const handleContextAction = async (action: string) => {
@@ -154,7 +214,17 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         updateEmailMutation.mutate({ emailId: email.id, accountId, data: { isStarred: !email.isStarred } });
         break;
       case 'delete':
+        // Deleting from trash is permanent and propagates to the mail server.
+        if (email.folder === 'TRASH') {
+          const confirmed = window.confirm(
+            `Permanently delete "${email.subject || '(no subject)'}"?\n\nThis removes it from the mail server too and cannot be undone.`
+          );
+          if (!confirmed) break;
+        }
         deleteEmailMutation.mutate({ emailId: email.id, accountId });
+        break;
+      case 'restore':
+        restoreEmailMutation.mutate({ emailId: email.id, accountId });
         break;
       case 'reply':
       case 'replyAll':
@@ -264,16 +334,41 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       // Opening the email marks it read server-side (GET side-effect), so keep the
       // sidebar unread badges in sync optimistically. Invalidating here would race
       // against that server write, so update the caches directly instead.
-      if (selectedAccountId && selectedAccountId !== 'new-emails' && email.folder === 'INBOX') {
-        queryClient.setQueryData(['accountStats', selectedAccountId], (oldData: any) =>
+      const readAccountId =
+        (selectedAccountId === 'all' || selectedAccountId === 'new-emails')
+          ? email.accountId
+          : selectedAccountId;
+
+      if (readAccountId && email.folder === 'INBOX') {
+        queryClient.setQueryData(['accountStats', readAccountId], (oldData: any) =>
           oldData
             ? { ...oldData, unreadCount: Math.max(0, (oldData.unreadCount || 0) - 1) }
             : oldData
         );
       }
       queryClient.setQueryData(['new-emails-count'], (oldData: any) => {
-        if (!oldData?.emails) return oldData;
-        return { ...oldData, emails: oldData.emails.filter((e: any) => e.id !== email.id) };
+        if (!oldData) return oldData;
+
+        const next = { ...oldData };
+
+        if (next.emails) {
+          next.emails = next.emails.filter((e: any) => e.id !== email.id);
+        }
+
+        // The sidebar account badge reads countsByAccount first and only falls back
+        // to `emails`, so the filter above alone leaves it stale until the 30s poll.
+        if (next.countsByAccount && readAccountId && email.folder === 'INBOX') {
+          const counts = { ...next.countsByAccount };
+          const remaining = (counts[readAccountId] || 0) - 1;
+          if (remaining > 0) {
+            counts[readAccountId] = remaining;
+          } else {
+            delete counts[readAccountId];
+          }
+          next.countsByAccount = counts;
+        }
+
+        return next;
       });
     }
 
@@ -340,6 +435,17 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const flatEmails = useMemo(() => data?.pages.flatMap(page => page.emails) || [], [data?.pages]);
   const emailsToDisplay = searchQuery ? searchResults : flatEmails;
   const loading = isLoading || isSearchLoading;
+
+  // Total, not just the loaded pages, so the confirmation states the real count
+  const trashCount = data?.pages?.[0]?.pagination?.total ?? flatEmails.length;
+
+  const handleEmptyTrash = () => {
+    const confirmed = window.confirm(
+      `Permanently delete all ${trashCount} ${trashCount === 1 ? 'email' : 'emails'} in the trash?\n\nThis removes them from the mail server too and cannot be undone.`
+    );
+    if (!confirmed) return;
+    emptyTrashMutation.mutate();
+  };
 
   // Derive the live selection from the list so removed emails drop out automatically
   const selectedEmails = useMemo(
@@ -412,6 +518,23 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white transition-all"
           />
         </div>
+        {selectedFolder === 'TRASH' && trashCount > 0 && (
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={handleEmptyTrash}
+              disabled={emptyTrashMutation.isPending}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {emptyTrashMutation.isPending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+              <span>Empty trash</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {selectedEmails.length > 0 && !isSearching && (
@@ -546,12 +669,23 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               )}
             </button>
             <div className="border-t border-gray-100 my-1"></div>
+            {contextMenu.email.folder === 'TRASH' && (
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
+                onClick={() => handleContextAction('restore')}
+              >
+                <RotateCcw className="w-4 h-4 text-gray-500" />
+                <span>Restore to folder</span>
+              </button>
+            )}
             <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2 text-red-600"
               onClick={() => handleContextAction('delete')}
             >
               <Trash2 className="w-4 h-4" />
-              <span>Delete</span>
+              <span>
+                {contextMenu.email.folder === 'TRASH' ? 'Delete permanently' : 'Delete'}
+              </span>
             </button>
           </div>
         </>
