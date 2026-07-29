@@ -11,12 +11,37 @@ export function AccountList() {
   const pathname = usePathname();
   const router = useRouter();
 
-  const handleSelect = (id: string) => {
-    setSelectedAccountId(id);
-    if (!pathname.startsWith('/inbox') && !pathname.startsWith('/labels')) {
+  const selectFolder = (folderId: string) => {
+    console.log('Selected folder:', folderId);
+  };
+
+  const selectAccount = (accountId: string) => {
+    console.log('Selected account:', accountId);
+  };
+
+  const navigateToInboxWhenNeeded = () => {
+    if (pathname !== '/inbox') {
       router.push('/inbox');
     }
   };
+
+  const handleFolderSelect = (folderId: string) => {
+    selectFolder(folderId);
+    navigateToInboxWhenNeeded();
+  };
+
+  const handleAccountSelect = (accountId: string) => {
+    selectAccount(accountId);
+    navigateToInboxWhenNeeded();
+  };
+
+  const handleSelect = (id: string) => {
+    setSelectedAccountId(id);
+    if (!pathname.startsWith('/inbox')) {
+      router.push('/inbox');
+    }
+  };
+
 
   const { data: accounts, isLoading } = useQuery({
     queryKey: ['accounts'],
