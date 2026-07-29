@@ -8,6 +8,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
+import clsx from 'clsx';
 import { EmailRow } from './EmailRow';
 
 interface ContextMenuState {
@@ -375,6 +376,16 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     onSelectEmail(email.id);
   };
 
+  const [readStatus, setReadStatus] = useState<'all' | 'unread'>('all');
+  const [accountScope, setAccountScope] = useState<'all' | 'favourite-accounts'>('all');
+  const [isFavouriteEmailsOnly, setIsFavouriteEmailsOnly] = useState<boolean>(false);
+  const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<string> | null>(null);
+
+  // Reset sticky unread retention set whenever filter settings change
+  useEffect(() => {
+    setRetainedUnreadIds(null);
+  }, [readStatus, accountScope, isFavouriteEmailsOnly, selectedAccountId, selectedFolder]);
+
   const { data: accounts } = useQuery({
     queryKey: ['accounts'],
     queryFn: async () => {
@@ -395,15 +406,17 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     hasNextPage,
     isFetchingNextPage
   } = useInfiniteQuery({
-    queryKey: ['emails', selectedAccountId, selectedFolder],
+    queryKey: ['emails', selectedAccountId, selectedFolder, readStatus, accountScope, isFavouriteEmailsOnly],
     queryFn: async ({ pageParam = 1 }) => {
-      let url = `/api/accounts/${selectedAccountId}/emails`;
+      let url = `/api/accounts/${selectedAccountId}/emails?folder=${selectedFolder}&page=${pageParam}&limit=20`;
 
       if (selectedAccountId === 'new-emails') {
-        url = '/api/emails/new';
-      } else {
-        url += `?folder=${selectedFolder}&page=${pageParam}&limit=20`;
+        url = `/api/accounts/all/emails?folder=INBOX&page=${pageParam}&limit=20`;
       }
+
+      if (readStatus !== 'all') url += `&readStatus=${readStatus}`;
+      if (accountScope !== 'all') url += `&accountScope=${accountScope}`;
+      if (isFavouriteEmailsOnly) url += `&favouriteEmailsOnly=true`;
 
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch emails');
@@ -433,7 +446,22 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
   // Flatten the pages for the main list
   const flatEmails = useMemo(() => data?.pages.flatMap(page => page.emails) || [], [data?.pages]);
-  const emailsToDisplay = searchQuery ? searchResults : flatEmails;
+
+  // Seed retained unread IDs when unread filter is active
+  useEffect(() => {
+    if (readStatus === 'unread' && flatEmails.length > 0 && !retainedUnreadIds) {
+      setRetainedUnreadIds(new Set(flatEmails.map((e: any) => e.id)));
+    }
+  }, [readStatus, flatEmails, retainedUnreadIds]);
+
+  const displayableFlatEmails = useMemo(() => {
+    if (readStatus === 'unread' && retainedUnreadIds) {
+      return flatEmails.filter((e: any) => retainedUnreadIds.has(e.id) || !e.isRead);
+    }
+    return flatEmails;
+  }, [flatEmails, readStatus, retainedUnreadIds]);
+
+  const emailsToDisplay = searchQuery ? searchResults : displayableFlatEmails;
   const loading = isLoading || isSearchLoading;
 
   // Total, not just the loaded pages, so the confirmation states the real count
@@ -481,11 +509,11 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
         <div className="mb-4 flex flex-col justify-center min-h-[40px]">
-          {activeAccount || selectedAccountId === 'new-emails' ? (
+          {activeAccount || selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
             <>
-              {selectedAccountId === 'new-emails' ? (
+              {selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                  <span>New Emails</span>
+                  <span>All Emails</span>
                 </h2>
               ) : (
                 <>
@@ -518,6 +546,85 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white transition-all"
           />
         </div>
+
+        {(selectedAccountId === 'all' || selectedAccountId === 'new-emails') && (
+          <div className="flex items-center gap-2 overflow-x-auto pt-3 pb-0.5 scrollbar-none text-xs">
+            {/* Group 1: Read status (Always 1 active: All emails vs Unread) */}
+            <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setReadStatus('all')}
+                className={clsx(
+                  "px-2.5 py-1 rounded-full font-medium transition-colors",
+                  readStatus === 'all'
+                    ? "bg-white text-gray-900 shadow-sm font-semibold"
+                    : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                All emails
+              </button>
+              <button
+                type="button"
+                onClick={() => setReadStatus('unread')}
+                className={clsx(
+                  "px-2.5 py-1 rounded-full font-medium transition-colors",
+                  readStatus === 'unread'
+                    ? "bg-accent-600 text-white shadow-sm font-semibold"
+                    : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                Unread
+              </button>
+            </div>
+
+            <span className="h-4 w-px bg-gray-200 flex-shrink-0" />
+
+            {/* Group 2: Account scope (Always 1 active: All accounts vs Favourite accounts) */}
+            <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setAccountScope('all')}
+                className={clsx(
+                  "px-2.5 py-1 rounded-full font-medium transition-colors",
+                  accountScope === 'all'
+                    ? "bg-white text-gray-900 shadow-sm font-semibold"
+                    : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                All accounts
+              </button>
+              <button
+                type="button"
+                onClick={() => setAccountScope('favourite-accounts')}
+                className={clsx(
+                  "px-2.5 py-1 rounded-full font-medium transition-colors",
+                  accountScope === 'favourite-accounts'
+                    ? "bg-accent-600 text-white shadow-sm font-semibold"
+                    : "text-gray-600 hover:text-gray-900"
+                )}
+              >
+                Favourite accounts
+              </button>
+            </div>
+
+            <span className="h-4 w-px bg-gray-200 flex-shrink-0" />
+
+            {/* Group 3: Standalone Favourite emails toggle */}
+            <button
+              type="button"
+              onClick={() => setIsFavouriteEmailsOnly((prev) => !prev)}
+              className={clsx(
+                "px-3 py-1 rounded-full font-medium transition-colors border flex items-center space-x-1.5 flex-shrink-0",
+                isFavouriteEmailsOnly
+                  ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                  : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200 hover:text-gray-900"
+              )}
+            >
+              <Star className={clsx("w-3 h-3", isFavouriteEmailsOnly ? "fill-white text-white" : "text-amber-500")} />
+              <span>Favourite emails</span>
+            </button>
+          </div>
+        )}
         {selectedFolder === 'TRASH' && trashCount > 0 && (
           <div className="mt-3 flex justify-end">
             <button
@@ -578,6 +685,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
                   isChecked={selectedIds.has(email.id)}
                   selectionActive={selectedEmails.length > 0}
                   onToggleSelect={toggleSelect}
+                  showAccountBadge={selectedAccountId === 'all' || selectedAccountId === 'new-emails'}
                 />
               ))}
             </div>

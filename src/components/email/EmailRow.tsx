@@ -19,6 +19,7 @@ interface EmailRowProps {
   /** True when any email in the list is checked — keeps all checkboxes visible. */
   selectionActive?: boolean;
   onToggleSelect?: (id: string) => void;
+  showAccountBadge?: boolean;
 }
 
 export function EmailRow({
@@ -30,10 +31,15 @@ export function EmailRow({
   isChecked,
   selectionActive,
   onToggleSelect,
+  showAccountBadge = true,
 }: EmailRowProps) {
   const isUnread = !email.isRead;
   const { showAvatars, timeFormat } = useUIStore();
   const snippet = typeof email.snippet === 'string' ? email.snippet.trim() : '';
+
+  const accountInfo = email.account;
+  const accountLabel = accountInfo?.label || accountInfo?.emailAddress;
+  const accountColor = accountInfo?.color || '#3B82F6';
 
   const formattedTime = useMemo(() => {
     const date = getEmailDisplayTimestamp(email);
@@ -98,8 +104,20 @@ export function EmailRow({
 
       <div className={clsx("flex-1 min-w-0 pr-4", !showAvatars && "pl-[var(--spacing-density-col)]")}>
         <div className="flex items-center justify-between mb-0.5">
-          <span className={clsx("truncate text-sm flex items-center gap-1.5", isUnread ? "text-gray-900 font-bold" : "text-gray-900 font-medium")}>
+          <span className={clsx("truncate text-sm flex items-center gap-1.5 min-w-0", isUnread ? "text-gray-900 font-bold" : "text-gray-900 font-medium")}>
             <span className="truncate">{email.fromName || email.fromAddress}</span>
+            {showAccountBadge && accountLabel && (
+              <span
+                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 max-w-[130px] truncate flex-shrink-0 border border-gray-200"
+                title={accountInfo?.emailAddress || accountLabel}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: accountColor }}
+                />
+                <span className="truncate">{accountLabel}</span>
+              </span>
+            )}
             {email.isHighRisk && (
               <span
                 title={email.riskReason || 'Flagged as high risk'}

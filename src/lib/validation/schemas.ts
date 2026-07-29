@@ -159,6 +159,13 @@ export const emailListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
   search: z.string().optional(),
+  filter: z.enum(['all', 'unread', 'favourite-accounts', 'favourite-emails']).optional(),
+  readStatus: z.enum(['all', 'unread']).default('all'),
+  accountScope: z.enum(['all', 'favourite-accounts']).default('all'),
+  favouriteEmailsOnly: z
+    .string()
+    .transform((v) => v === 'true')
+    .optional(),
   unreadOnly: z
     .string()
     .transform((v) => v === 'true')
