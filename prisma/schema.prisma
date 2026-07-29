@@ -16,6 +16,7 @@ model User {
 
   memberships    OrganizationMember[]
   activityLogs   EmailActivityLog[]
+  favouriteAccounts FavouriteAccount[]
 
   @@map("users")
 }
@@ -88,6 +89,7 @@ model EmailAccount {
   accountLabels  AccountLabel[]
   activityLogs   EmailActivityLog[]
   memberAccess   MemberEmailAccountAccess[]
+  favouritedBy   FavouriteAccount[]
 
   @@unique([organizationId, emailAddress])
   @@map("email_accounts")
@@ -234,6 +236,22 @@ model PushSubscription {
   @@unique([endpoint])
   @@index([organizationId])
   @@map("push_subscriptions")
+}
+
+model FavouriteAccount {
+  userId         String    @map("user_id") @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  accountId      String    @map("account_id") @db.Uuid
+  sortOrder      Int       @map("sort_order")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz // null = active favourite
+
+  user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([userId, accountId])
+  @@index([userId, deletedAt, sortOrder])
+  @@map("favourite_accounts")
 }
 
 model MemberEmailAccountAccess {

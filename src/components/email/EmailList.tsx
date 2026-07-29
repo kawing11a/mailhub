@@ -92,6 +92,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       queryClient.invalidateQueries({ queryKey: ['emails', selectedAccountId, selectedFolder] });
       queryClient.invalidateQueries({ queryKey: ['search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
     },
     onError: () => toast.error('Failed to update email'),
   });
@@ -108,6 +110,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       queryClient.invalidateQueries({ queryKey: ['emails', selectedAccountId, selectedFolder] });
       queryClient.invalidateQueries({ queryKey: ['search'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
       toast.success('Email moved to trash');
     },
     onError: () => toast.error('Failed to delete email'),
@@ -210,13 +214,28 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             if (!oldData) return oldData;
             return {
               ...oldData,
-              hits: oldData.hits?.map((e: any) => 
+              hits: oldData.hits?.map((e: any) =>
                 e.id === email.id ? { ...e, isRead: true } : e
               )
             };
           }
         );
       }
+
+      // Opening the email marks it read server-side (GET side-effect), so keep the
+      // sidebar unread badges in sync optimistically. Invalidating here would race
+      // against that server write, so update the caches directly instead.
+      if (selectedAccountId && selectedAccountId !== 'new-emails' && email.folder === 'INBOX') {
+        queryClient.setQueryData(['accountStats', selectedAccountId], (oldData: any) =>
+          oldData
+            ? { ...oldData, unreadCount: Math.max(0, (oldData.unreadCount || 0) - 1) }
+            : oldData
+        );
+      }
+      queryClient.setQueryData(['new-emails-count'], (oldData: any) => {
+        if (!oldData?.emails) return oldData;
+        return { ...oldData, emails: oldData.emails.filter((e: any) => e.id !== email.id) };
+      });
     }
 
     onSelectEmail(email.id);

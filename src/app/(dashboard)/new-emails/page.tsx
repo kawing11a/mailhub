@@ -17,7 +17,14 @@ function NewEmailsContent() {
 
   useEffect(() => {
     setSelectedAccountId('new-emails');
-    return () => setSelectedAccountId(null);
+    return () => {
+      // Only clear the selection if the user is leaving without having picked an
+      // account. Selecting an account (e.g. from the sidebar) navigates away and
+      // sets its own id first, so we must not clobber that deliberate choice.
+      if (useAccountStore.getState().selectedAccountId === 'new-emails') {
+        setSelectedAccountId(null);
+      }
+    };
   }, [setSelectedAccountId]);
 
   const handleSelectEmail = (id: string | null) => {

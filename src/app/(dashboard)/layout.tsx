@@ -5,6 +5,7 @@ import { ComposeModal } from '@/components/email/ComposeModal';
 import { useSSE } from '@/hooks/useSSE';
 
 import { SearchModal } from '@/components/search/SearchModal';
+import { AllAccountsModal } from '@/components/accounts/AllAccountsModal';
 import { ShortcutProvider } from '@/components/providers/ShortcutProvider';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
@@ -52,6 +53,7 @@ export default function DashboardLayout({
         
         <ComposeModal />
         <SearchModal />
+        <AllAccountsModal />
         <ToastLimit />
         <Toaster position="bottom-right" />
         </div>
