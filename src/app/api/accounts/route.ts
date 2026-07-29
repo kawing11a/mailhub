@@ -3,7 +3,6 @@ import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError, requireAdmin } from '@/lib/auth/middleware';
 import { createAccountSchema } from '@/lib/validation';
 import { createAccount, sanitizeAccount } from '@/lib/accounts/service';
-import { imapManager } from '@/lib/imap/connection-manager';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);

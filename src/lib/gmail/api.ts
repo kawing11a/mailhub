@@ -201,6 +201,78 @@ export async function sendMessageRaw(
 }
 
 /**
+ * Move a message to the Gmail trash.
+ * Requires the gmail.modify scope — a read-only grant will 403 here.
+ */
+export async function trashMessage(
+  accessToken: string,
+  messageId: string
+): Promise<void> {
+  const res = await gmailFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/trash`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new GmailApiError(`Failed to trash message ${messageId}`, res.status, err);
+  }
+}
+
+/**
+ * Permanently delete a message. This bypasses the trash and cannot be undone.
+ * Requires the gmail.modify scope.
+ */
+export async function deleteMessage(
+  accessToken: string,
+  messageId: string
+): Promise<void> {
+  const res = await gmailFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  // 404 means it is already gone, which is the state we wanted.
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json().catch(() => null);
+    throw new GmailApiError(`Failed to delete message ${messageId}`, res.status, err);
+  }
+}
+
+/**
+ * Move a message out of the trash and back into a folder, by label.
+ */
+export async function modifyMessageLabels(
+  accessToken: string,
+  messageId: string,
+  addLabelIds: string[],
+  removeLabelIds: string[]
+): Promise<void> {
+  const res = await gmailFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/modify`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ addLabelIds, removeLabelIds }),
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new GmailApiError(`Failed to modify labels on message ${messageId}`, res.status, err);
+  }
+}
+
+/**
  * Sync a draft email using raw RFC822 format buffer.
  */
 export async function syncDraftRaw(
