@@ -376,10 +376,21 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     onSelectEmail(email.id);
   };
 
-  const [readStatus, setReadStatus] = useState<'all' | 'unread'>('unread');
+  const [readStatus, setReadStatus] = useState<'all' | 'unread'>(
+    (selectedAccountId === 'all' || selectedAccountId === 'new-emails') ? 'unread' : 'all'
+  );
   const [accountScope, setAccountScope] = useState<'all' | 'favourite-accounts'>('all');
   const [isFavouriteEmailsOnly, setIsFavouriteEmailsOnly] = useState<boolean>(false);
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<string> | null>(null);
+
+  // Automatically update default readStatus depending on view (unread for All Emails, all for Inbox / account view)
+  useEffect(() => {
+    if (selectedAccountId === 'all' || selectedAccountId === 'new-emails') {
+      setReadStatus('unread');
+    } else {
+      setReadStatus('all');
+    }
+  }, [selectedAccountId]);
 
   // Reset sticky unread retention set whenever filter settings change
   useEffect(() => {

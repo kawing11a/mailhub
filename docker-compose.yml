@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
 
   mailhub-web:
-    build: .
+    image: kawing11a/mailhub:0.1.1
     ports:
       - "3000:3000"
     env_file:
@@ -47,7 +47,7 @@ services:
       - mailhub_storage:/app/.storage
 
   mailhub-worker-1:
-    build: .
+    image: kawing11a/mailhub:0.1.1
     command: npm run worker
     env_file:
       - .env
@@ -61,7 +61,7 @@ services:
       - mailhub_storage:/app/.storage
 
   mailhub-worker-2:
-    build: .
+    image: kawing11a/mailhub:0.1.1
     env_file:
       - .env
     environment:
