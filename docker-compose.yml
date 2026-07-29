@@ -33,7 +33,7 @@ services:
       - mailhub_meili_data:/meili_data
     restart: unless-stopped
 
-  email-manager-web:
+  mailhub-web:
     build: .
     ports:
       - "3000:3000"
@@ -46,7 +46,7 @@ services:
     volumes:
       - mailhub_storage:/app/.storage
 
-  email-manager-worker-1:
+  mailhub-worker-1:
     build: .
     command: npm run worker
     env_file:
@@ -60,7 +60,7 @@ services:
     volumes:
       - mailhub_storage:/app/.storage
 
-  email-manager-worker-2:
+  mailhub-worker-2:
     build: .
     env_file:
       - .env

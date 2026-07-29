@@ -82,8 +82,8 @@ Core entities managed via Prisma:
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/kawing11a/email-manager.git
-cd email-manager
+git clone https://github.com/kawing11a/mailhub.git
+cd mailhub
 npm install
 ```
 
@@ -236,10 +236,35 @@ npm test
 
 ## Docker
 
-Build and run the full stack:
+### Quick Start with Docker Hub Image
+
+Pull and run the official pre-built MailHub Docker image directly from Docker Hub:
 
 ```bash
-docker compose up --build
+# Pull the latest image from Docker Hub
+docker pull kawing11a/mailhub:latest
+
+# Run MailHub web container (using your .env file)
+docker run -d \
+  --name mailhub-web \
+  -p 3000:3000 \
+  --env-file .env \
+  kawing11a/mailhub:latest
+
+# Run background worker container
+docker run -d \
+  --name mailhub-worker \
+  --env-file .env \
+  kawing11a/mailhub:latest \
+  npm run worker
+```
+
+### Running with Docker Compose
+
+Build and run the complete stack (MailHub web, workers, PostgreSQL, Redis, Meilisearch):
+
+```bash
+docker compose up -d --build
 ```
 
 The Dockerfile uses a multi-stage build (`deps` → `build` → `runner`) producing a lean production image. Workers run as separate containers using the same image with `npm run worker` as the entrypoint.

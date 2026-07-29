@@ -21,8 +21,8 @@ Please be respectful, constructive, and polite in all interactions with fellow c
 #### Development Setup
 1. **Fork & Clone the Repository**
    ```bash
-   git clone https://github.com/your-username/email-manager.git
-   cd email-manager
+   git clone https://github.com/your-username/mailhub.git
+   cd mailhub
    ```
 
 2. **Install Dependencies**
