@@ -2,6 +2,9 @@
 
 A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMTP, Gmail OAuth, or Microsoft/Outlook OAuth accounts, sync emails via background workers, and manage everything from a unified dashboard with full-text search, drag-and-drop labels, activity logs, spam risk detection, granular member access control, Progressive Web App (PWA) support, and Web Push notifications.
 
+[![Sponsor MailHub](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/kawing11a)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/kawing11a)
+
 ## Tech Stack
 
 | Layer | Technology |
@@ -327,6 +330,16 @@ prisma/
 ├── schema.prisma        # Database schema
 └── migrations/          # Migration history
 ```
+
+## Sponsoring & Financial Support
+
+If **MailHub** helps you or your organization manage email workflows effectively, please consider supporting ongoing development and maintenance!
+
+[![Sponsor MailHub](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-ea4aaa?style=for-the-badge&logo=github-sponsors)](https://github.com/sponsors/kawing11a)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Donate-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/kawing11a)
+
+- 💖 **[GitHub Sponsors](https://github.com/sponsors/kawing11a)**
+- ☕ **[Buy Me a Coffee](https://www.buymeacoffee.com/kawing11a)**
 
 ## Contributing
 

@@ -97,6 +97,16 @@ npm run build
 - **Email Protocols**: Nodemailer (SMTP), ImapFlow (IMAP), Gmail OAuth & API, Microsoft OAuth & Graph API
 - **Search & State**: Meilisearch, Zustand, TanStack React Query v5
 
+
+---
+
+## Financial Contributions & Sponsorship
+
+If you prefer to support MailHub financially rather than through code contributions, you can sponsor the maintainers and project infrastructure through:
+
+- 💖 **[GitHub Sponsors](https://github.com/sponsors/kawing11a)**
+- ☕ **[Buy Me a Coffee](https://www.buymeacoffee.com/kawing11a)**
+
 ---
 
 ## License

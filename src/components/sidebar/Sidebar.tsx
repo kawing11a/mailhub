@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { AccountsSection } from './AccountsSection';
-import { PenSquare, Settings, Search, LayoutDashboard, Inbox } from 'lucide-react';
+import { PenSquare, Settings, Search, LayoutDashboard, Inbox, Heart } from 'lucide-react';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useQuery } from '@tanstack/react-query';
@@ -88,6 +88,15 @@ export function Sidebar() {
           >
             <Settings className="w-4 h-4" />
           </Link>
+          <a
+            href="https://github.com/sponsors/kawing11a"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-gray-500 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+            title="Sponsor Project"
+          >
+            <Heart className="w-4 h-4 text-rose-500 fill-rose-500/20" />
+          </a>
         </div>
       </div>
     </div>
