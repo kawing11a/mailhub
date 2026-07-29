@@ -26,6 +26,7 @@ A multi-tenant email management platform built with Next.js 16. Connect IMAP/SMT
 - 👥 **Granular Access Control**: Organization administrators can manage and grant per-member access permissions to specific email accounts.
 - ⚡ **Realtime Email Sync**: High-throughput background sync powered by BullMQ workers with automatic SPAM detection and Meilisearch indexation.
 - 📤 **Multi-Provider Email Sender**: Send emails using native SMTP, Google Gmail API, or Microsoft Graph/Outlook API with automatic token refreshing.
+- 📬 **Aggregated All Emails View**: View and filter emails across all connected accounts simultaneously in a unified stream, complete with customizable reading pane layouts (Right, Bottom, or Off).
 - 🗑️ **Trash & Restore Flow**: Full support for moving emails to Trash, restoring messages back to inbox/folders, and emptying trash per account.
 - 🔍 **Instant Full-Text Search**: Search headers, body content, and senders seamlessly across all connected accounts powered by Meilisearch.
 - 🏷️ **Drag & Drop Label Management**: Organize emails using customizable organization labels and interactive drag-and-drop actions.
@@ -146,6 +147,14 @@ Workers sync email accounts in the background:
 npm run worker
 ```
 
+### 7. Run Tests
+
+To execute unit and API endpoint tests:
+
+```bash
+npm test
+```
+
 ## API Routes
 
 | Method | Route | Description |
@@ -154,6 +163,7 @@ npm run worker
 | POST | `/api/auth/login` | Authenticate and receive JWT |
 | POST | `/api/auth/logout` | Clear authentication session |
 | GET | `/api/auth/me` | Fetch active user profile |
+| POST | `/api/auth/password` | Update user account password |
 | GET | `/api/accounts` | List connected email accounts |
 | POST | `/api/accounts` | Add an email account (IMAP/SMTP or OAuth) |
 | DELETE | `/api/accounts/[id]` | Remove connected email account |
@@ -168,25 +178,32 @@ npm run worker
 | GET | `/api/accounts/[id]/emails/[emailId]/attachments/[attachmentId]` | Download email attachment |
 | POST | `/api/accounts/[id]/emails/empty-trash` | Purge all emails in trash for account |
 | GET/POST | `/api/accounts/[id]/drafts` | Manage email drafts |
+| POST | `/api/accounts/[id]/drafts/sync` | Sync local email draft to server |
 | GET | `/api/accounts/oauth/google/init` | Initiate Google OAuth 2.0 authorization |
 | GET | `/api/accounts/oauth/google/callback` | Google OAuth 2.0 callback redirect |
 | GET | `/api/accounts/oauth/microsoft/init` | Initiate Microsoft Outlook OAuth 2.0 authorization |
 | GET | `/api/accounts/oauth/microsoft/callback` | Microsoft Outlook OAuth 2.0 callback redirect |
+| GET | `/api/emails/new` | Aggregated stream of recent emails across all accounts |
 | GET | `/api/emails/search` | Full-text search across emails (Meilisearch) |
-| GET | `/api/emails/thread` | Fetch email thread by thread ID |
+| GET | `/api/emails/thread/[threadId]` | Fetch email thread by thread ID |
 | POST | `/api/emails/labels` | Apply or remove labels from emails |
-| GET | `/api/labels` | List organization labels |
-| POST | `/api/labels` | Create a label |
-| GET | `/api/favourites` | Manage user favorite emails |
+| GET/POST | `/api/labels` | List or create organization labels |
+| PATCH/DELETE | `/api/labels/[id]` | Update or delete organization label |
+| GET/POST | `/api/labels/[id]/emails` | Manage emails assigned to label |
+| GET/POST | `/api/labels/[id]/accounts` | Manage accounts assigned to label |
+| GET/POST/DEL | `/api/favourites` | Manage user favorite emails |
+| POST | `/api/favourites/reorder` | Reorder user favorite items |
 | GET | `/api/org` | Organization details |
 | GET | `/api/org/members` | Organization members list |
+| PATCH/DELETE | `/api/org/members/[userId]` | Update member role or remove member |
 | GET/POST | `/api/org/members/[userId]/accounts` | Manage member access control for accounts |
 | GET | `/api/activity` | Fetch activity audit log |
 | GET | `/api/dashboard` | Dashboard summary stats |
-| GET | `/api/realtime` | SSE stream for live updates |
+| GET | `/api/realtime/stream` | SSE stream for live updates |
 | GET | `/api/version` | Service Worker app version check |
 | GET | `/api/pwa` | Check PWA system status |
-| POST | `/api/notifications` | Register Web Push subscription |
+| POST | `/api/notifications/subscribe` | Register Web Push subscription |
+| POST | `/api/notifications/test` | Send test Web Push notification |
 
 ## Dashboard Pages
 
@@ -194,8 +211,9 @@ npm run worker
 |---|---|
 | `/login` | Sign in page |
 | `/register` | Sign up page |
-| `/inbox` | Unified email inbox with search, context menus & thread viewer |
-| `/new-emails` | Real-time incoming email feed |
+| `/inbox` | Account-specific email inbox with search, context menus & thread viewer |
+| `/all-emails` | Aggregated multi-account email feed with reading pane customization (Right, Bottom, Off) |
+| `/new-emails` | Live incoming email feed (redirects to `/all-emails`) |
 | `/overview` | Analytics dashboard & overview statistics |
 | `/labels` | Label & category management |
 | `/settings` | Account, team access, and organization settings |
@@ -226,22 +244,23 @@ src/
 │   ├── (auth)/          # Login & register pages
 │   ├── (dashboard)/     # Authenticated dashboard pages
 │   │   ├── activity/    # Activity log
-│   │   ├── inbox/       # Email inbox & thread viewer
+│   │   ├── all-emails/  # Aggregated multi-account email feed
+│   │   ├── inbox/       # Account email inbox & thread viewer
 │   │   ├── labels/      # Label management
-│   │   ├── new-emails/  # Live incoming email feed
+│   │   ├── new-emails/  # Redirect to all-emails feed
 │   │   ├── overview/    # Dashboard stats
 │   │   ├── settings/    # Settings & team account access control
 │   │   └── testing/     # Testing sandbox
 │   ├── api/             # REST API routes
-│   │   ├── accounts/    # Email account CRUD, OAuth, testing, and member access
+│   │   ├── accounts/    # Email account CRUD, OAuth, testing, stats, drafts, and member access
 │   │   ├── activity/    # Activity audit log
-│   │   ├── auth/        # Auth endpoints (login, logout, me, password)
+│   │   ├── auth/        # Auth endpoints (login, logout, me, password, register)
 │   │   ├── dashboard/   # Summary statistics
-│   │   ├── emails/      # Email search, threads, labels, and actions
-│   │   ├── favourites/  # Favorites management
-│   │   ├── labels/      # Label management
-│   │   ├── notifications/# Push subscriptions
-│   │   ├── org/         # Organization & team member management
+│   │   ├── emails/      # Email search, threads, new email stream, and labels
+│   │   ├── favourites/  # Favorites management & reordering
+│   │   ├── labels/      # Organization and account label management
+│   │   ├── notifications/# Push subscriptions & test notifications
+│   │   ├── org/         # Organization & team member access management
 │   │   ├── pwa/         # PWA status check
 │   │   ├── realtime/    # Server-Sent Events stream
 │   │   └── version/     # PWA / App version check
