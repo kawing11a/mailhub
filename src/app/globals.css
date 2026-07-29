@@ -111,3 +111,105 @@ input, select, textarea {
   outline: 2px solid var(--color-accent-500);
   outline-offset: 2px;
 }
+
+@keyframes dashboard-switch-sheen {
+  0% {
+    transform: translateX(-145%) skewX(-18deg);
+  }
+  100% {
+    transform: translateX(255%) skewX(-18deg);
+  }
+}
+
+@keyframes dashboard-value-change {
+  0% {
+    opacity: 0.2;
+    filter: blur(3px);
+    transform: translateY(10px) scale(0.9);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(-2px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes dashboard-panel-change {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-scope-switch:hover {
+  transform: translateY(-2px) scale(1.015);
+  filter: saturate(1.08);
+}
+
+.dashboard-scope-switch:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.dashboard-switch-active::before {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 26%), transparent);
+  content: '';
+  transform: translateX(-145%) skewX(-18deg);
+}
+
+.dashboard-scope-switch:hover .dashboard-switch-active::before {
+  animation: dashboard-switch-sheen 850ms ease-out;
+}
+
+.dashboard-value-change {
+  animation: dashboard-value-change 560ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.dashboard-panel-change {
+  animation: dashboard-panel-change 440ms ease-out both;
+}
+
+.dashboard-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -18px rgb(15 23 42 / 35%);
+}
+
+.dashboard-data-refreshing::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 0.75rem;
+  background: linear-gradient(105deg, transparent 30%, rgb(255 255 255 / 55%) 48%, transparent 66%);
+  content: '';
+  pointer-events: none;
+  transform: translateX(-100%);
+  animation: dashboard-data-shimmer 900ms ease-in-out infinite;
+}
+
+@keyframes dashboard-data-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-scope-switch,
+  .dashboard-switch-active::before,
+  .dashboard-value-change,
+  .dashboard-panel-change,
+  .dashboard-stat-card,
+  .dashboard-data-refreshing::after {
+    animation: none !important;
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
