@@ -359,8 +359,16 @@ export class IMAPConnectionManager {
           update: {},
         });
         
-        // Store attachments
-        if (parsed.attachments && parsed.attachments.length > 0) {
+        // Store attachments.
+        // The email above is an upsert, so a re-synced message reuses the same row.
+        // Creating unconditionally here appended a fresh copy of every attachment on
+        // each sync; the attachment set for a given messageId never changes, so skip
+        // entirely (before the disk writes) once any are already stored.
+        const existingAttachments = await tx.attachment.count({
+          where: { emailId: email.id },
+        });
+
+        if (existingAttachments === 0 && parsed.attachments && parsed.attachments.length > 0) {
           const storageDir = path.join(process.cwd(), '.storage', 'attachments');
           await fs.mkdir(storageDir, { recursive: true }).catch(() => {});
 
