@@ -124,7 +124,15 @@ npx prisma generate
 npx prisma migrate deploy
 ```
 
-To seed test data:
+To create an initial admin account for a clean deployment:
+
+```bash
+npm run create-admin
+# Or pass parameters inline:
+npm run create-admin admin@example.com "Admin User" "Password123!" "My Organization"
+```
+
+To seed test data (optional):
 
 ```bash
 npm run db:seed
