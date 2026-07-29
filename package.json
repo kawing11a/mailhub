@@ -1,7 +1,8 @@
 {
   "name": "mailhub",
   "version": "0.1.0",
-  "private": true,
+  "license": "MIT",
+  "private": false,
   "scripts": {
     "dev": "next dev --experimental-https",
     "build": "next build",
