@@ -5,7 +5,7 @@ export async function checkIsHighRisk(
 ): Promise<{ isHighRisk: boolean; reason?: string }> {
   try {
     // OpenAI-compatible endpoint (compatible with oMLX, LM Studio, Ollama, vLLM, etc.)
-    const aiUrl = process.env.AI_API_URL || 'http://192.168.0.184:11434/v1/chat/completions';
+    const aiUrl = process.env.AI_API_URL || 'http://localhost:11434/v1/chat/completions';
     const aiModel = process.env.AI_MODEL || 'llama3.2'; // Change to your oMLX model
 
     const response = await fetch(aiUrl, {

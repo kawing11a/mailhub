@@ -43,5 +43,8 @@ next-env.d.ts
 
 /src/generated/prisma
 
-certificates
-reverse_proxy
+certificates/
+reverse_proxy/
+.agent/
+AGENTS.md
+CLAUDE.md
