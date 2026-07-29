@@ -1,0 +1,578 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Tag, Mail, Search, Check, Loader2, ShieldAlert } from 'lucide-react';
+import clsx from 'clsx';
+import toast from 'react-hot-toast';
+
+interface LabelWithAccounts {
+  id: string;
+  name: string;
+  color: string;
+  accountIds: string[];
+}
+
+interface EmailAccount {
+  id: string;
+  label: string;
+  emailAddress: string;
+  color?: string | null;
+  avatarInitials?: string | null;
+}
+
+interface LabelsResponse {
+  labels: LabelWithAccounts[];
+}
+
+type AssignmentMode = 'account' | 'label';
+
+export default function LabelAssignmentPage() {
+  const queryClient = useQueryClient();
+  const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('account');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const [labelSearch, setLabelSearch] = useState('');
+
+  const { data: authData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
+
+  const {
+    data: labelsData,
+    isLoading: isLoadingLabels,
+    isError: isLabelsError,
+  } = useQuery({
+    queryKey: ['labels'],
+    queryFn: async () => {
+      const res = await fetch('/api/labels');
+      if (!res.ok) throw new Error('Failed to fetch labels');
+      return res.json();
+    },
+  });
+
+  const {
+    data: accountsData,
+    isLoading: isLoadingAccounts,
+    isError: isAccountsError,
+  } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      const res = await fetch('/api/accounts');
+      if (!res.ok) throw new Error('Failed to fetch accounts');
+      return res.json();
+    },
+  });
+
+  const labels: LabelWithAccounts[] = labelsData?.labels || [];
+  const accounts: EmailAccount[] = Array.isArray(accountsData) ? accountsData : [];
+  const activeAccountId = accounts.some((account) => account.id === selectedAccountId)
+    ? selectedAccountId
+    : accounts[0]?.id || null;
+  const selectedAccount =
+    accounts.find((account) => account.id === activeAccountId) || null;
+  const activeLabelId = labels.some((label) => label.id === selectedLabelId)
+    ? selectedLabelId
+    : labels[0]?.id || null;
+  const selectedLabel = labels.find((label) => label.id === activeLabelId) || null;
+
+  const mutation = useMutation({
+    mutationFn: async ({ labelId, accountIds }: { labelId: string; accountIds: string[] }) => {
+      const res = await fetch(`/api/labels/${labelId}/accounts`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountIds }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to save assignment');
+      return json;
+    },
+    onMutate: async ({ labelId, accountIds }) => {
+      await queryClient.cancelQueries({ queryKey: ['labels'] });
+      const previous = queryClient.getQueryData<LabelsResponse>(['labels']);
+      queryClient.setQueryData<LabelsResponse>(['labels'], (data) =>
+        data
+          ? {
+              ...data,
+              labels: data.labels.map((label) =>
+                label.id === labelId ? { ...label, accountIds } : label
+              ),
+            }
+          : data
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['labels'], context.previous);
+      toast.error('Failed to save assignment');
+    },
+    onSuccess: () => {
+      toast.success('Assignment saved');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: ['labelEmails'] });
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+    },
+  });
+
+  const handleToggleLabel = (label: LabelWithAccounts) => {
+    if (!activeAccountId || mutation.isPending) return;
+    const current = label.accountIds || [];
+    const next = current.includes(activeAccountId)
+      ? current.filter((id) => id !== activeAccountId)
+      : [...current, activeAccountId];
+    mutation.mutate({ labelId: label.id, accountIds: next });
+  };
+
+  const handleToggleAccount = (accountId: string) => {
+    if (!selectedLabel || mutation.isPending) return;
+    const current = selectedLabel.accountIds || [];
+    const next = current.includes(accountId)
+      ? current.filter((id) => id !== accountId)
+      : [...current, accountId];
+    mutation.mutate({ labelId: selectedLabel.id, accountIds: next });
+  };
+
+  if (authData && authData.role !== 'admin') {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <ShieldAlert className="w-10 h-10 text-gray-400 mb-3" />
+        <h1 className="text-lg font-semibold text-gray-900">Admin access required</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Only organization admins can manage label assignments.
+        </p>
+      </div>
+    );
+  }
+
+  const filteredLabels = labels.filter((l) =>
+    l.name.toLowerCase().includes(labelSearch.toLowerCase())
+  );
+  const assignedLabelCount = activeAccountId
+    ? labels.filter((label) => label.accountIds?.includes(activeAccountId)).length
+    : 0;
+
+  const isLoading = isLoadingLabels || isLoadingAccounts;
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Label Assignment</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Assign labels to email accounts. The label view in the sidebar shows individually
+          tagged emails plus all emails from assigned accounts — existing emails are never
+          modified. Changes are saved automatically.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center p-12">
+          <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+        </div>
+      ) : isLabelsError || isAccountsError ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-sm text-red-700">
+          Failed to load {isLabelsError ? 'labels' : 'accounts'}. Please refresh the page and
+          try again.
+        </div>
+      ) : accounts.length === 0 ? (
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+              <Mail className="w-5 h-5 text-gray-400" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">No email accounts connected</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Connect an account before assigning labels.{' '}
+                <Link href="/settings/accounts" className="text-accent-600 hover:underline">
+                  Connect an account
+                </Link>
+                .
+              </p>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="space-y-4">
+          <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">Assignment method</h2>
+              <p className="mt-0.5 text-xs text-gray-500">
+                {assignmentMode === 'account'
+                  ? 'Select an email account, then assign its labels.'
+                  : 'Select a label, then assign it to multiple email accounts.'}
+              </p>
+            </div>
+            <div
+              role="group"
+              aria-label="Assignment method"
+              className="inline-flex self-start sm:self-auto p-1 bg-gray-100 rounded-lg"
+            >
+              <button
+                type="button"
+                aria-pressed={assignmentMode === 'account'}
+                onClick={() => setAssignmentMode('account')}
+                disabled={mutation.isPending}
+                className={clsx(
+                  'inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  assignmentMode === 'account'
+                    ? 'bg-white text-accent-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                )}
+              >
+                <Mail className="w-4 h-4" />
+                <span>By account</span>
+              </button>
+              <button
+                type="button"
+                aria-pressed={assignmentMode === 'label'}
+                onClick={() => setAssignmentMode('label')}
+                disabled={mutation.isPending}
+                className={clsx(
+                  'inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
+                  assignmentMode === 'label'
+                    ? 'bg-white text-accent-700 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                )}
+              >
+                <Tag className="w-4 h-4" />
+                <span>By label</span>
+              </button>
+            </div>
+          </section>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
+            {/* Labels column */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <Tag className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  <h2 className="font-semibold text-gray-900 truncate">
+                    {assignmentMode === 'account' ? (
+                      <>
+                        Labels for{' '}
+                        <span className="text-accent-700">{selectedAccount?.label}</span>
+                      </>
+                    ) : (
+                      'Labels'
+                    )}
+                  </h2>
+                </div>
+                {assignmentMode === 'account' && mutation.isPending ? (
+                  <span className="flex items-center space-x-1.5 text-xs text-gray-500 flex-shrink-0">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving…</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500 flex-shrink-0">
+                    {assignmentMode === 'account'
+                      ? `${assignedLabelCount} assigned`
+                      : `${labels.length} ${labels.length === 1 ? 'label' : 'labels'}`}
+                  </span>
+                )}
+              </div>
+              {labels.length === 0 ? (
+                <p className="p-6 text-sm text-gray-500">
+                  No labels yet. Create one from the sidebar to get started.
+                </p>
+              ) : (
+                <div className="p-4 space-y-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={labelSearch}
+                      onChange={(event) => setLabelSearch(event.target.value)}
+                      placeholder="Search labels..."
+                      aria-label="Search labels"
+                      className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                    {filteredLabels.length === 0 ? (
+                      <p className="p-3 text-sm text-gray-500">No labels match your search.</p>
+                    ) : (
+                      filteredLabels.map((label) => {
+                        const isAssigned =
+                          !!activeAccountId && label.accountIds?.includes(activeAccountId);
+                        const isSelected = label.id === activeLabelId;
+
+                        if (assignmentMode === 'label') {
+                          return (
+                            <button
+                              key={label.id}
+                              type="button"
+                              aria-pressed={isSelected}
+                              onClick={() => setSelectedLabelId(label.id)}
+                              disabled={mutation.isPending}
+                              className={clsx(
+                                'w-full flex items-center justify-between p-3 border rounded-lg text-left transition-colors',
+                                mutation.isPending
+                                  ? 'cursor-wait opacity-70'
+                                  : 'cursor-pointer hover:bg-gray-50',
+                                isSelected
+                                  ? 'border-accent-300 bg-accent-50 ring-1 ring-accent-200'
+                                  : 'border-gray-200'
+                              )}
+                            >
+                              <span className="flex items-center space-x-2.5 min-w-0">
+                                <span
+                                  className="w-3 h-3 rounded-full flex-shrink-0"
+                                  style={{ backgroundColor: label.color }}
+                                />
+                                <span className="text-sm font-medium text-gray-900 truncate">
+                                  {label.name}
+                                </span>
+                              </span>
+                              <span className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                                <span className="text-xs text-gray-400">
+                                  {label.accountIds?.length || 0}{' '}
+                                  {(label.accountIds?.length || 0) === 1
+                                    ? 'account'
+                                    : 'accounts'}
+                                </span>
+                                <span
+                                  className={clsx(
+                                    'w-5 h-5 rounded-full border flex items-center justify-center',
+                                    isSelected
+                                      ? 'bg-accent-600 border-accent-600 text-white'
+                                      : 'border-gray-300'
+                                  )}
+                                >
+                                  {isSelected && <Check className="w-3.5 h-3.5" />}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <label
+                            key={label.id}
+                            className={clsx(
+                              'relative flex items-center justify-between p-3 border rounded-lg transition-colors',
+                              mutation.isPending
+                                ? 'cursor-wait opacity-70'
+                                : 'cursor-pointer hover:bg-gray-50',
+                              isAssigned
+                                ? 'border-accent-200 bg-accent-50/40'
+                                : 'border-gray-200'
+                            )}
+                          >
+                            <span className="flex items-center space-x-2.5 min-w-0">
+                              <span
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: label.color }}
+                              />
+                              <span className="text-sm font-medium text-gray-900 truncate">
+                                {label.name}
+                              </span>
+                            </span>
+                            <span
+                              className={clsx(
+                                'w-5 h-5 rounded border flex items-center justify-center flex-shrink-0 ml-3',
+                                isAssigned
+                                  ? 'bg-accent-600 border-accent-600 text-white'
+                                  : 'border-gray-300'
+                              )}
+                            >
+                              {isAssigned && <Check className="w-3.5 h-3.5" />}
+                            </span>
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={!!isAssigned}
+                              disabled={mutation.isPending}
+                              onChange={() => handleToggleLabel(label)}
+                              aria-label={`${isAssigned ? 'Remove' : 'Assign'} label ${
+                                label.name
+                              } ${isAssigned ? 'from' : 'to'} ${selectedAccount?.label}`}
+                            />
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+
+            {/* Email accounts column */}
+            <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-2 min-w-0">
+                  <Mail className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                  <h2 className="font-semibold text-gray-900 truncate">
+                    {assignmentMode === 'account' ? (
+                      'Email accounts'
+                    ) : (
+                      <>
+                        Accounts for{' '}
+                        <span className="text-accent-700">{selectedLabel?.name}</span>
+                      </>
+                    )}
+                  </h2>
+                </div>
+                {assignmentMode === 'label' && mutation.isPending ? (
+                  <span className="flex items-center space-x-1.5 text-xs text-gray-500 flex-shrink-0">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving…</span>
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500 flex-shrink-0">
+                    {assignmentMode === 'account'
+                      ? `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`
+                      : `${selectedLabel?.accountIds?.length || 0} assigned`}
+                  </span>
+                )}
+              </div>
+              <div className="p-4">
+                <p className="mb-3 text-xs text-gray-500">
+                  {assignmentMode === 'account'
+                    ? 'Select an account, then choose all of its labels from the left.'
+                    : selectedLabel
+                      ? 'Click each account that should use the selected label.'
+                      : 'Create a label before assigning email accounts.'}
+                </p>
+                <div
+                  role="group"
+                  aria-label="Email accounts"
+                  className="space-y-2 max-h-[60vh] overflow-y-auto"
+                >
+                  {accounts.map((account) => {
+                    const isSelected = account.id === activeAccountId;
+                    const isAssigned = !!selectedLabel?.accountIds?.includes(account.id);
+                    const accountLabelCount = labels.filter((label) =>
+                      label.accountIds?.includes(account.id)
+                    ).length;
+
+                    if (assignmentMode === 'label') {
+                      return (
+                        <label
+                          key={account.id}
+                          className={clsx(
+                            'relative flex items-center justify-between p-3 border rounded-lg transition-colors',
+                            mutation.isPending
+                              ? 'cursor-wait opacity-70'
+                              : !selectedLabel
+                                ? 'cursor-not-allowed opacity-60'
+                                : 'cursor-pointer hover:bg-gray-50',
+                            isAssigned
+                              ? 'border-accent-200 bg-accent-50/40'
+                              : 'border-gray-200'
+                          )}
+                        >
+                          <span className="flex items-center space-x-3 min-w-0">
+                            <span
+                              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0"
+                              style={{ backgroundColor: account.color || '#3B82F6' }}
+                            >
+                              {account.avatarInitials ||
+                                account.label.substring(0, 2).toUpperCase()}
+                            </span>
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium text-gray-900 truncate">
+                                {account.label}
+                              </span>
+                              <span className="block text-xs text-gray-500 truncate">
+                                {account.emailAddress}
+                              </span>
+                            </span>
+                          </span>
+                          <span className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                            <span className="text-xs text-gray-400">
+                              {isAssigned ? 'Assigned' : 'Not assigned'}
+                            </span>
+                            <span
+                              className={clsx(
+                                'w-5 h-5 rounded border flex items-center justify-center',
+                                isAssigned
+                                  ? 'bg-accent-600 border-accent-600 text-white'
+                                  : 'border-gray-300'
+                              )}
+                            >
+                              {isAssigned && <Check className="w-3.5 h-3.5" />}
+                            </span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            className="sr-only"
+                            checked={isAssigned}
+                            disabled={mutation.isPending || !selectedLabel}
+                            onChange={() => handleToggleAccount(account.id)}
+                            aria-label={`${isAssigned ? 'Remove' : 'Assign'} account ${
+                              account.label
+                            } ${isAssigned ? 'from' : 'to'} label ${selectedLabel?.name}`}
+                          />
+                        </label>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={account.id}
+                        type="button"
+                        aria-pressed={isSelected}
+                        onClick={() => setSelectedAccountId(account.id)}
+                        disabled={mutation.isPending}
+                        className={clsx(
+                          'w-full flex items-center justify-between p-3 border rounded-lg text-left transition-colors',
+                          mutation.isPending
+                            ? 'cursor-wait opacity-70'
+                            : 'cursor-pointer hover:bg-gray-50',
+                          isSelected
+                            ? 'border-accent-300 bg-accent-50 ring-1 ring-accent-200'
+                            : 'border-gray-200'
+                        )}
+                      >
+                        <span className="flex items-center space-x-3 min-w-0">
+                          <span
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-white font-medium text-xs flex-shrink-0"
+                            style={{ backgroundColor: account.color || '#3B82F6' }}
+                          >
+                            {account.avatarInitials ||
+                              account.label.substring(0, 2).toUpperCase()}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block text-sm font-medium text-gray-900 truncate">
+                              {account.label}
+                            </span>
+                            <span className="block text-xs text-gray-500 truncate">
+                              {account.emailAddress}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="flex items-center space-x-2 flex-shrink-0 ml-3">
+                          <span className="text-xs text-gray-400">
+                            {accountLabelCount} {accountLabelCount === 1 ? 'label' : 'labels'}
+                          </span>
+                          <span
+                            className={clsx(
+                              'w-5 h-5 rounded-full border flex items-center justify-center',
+                              isSelected
+                                ? 'bg-accent-600 border-accent-600 text-white'
+                                : 'border-gray-300'
+                            )}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5" />}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

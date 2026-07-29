@@ -1,11 +1,13 @@
 'use client';
 
+import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { Loader2, Reply, ReplyAll, Forward, Trash2, ArrowLeft, Mail } from 'lucide-react';
 import { format } from 'date-fns';
-import { LabelPicker } from '@/components/labels/LabelPicker';
+import { LabelAssignmentPicker } from '@/components/labels/LabelAssignmentPicker';
+import { LabelBadge } from '@/components/labels/LabelBadge';
 
 interface EmailViewerProps {
   emailId: string;
@@ -50,6 +52,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const handleMarkUnread = () => {
     updateEmailMutation.mutate({ isRead: false });
   };
+
+  const labelCounts = useMemo(
+    () =>
+      new Map<string, number>(
+        (email?.emailLabels || []).map((el: any) => [el.label.id, 1] as [string, number])
+      ),
+    [email?.emailLabels]
+  );
 
   const getFormattedDate = (dateString?: string) => {
     if (!dateString) return '';
@@ -162,7 +172,12 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
 
         <div className="flex items-center space-x-2">
-          <LabelPicker emailId={emailId} />
+          <LabelAssignmentPicker
+            emailIds={[emailId]}
+            labelCounts={labelCounts}
+            align="right"
+            allowRemoval={false}
+          />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
           </button>
@@ -203,6 +218,13 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <div className="text-sm text-gray-500 mt-0.5">
               To: {email.toAddresses?.map((t: any) => t.address).join(', ')}
             </div>
+            {email.emailLabels?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {email.emailLabels.map((el: any) => (
+                  <LabelBadge key={el.label.id} label={el.label} />
+                ))}
+              </div>
+            )}
           </div>
         </div>
         <div className="text-sm text-gray-500 whitespace-nowrap">

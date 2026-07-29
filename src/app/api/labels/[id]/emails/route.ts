@@ -24,33 +24,47 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Label not found' }, { status: 404 });
     }
 
-    const emailLabels = await prisma.emailLabel.findMany({
+    // Accounts assigned this label contribute all their emails to the view
+    const assignedAccounts = await prisma.accountLabel.findMany({
       where: { labelId: id },
-      include: {
-        email: {
-          select: {
-            id: true,
-            accountId: true,
-            messageId: true,
-            threadId: true,
-            folder: true,
-            subject: true,
-            snippet: true,
-            fromAddress: true,
-            fromName: true,
-            isRead: true,
-            isStarred: true,
-            hasAttachments: true,
-            receivedAt: true,
-          }
-        }
+      select: { accountId: true },
+    });
+
+    const emails = await prisma.email.findMany({
+      where: {
+        account: {
+          organizationId: session.organizationId,
+          ...(session.role !== 'admin'
+            ? { memberAccess: { some: { userId: session.userId } } }
+            : {}),
+        },
+        OR: [
+          { emailLabels: { some: { labelId: id } } },
+          { accountId: { in: assignedAccounts.map((a) => a.accountId) } },
+        ],
       },
-      orderBy: { email: { receivedAt: 'desc' } },
+      select: {
+        id: true,
+        accountId: true,
+        messageId: true,
+        threadId: true,
+        folder: true,
+        subject: true,
+        snippet: true,
+        fromAddress: true,
+        fromName: true,
+        isRead: true,
+        isStarred: true,
+        hasAttachments: true,
+        receivedAt: true,
+        emailLabels: {
+          include: { label: { select: { id: true, name: true, color: true } } },
+        },
+      },
+      orderBy: { receivedAt: 'desc' },
       skip,
       take: limit,
     });
-
-    const emails = emailLabels.map((el: any) => el.email);
 
     return NextResponse.json({ emails, page, limit });
   } catch (error) {

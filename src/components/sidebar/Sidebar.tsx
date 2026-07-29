@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AccountList } from './AccountList';
 import { FolderSection } from './FolderSection';
-import { LabelSection } from './LabelSection';
 import { PenSquare, Settings, LogOut, Search, LayoutDashboard } from 'lucide-react';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
@@ -24,8 +23,8 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-64 border-r border-gray-200 bg-gray-50 flex flex-col h-full">
-      <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+    <div className="w-64 border-r border-gray-200 bg-gray-50 flex flex-col h-full overflow-hidden">
+      <div className="flex flex-none items-center justify-between border-b border-gray-200 p-4">
         <Link href="/inbox" className="hover:opacity-80 transition-opacity flex items-center">
           <img src="/logo-transparent.png" alt="MailHub Logo" className="h-12 w-auto object-contain" />
         </Link>
@@ -38,7 +37,7 @@ export function Sidebar() {
         </Link>
       </div>
 
-      <div className="p-4 space-y-2">
+      <div className="flex-none p-4 space-y-2">
         <button
           onClick={() => setComposeModalOpen(true)}
           className="w-full flex items-center justify-center space-x-2 bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm"
@@ -58,13 +57,12 @@ export function Sidebar() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <AccountList />
         <FolderSection />
-        <LabelSection />
       </div>
 
-      <div className="p-4 border-t border-gray-200 space-y-1">
+      <div className="flex-none p-4 border-t border-gray-200 space-y-1">
         <Link 
           href="/settings/members"
           className="flex items-center space-x-3 w-full px-3 py-2 text-sm font-medium text-gray-700 rounded-md hover:bg-gray-100 transition-colors"

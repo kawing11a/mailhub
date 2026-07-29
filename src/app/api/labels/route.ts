@@ -18,9 +18,15 @@ export async function GET(req: NextRequest) {
     const labels = await prisma.label.findMany({
       where: { organizationId: session.organizationId },
       orderBy: { name: 'asc' },
+      include: { accountLabels: { select: { accountId: true } } },
     });
 
-    return NextResponse.json({ labels });
+    return NextResponse.json({
+      labels: labels.map(({ accountLabels, ...label }) => ({
+        ...label,
+        accountIds: accountLabels.map((al) => al.accountId),
+      })),
+    });
   } catch (error) {
     console.error('Fetch labels error:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

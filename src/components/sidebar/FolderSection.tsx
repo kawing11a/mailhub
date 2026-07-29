@@ -37,42 +37,46 @@ export function FolderSection() {
     }
   };
 
+  const renderFolder = (folder: (typeof FOLDERS)[number]) => {
+    const isActive = selectedFolder === folder.id;
+    const Icon = folder.icon;
+
+    return (
+      <button
+        key={folder.id}
+        onClick={() => handleSelect(folder.id)}
+        className={clsx(
+          'flex w-full flex-none items-center space-x-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+          isActive
+            ? 'bg-accent-600 text-white shadow-sm'
+            : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
+        )}
+      >
+        <Icon className="w-4 h-4" />
+        <span>{folder.name}</span>
+        {folder.id === 'INBOX' && stats?.unreadCount > 0 && (
+          <span className={clsx(
+            'ml-auto text-xs font-semibold px-2 py-0.5 rounded-full',
+            isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-900'
+          )}>
+            {stats.unreadCount}
+          </span>
+        )}
+      </button>
+    );
+  };
+
   return (
-    <div className="flex flex-col space-y-1 p-2">
-      <div className="pt-4 pb-1">
-        <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Folders
-        </p>
+    <div className="flex min-h-0 flex-1 flex-col p-2">
+      <div className="space-y-1">
+        <div className="pt-2 pb-1">
+          <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Folders
+          </p>
+        </div>
+
+        {FOLDERS.map(renderFolder)}
       </div>
-
-      {FOLDERS.map((folder) => {
-        const isActive = selectedFolder === folder.id;
-        const Icon = folder.icon;
-
-        return (
-          <button
-            key={folder.id}
-            onClick={() => handleSelect(folder.id)}
-            className={clsx(
-              'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium w-full',
-              isActive
-                ? 'bg-accent-600 text-white shadow-sm'
-                : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
-            )}
-          >
-            <Icon className="w-4 h-4" />
-            <span>{folder.name}</span>
-            {folder.id === 'INBOX' && stats?.unreadCount > 0 && (
-              <span className={clsx(
-                'ml-auto text-xs font-semibold px-2 py-0.5 rounded-full',
-                isActive ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-900'
-              )}>
-                {stats.unreadCount}
-              </span>
-            )}
-          </button>
-        );
-      })}
     </div>
   );
 }

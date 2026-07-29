@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Users, Shield, CreditCard, Mail, Settings } from 'lucide-react';
+import { Users, Shield, CreditCard, Mail, Settings, Tag } from 'lucide-react';
 
 export default function SettingsLayout({
   children,
@@ -23,7 +23,12 @@ export default function SettingsLayout({
   });
 
   const navItems = [
-    ...(authData?.role === 'admin' ? [{ name: 'Members', href: '/settings/members', icon: Users }] : []),
+    ...(authData?.role === 'admin'
+      ? [
+          { name: 'Members', href: '/settings/members', icon: Users },
+          { name: 'Label Assignment', href: '/settings/labels', icon: Tag },
+        ]
+      : []),
     { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
     { name: 'Preferences', href: '/settings/preferences', icon: Settings },
   ];
