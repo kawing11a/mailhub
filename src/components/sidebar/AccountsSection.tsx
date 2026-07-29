@@ -22,7 +22,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   accountDisplayName,
   duplicateDisplayNames,
@@ -36,9 +36,9 @@ import {
 } from '@/hooks/useFavouriteMutations';
 import {
   allowedAccountIdsForLabels,
-  LabelFilterMenu,
   useLabels,
 } from '@/components/accounts/LabelFilterMenu';
+import { LabelFilterChips } from '@/components/accounts/LabelFilterChips';
 
 /** How many accounts to show when the user hasn't favourited anything yet. */
 const FALLBACK_COUNT = 5;
@@ -173,16 +173,8 @@ export function AccountsSection() {
   const { toggleFavourite, reorderFavourites } = useFavouriteMutations();
 
   const labels = useLabels();
-  const [selectedLabelIds, setSelectedLabelIds] = useState<Set<string>>(new Set());
-  const isFiltering = selectedLabelIds.size > 0;
-
-  const toggleLabel = (labelId: string) =>
-    setSelectedLabelIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(labelId)) next.delete(labelId);
-      else next.add(labelId);
-      return next;
-    });
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const isFiltering = selectedLabelId !== null;
 
   const sensors = useSensors(
     // A small activation distance keeps normal clicks (select account) working.
@@ -195,33 +187,60 @@ export function AccountsSection() {
     [accounts, selectedAccountId]
   );
 
+  const favouriteAccounts = useMemo(() => sortedFavourites(accounts), [accounts]);
+  const hasFavourites = favouriteAccounts.length > 0;
+
+  // Which labels earn a chip: with favourites, only labels that tag at least one
+  // favourite (so no chip is a dead end); with none, every label.
+  const filterLabels = useMemo(() => {
+    if (!hasFavourites) return labels;
+    const favIds = new Set(favouriteAccounts.map((a) => a.id));
+    return labels.filter((l) => (l.accountIds ?? []).some((id) => favIds.has(id)));
+  }, [labels, favouriteAccounts, hasFavourites]);
+
+  // Drop a selection that's no longer offered (e.g. its last favourite was removed).
+  useEffect(() => {
+    if (selectedLabelId && !filterLabels.some((l) => l.id === selectedLabelId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedLabelId(null);
+    }
+  }, [filterLabels, selectedLabelId]);
+
   // Favourites drive the list. With none yet, fall back to the first few accounts
-  // alphabetically so the section is never empty.
+  // alphabetically — scoped to the selected label when one is picked — so the
+  // section is never empty and a label always shows its own accounts.
   const listedAccounts = useMemo(() => {
-    const favourites = sortedFavourites(accounts);
-    const base =
-      favourites.length > 0
-        ? favourites
-        : sortedByName(accounts).slice(0, FALLBACK_COUNT);
-    const allowedIds = allowedAccountIdsForLabels(labels, selectedLabelIds);
-    return base.filter(
-      (a) => a.id !== activeAccount?.id && (!allowedIds || allowedIds.has(a.id))
-    );
-  }, [accounts, activeAccount, labels, selectedLabelIds]);
+    const allowedIds = selectedLabelId
+      ? allowedAccountIdsForLabels(labels, new Set([selectedLabelId]))
+      : null;
+    if (hasFavourites) {
+      // The active account stays in the list (highlighted) as well as the pinned
+      // area above — selecting it shouldn't make its list entry disappear.
+      return allowedIds ? favouriteAccounts.filter((a) => allowedIds.has(a.id)) : favouriteAccounts;
+    }
+    const pool = sortedByName(accounts);
+    return (allowedIds ? pool.filter((a) => allowedIds.has(a.id)) : pool).slice(0, FALLBACK_COUNT);
+  }, [accounts, favouriteAccounts, hasFavourites, labels, selectedLabelId]);
 
   // Reordering acts on the full favourite list; a filtered subset would reorder
   // confusingly, so drag is disabled while a label filter is active.
-  const isDraggable = !isFiltering && sortedFavourites(accounts).length > 0;
+  const isDraggable = !isFiltering && hasFavourites;
 
   // Computed over ALL accounts, not just the rendered rows: an ambiguous name is
   // ambiguous whether or not its twin happens to be listed right now.
   const duplicates = useMemo(() => duplicateDisplayNames(accounts), [accounts]);
 
-  // The address only earns its line when it disambiguates: on the active account
-  // (confirming which identity you're acting as) or on a shared display name.
+  // In the pinned area the address earns its line when it disambiguates: on the
+  // active account (confirming which identity you're acting as) or a shared name.
   const showEmailFor = (account: SidebarAccount) =>
     shouldShowEmail(account) &&
     (account.id === selectedAccountId || duplicates.has(normalizedDisplayName(account)));
+
+  // In the list, visibility must not depend on selection — otherwise the active
+  // account's row would sprout an address its unselected twin doesn't have. Show
+  // it only for genuinely ambiguous (shared) names.
+  const showEmailInList = (account: SidebarAccount) =>
+    shouldShowEmail(account) && duplicates.has(normalizedDisplayName(account));
 
   const handleSelect = (id: string) => {
     setSelectedAccountId(id);
@@ -260,20 +279,11 @@ export function AccountsSection() {
         </p>
       </div>
 
-      {labels.length > 0 && (
-        <div className="flex-none px-1 pb-2">
-          <LabelFilterMenu
-            labels={labels}
-            selectedLabelIds={selectedLabelIds}
-            onToggle={toggleLabel}
-            onClear={() => setSelectedLabelIds(new Set())}
-          />
-        </div>
-      )}
-
-      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
-        {/* Active account leads and doubles as the switcher. */}
-        {activeAccount && (
+      {/* Active-account slot is always reserved (above the scroll area, so it
+          stays pinned) — a real switcher when one is active, otherwise a
+          placeholder — so the Quick Filter never sits directly under the title. */}
+      <div className="flex-none px-1 pb-2">
+        {activeAccount ? (
           <button
             onClick={() => setAllAccountsOpen(true)}
             title="Switch account"
@@ -293,8 +303,32 @@ export function AccountsSection() {
               </span>
             )}
           </button>
+        ) : (
+          <button
+            onClick={() => setAllAccountsOpen(true)}
+            title="Select an account"
+            className="flex w-full items-center gap-2 rounded-md border border-dashed border-gray-300 bg-white px-3 py-2 text-left text-sm text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+          >
+            <Users className="h-4 w-4 flex-shrink-0 text-gray-400" />
+            <span className="min-w-0 flex-1 truncate">No active account</span>
+          </button>
         )}
+      </div>
 
+      {filterLabels.length > 0 && (
+        <div className="flex-none px-1 pb-2">
+          <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Quick Filter
+          </p>
+          <LabelFilterChips
+            labels={filterLabels}
+            selectedLabelId={selectedLabelId}
+            onSelect={setSelectedLabelId}
+          />
+        </div>
+      )}
+
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pr-0.5">
         {listedAccounts.length === 0 && (isFiltering || !activeAccount) ? (
           <p className="px-3 py-2 text-xs italic text-gray-500">
             {isFiltering ? 'No accounts match this label' : 'No accounts connected'}
@@ -314,7 +348,7 @@ export function AccountsSection() {
                   key={account.id}
                   account={account}
                   isSelected={selectedAccountId === account.id}
-                  showEmail={showEmailFor(account)}
+                  showEmail={showEmailInList(account)}
                   onSelect={() => handleSelect(account.id)}
                   onToggleFavourite={() => toggleFavourite(account)}
                 />
@@ -343,7 +377,7 @@ export function AccountsSection() {
                   <AccountIdentity
                     account={account}
                     isSelected={isSelected}
-                    showEmail={showEmailFor(account)}
+                    showEmail={showEmailInList(account)}
                   />
                 </button>
                 <StarButton
