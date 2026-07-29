@@ -21,6 +21,15 @@
 |:---:|:---:|:---:|
 | <img src="public/screenshots/overview.png" alt="Dashboard Overview" width="380" /> | <img src="public/screenshots/desktop.png" alt="Multi-Account Email Stream" width="380" /> | <img src="public/screenshots/mobile.png" alt="Mobile Responsive View" width="220" /> |
 
+## Why MailHub?
+
+Managing multiple email accounts across local clients is a disjointed, sluggish experience. MailHub redesigns this workflow from the ground up:
+
+- 📬 **Aggregated Stream (Unified Context)**: No more clicking through 10 different mailboxes. MailHub unifies all your IMAP and OAuth accounts into a single, unified email feed.
+- ⚙️ **Server-Side Decoupling**: Heavy syncing tasks are fully handled by backend BullMQ workers on your server. Your frontend Next.js 16 dashboard remains ultra-lightweight and buttery smooth, no matter how many accounts you add.
+- ⚡ **Instant Global Search**: Powered by Meilisearch. Search through hundreds of thousands of emails across all connected accounts simultaneously with millisecond-level results.
+- 🌐 **Setup Once, Access Anywhere**: Being a Self-hosted PWA, you only configure your email accounts once on your server. Any desktop or mobile device can then instantly access the fully synced dashboard without tedious re-configurations.
+
 ## Tech Stack
 
 | Layer | Technology |
