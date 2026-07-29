@@ -79,11 +79,11 @@ export function AccountList() {
   }
 
   return (
-    <div className="flex flex-none flex-col space-y-1 p-2">
+    <div className="flex min-h-0 flex-1 flex-col space-y-1 p-2">
       <button
         onClick={() => handleSelect('all')}
         className={clsx(
-          'flex items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium',
+          'flex flex-none items-center space-x-3 px-3 py-2 rounded-md transition-colors text-sm font-medium',
           selectedAccountId === 'all'
             ? 'bg-accent-600 text-white shadow-sm'
             : 'text-gray-700 hover:bg-gray-200 hover:text-gray-900'
@@ -93,13 +93,13 @@ export function AccountList() {
         <span>Unified Inbox</span>
       </button>
 
-      <div className="pt-4 pb-1">
+      <div className="flex-none pt-4 pb-1">
         <p className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
           Accounts
         </p>
       </div>
 
-      <div className="px-2 pb-1">
+      <div className="flex-none px-2 pb-1">
         <label
           htmlFor="account-label-filter"
           className="mb-1.5 block px-1 text-xs font-medium text-gray-500"
@@ -138,7 +138,7 @@ export function AccountList() {
         </div>
       </div>
 
-      <div className="h-32 overflow-y-auto overscroll-contain pr-0.5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-0.5">
         {filteredAccounts.length === 0 ? (
           <p className="px-3 py-2 text-xs italic text-gray-500">
             {selectedLabelId === 'all' ? 'No accounts connected' : 'No accounts use this label'}
