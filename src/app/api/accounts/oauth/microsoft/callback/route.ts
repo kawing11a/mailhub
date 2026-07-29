@@ -69,8 +69,9 @@ export async function GET(req: NextRequest) {
     const tokens = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      console.error('Microsoft OAuth token exchange failed:', tokens);
-      return NextResponse.redirect(new URL('/settings/accounts?error=token_exchange_failed', baseUrl));
+      console.error('Microsoft OAuth token exchange failed:', JSON.stringify(tokens, null, 2));
+      const errorMsg = encodeURIComponent(tokens.error_description || tokens.error || 'token_exchange_failed');
+      return NextResponse.redirect(new URL(`/settings/accounts?error=${errorMsg}`, baseUrl));
     }
 
     // Encrypt the tokens before storing

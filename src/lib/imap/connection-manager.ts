@@ -45,7 +45,17 @@ export class IMAPConnectionManager {
       ? decrypt(account.oauthAccessToken)
       : null;
 
-    if (accessToken && account.oauthTokenExpiry) {
+    if (account.oauthRefreshToken && (account.oauthProvider === 'microsoft' || account.provider === 'outlook')) {
+      try {
+        const { getValidOAuthAccessToken } = await import('@/lib/accounts/tokens');
+        accessToken = await getValidOAuthAccessToken(
+          account.id,
+          'https://outlook.office.com/IMAP.AccessAsUser.All offline_access'
+        );
+      } catch (tokenErr) {
+        console.error(`Failed to acquire Microsoft IMAP access token for account ${account.id}:`, tokenErr);
+      }
+    } else if (accessToken && account.oauthTokenExpiry) {
       const now = new Date();
       if (account.oauthTokenExpiry < new Date(now.getTime() + 5 * 60000)) {
         if (account.oauthRefreshToken) {
@@ -55,28 +65,7 @@ export class IMAPConnectionManager {
             let newExpiry: Date | null = null;
             let newRefreshToken: string | null = null;
 
-            if (account.oauthProvider === 'microsoft') {
-              console.log(`Refreshing Microsoft OAuth token for account ${account.id}`);
-              const res = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: new URLSearchParams({
-                  client_id: process.env.MICROSOFT_CLIENT_ID || '',
-                  client_secret: process.env.MICROSOFT_CLIENT_SECRET || '',
-                  refresh_token: refreshToken,
-                  grant_type: 'refresh_token',
-                }),
-              });
-
-              if (res.ok) {
-                const data = await res.json();
-                newAccessToken = data.access_token;
-                newExpiry = new Date(Date.now() + (data.expires_in * 1000));
-                if (data.refresh_token) newRefreshToken = data.refresh_token;
-              } else {
-                console.error(`Failed to refresh Microsoft token: ${await res.text()}`);
-              }
-            } else if (account.oauthProvider === 'google') {
+            if (account.oauthProvider === 'google') {
               console.log(`Refreshing Google OAuth token for account ${account.id}`);
               const res = await fetch('https://oauth2.googleapis.com/token', {
                 method: 'POST',

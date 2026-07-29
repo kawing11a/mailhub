@@ -41,8 +41,11 @@ export async function GET(req: NextRequest) {
     'profile',
     'email',
     'offline_access',
-    'https://outlook.office.com/IMAP.AccessAsUser.All',
-    'https://outlook.office.com/SMTP.Send'
+    'https://graph.microsoft.com/IMAP.AccessAsUser.All',
+    'https://graph.microsoft.com/SMTP.Send',
+    'https://graph.microsoft.com/Mail.Send',
+    'https://graph.microsoft.com/Mail.ReadWrite',
+    'https://graph.microsoft.com/User.Read',
   ].join(' '));
   oauthUrl.searchParams.set('response_mode', 'query');
   oauthUrl.searchParams.set('prompt', 'consent'); // Force consent to get refresh token
