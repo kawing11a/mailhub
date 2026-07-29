@@ -21,7 +21,9 @@ function InboxContent() {
     } else {
       newParams.delete('emailId');
     }
-    router.push(`${pathname}?${newParams.toString()}`);
+    const queryString = newParams.toString();
+    const url = queryString ? `${pathname}?${queryString}` : pathname;
+    window.history.pushState(null, '', url);
   };
 
   if (readingPane === 'off') {

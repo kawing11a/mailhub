@@ -66,7 +66,11 @@ export function SearchModal() {
           const email = results[selectedIndex];
           setSearchOpen(false);
           useAccountStore.getState().setSelectedAccountId(email.accountId);
-          router.push(`/inbox?emailId=${email.id}`);
+          if (window.location.pathname === '/inbox') {
+            window.history.pushState(null, '', `/inbox?emailId=${email.id}`);
+          } else {
+            router.push(`/inbox?emailId=${email.id}`);
+          }
         }
       }
     };
@@ -132,7 +136,11 @@ export function SearchModal() {
                       onClick={() => {
                         setSearchOpen(false);
                         useAccountStore.getState().setSelectedAccountId(email.accountId);
-                        router.push(`/inbox?emailId=${email.id}`);
+                        if (window.location.pathname === '/inbox') {
+                          window.history.pushState(null, '', `/inbox?emailId=${email.id}`);
+                        } else {
+                          router.push(`/inbox?emailId=${email.id}`);
+                        }
                       }}
                     >
                       <div className="flex items-center justify-between w-full mb-1">
