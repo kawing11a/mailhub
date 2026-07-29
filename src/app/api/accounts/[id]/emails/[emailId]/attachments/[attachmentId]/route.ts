@@ -49,11 +49,31 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    // Check if file exists
-    await fs.access(attachment.storagePath);
-    
+    // Check multiple candidate paths for robustness across Docker / Windows environments
+    const candidatePaths = [
+      attachment.storagePath,
+      path.resolve(process.cwd(), attachment.storagePath.replace(/^\/app\//, '')),
+      path.resolve(process.cwd(), '.storage', 'attachments', attachment.id),
+      path.resolve(process.cwd(), '.storage', 'attachments', path.basename(attachment.storagePath)),
+    ];
+
+    let foundPath: string | null = null;
+    for (const cand of candidatePaths) {
+      try {
+        await fs.access(cand);
+        foundPath = cand;
+        break;
+      } catch {
+        // try next candidate
+      }
+    }
+
+    if (!foundPath) {
+      return apiError('Attachment file not found on storage', 404);
+    }
+
     // Read the file as a buffer
-    const fileBuffer = await fs.readFile(attachment.storagePath);
+    const fileBuffer = await fs.readFile(foundPath);
 
     // Create a response with the file buffer
     const response = new NextResponse(fileBuffer);

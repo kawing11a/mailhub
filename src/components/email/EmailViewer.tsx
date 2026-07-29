@@ -1,5 +1,7 @@
 'use client';
 
+import { CalendarEventSection } from '@/components/calendar/CalendarEventSection';
+import { isCalendarAttachment } from '@/lib/calendar/ics-parser';
 import { LabelBadge } from '@/components/labels/LabelBadge';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
 import { formatStoredAddresses } from '@/lib/email/display-addresses';
@@ -102,6 +104,44 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       ),
     [email?.emailLabels]
   );
+
+  const regularAttachments = useMemo(() => {
+    if (!email?.attachments) return [];
+    return email.attachments.filter((att: any) => !isCalendarAttachment(att));
+  }, [email?.attachments]);
+
+  const calendarAttachments = useMemo(() => {
+    if (!email?.attachments) return [];
+    return email.attachments.filter((att: any) => isCalendarAttachment(att));
+  }, [email?.attachments]);
+
+  const inlineIcsContent = useMemo(() => {
+    if (calendarAttachments.length > 0) return null;
+    const text = email?.body?.bodyText || '';
+    if (text.includes('BEGIN:VCALENDAR')) {
+      const startIdx = text.indexOf('BEGIN:VCALENDAR');
+      const endIdx = text.indexOf('END:VCALENDAR');
+      if (endIdx > startIdx) {
+        return text.substring(startIdx, endIdx + 'END:VCALENDAR'.length);
+      }
+    }
+    const html = email?.body?.bodyHtml || '';
+    if (html.includes('BEGIN:VCALENDAR')) {
+      const startIdx = html.indexOf('BEGIN:VCALENDAR');
+      const endIdx = html.indexOf('END:VCALENDAR');
+      if (endIdx > startIdx) {
+        const raw = html.substring(startIdx, endIdx + 'END:VCALENDAR'.length);
+        return raw.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '');
+      }
+    }
+    return null;
+  }, [email?.body?.bodyText, email?.body?.bodyHtml, calendarAttachments]);
+
+  const hasMeetingInEmail = useMemo(() => {
+    if (calendarAttachments.length > 0 || inlineIcsContent) return true;
+    const combined = (email?.body?.bodyText || '') + ' ' + (email?.body?.bodyHtml || '');
+    return combined.includes('teams.microsoft.com') || combined.includes('Microsoft Teams meeting') || combined.includes('zoom.us') || combined.includes('meet.google.com');
+  }, [calendarAttachments.length, inlineIcsContent, email?.body?.bodyText, email?.body?.bodyHtml]);
 
   const getFormattedDate = (date?: Date | null) => {
     if (!date) return '';
@@ -305,14 +345,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
       </div>
       {/* Attachments Section — pinned under the addresses, above the body */}
-      {email.attachments && email.attachments.length > 0 ? (
+      {regularAttachments.length > 0 ? (
         <div className="px-6 py-4 border-b border-gray-100 max-h-56 overflow-y-auto flex-shrink-0">
           <h3 className="text-sm font-medium text-gray-900 flex items-center mb-4">
             <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
-            Attachments ({email.attachments.length})
+            Attachments ({regularAttachments.length})
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {email.attachments.map((att: any) => {
+            {regularAttachments.map((att: any) => {
               const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
               const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
 
@@ -346,7 +386,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             })}
           </div>
         </div>
-      ) : email.hasAttachments ? (
+      ) : email.hasAttachments && calendarAttachments.length === 0 ? (
         <div className="px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <h3 className="text-sm font-medium text-gray-900 flex items-center mb-2">
             <Paperclip className="w-4 h-4 mr-2 text-gray-500" />
@@ -358,6 +398,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           </div>
         </div>
       ) : null}
+
+      {/* Calendar Event Timetable View for Calendar Attachments, Inline Invites or Teams Meetings */}
+      {hasMeetingInEmail && (
+        <CalendarEventSection
+          attachments={calendarAttachments}
+          inlineIcsContent={inlineIcsContent}
+          defaultSubject={email.subject}
+          selectedAccountId={email.accountId || selectedAccountId}
+          emailId={emailId}
+          email={email}
+        />
+      )}
 
       {/* Security Warning Banner if High Risk */}
       {email.isHighRisk && (
