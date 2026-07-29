@@ -40,7 +40,7 @@
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^1.21.0",
     "mailparser": "^3.9.11",
-    "meilisearch": "^0.58.0",
+    "meilisearch": "^0.60.0",
     "next": "16.2.9",
     "node-imap": "^0.9.6",
     "nodemailer": "^9.0.1",
