@@ -376,7 +376,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     onSelectEmail(email.id);
   };
 
-  const [readStatus, setReadStatus] = useState<'all' | 'unread'>('all');
+  const [readStatus, setReadStatus] = useState<'all' | 'unread'>('unread');
   const [accountScope, setAccountScope] = useState<'all' | 'favourite-accounts'>('all');
   const [isFavouriteEmailsOnly, setIsFavouriteEmailsOnly] = useState<boolean>(false);
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<string> | null>(null);
@@ -548,81 +548,90 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         </div>
 
         {(selectedAccountId === 'all' || selectedAccountId === 'new-emails') && (
-          <div className="flex items-center gap-2 overflow-x-auto pt-3 pb-0.5 scrollbar-none text-xs">
-            {/* Group 1: Read status (Always 1 active: All emails vs Unread) */}
-            <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setReadStatus('all')}
-                className={clsx(
-                  "px-2.5 py-1 rounded-full font-medium transition-colors",
-                  readStatus === 'all'
-                    ? "bg-white text-gray-900 shadow-sm font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
-                )}
-              >
-                All emails
-              </button>
-              <button
-                type="button"
-                onClick={() => setReadStatus('unread')}
-                className={clsx(
-                  "px-2.5 py-1 rounded-full font-medium transition-colors",
-                  readStatus === 'unread'
-                    ? "bg-accent-600 text-white shadow-sm font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
-                )}
-              >
-                Unread
-              </button>
+          <div className="flex items-center gap-2.5 overflow-x-auto pt-3 pb-0.5 scrollbar-none text-xs">
+            {/* Group 1: Accounts (Always 1 active: All vs Favourites) */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider pl-1">Accounts</span>
+              <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setAccountScope('all')}
+                  className={clsx(
+                    "px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors",
+                    accountScope === 'all'
+                      ? "bg-white text-gray-900 shadow-sm font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAccountScope('favourite-accounts')}
+                  className={clsx(
+                    "px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors",
+                    accountScope === 'favourite-accounts'
+                      ? "bg-accent-600 text-white shadow-sm font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  Favourites
+                </button>
+              </div>
             </div>
 
-            <span className="h-4 w-px bg-gray-200 flex-shrink-0" />
+            <span className="h-6 w-px bg-gray-200 flex-shrink-0 self-end mb-1" />
 
-            {/* Group 2: Account scope (Always 1 active: All accounts vs Favourite accounts) */}
-            <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200 flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setAccountScope('all')}
-                className={clsx(
-                  "px-2.5 py-1 rounded-full font-medium transition-colors",
-                  accountScope === 'all'
-                    ? "bg-white text-gray-900 shadow-sm font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
-                )}
-              >
-                All accounts
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountScope('favourite-accounts')}
-                className={clsx(
-                  "px-2.5 py-1 rounded-full font-medium transition-colors",
-                  accountScope === 'favourite-accounts'
-                    ? "bg-accent-600 text-white shadow-sm font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
-                )}
-              >
-                Favourite accounts
-              </button>
+            {/* Group 2: Emails (Always 1 active: All vs Unread) */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider pl-1">Emails</span>
+              <div className="flex items-center bg-gray-100 p-0.5 rounded-full border border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setReadStatus('all')}
+                  className={clsx(
+                    "px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors",
+                    readStatus === 'all'
+                      ? "bg-white text-gray-900 shadow-sm font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReadStatus('unread')}
+                  className={clsx(
+                    "px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors",
+                    readStatus === 'unread'
+                      ? "bg-accent-600 text-white shadow-sm font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  Unread
+                </button>
+              </div>
             </div>
 
-            <span className="h-4 w-px bg-gray-200 flex-shrink-0" />
+            <span className="h-6 w-px bg-gray-200 flex-shrink-0 self-end mb-1" />
 
-            {/* Group 3: Standalone Favourite emails toggle */}
-            <button
-              type="button"
-              onClick={() => setIsFavouriteEmailsOnly((prev) => !prev)}
-              className={clsx(
-                "px-3 py-1 rounded-full font-medium transition-colors border flex items-center space-x-1.5 flex-shrink-0",
-                isFavouriteEmailsOnly
-                  ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                  : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200 hover:text-gray-900"
-              )}
-            >
-              <Star className={clsx("w-3 h-3", isFavouriteEmailsOnly ? "fill-white text-white" : "text-amber-500")} />
-              <span>Favourite emails</span>
-            </button>
+            {/* Group 3: Others (Standalone Starred toggle) */}
+            <div className="flex flex-col gap-1 flex-shrink-0">
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider pl-1">Others</span>
+              <button
+                type="button"
+                onClick={() => setIsFavouriteEmailsOnly((prev) => !prev)}
+                className={clsx(
+                  "px-2.5 py-0.5 rounded-full text-[11px] font-medium transition-colors border flex items-center space-x-1",
+                  isFavouriteEmailsOnly
+                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                    : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200 hover:text-gray-900"
+                )}
+              >
+                <Star className={clsx("w-3 h-3", isFavouriteEmailsOnly ? "fill-white text-white" : "text-amber-500")} />
+                <span>Starred</span>
+              </button>
+            </div>
           </div>
         )}
         {selectedFolder === 'TRASH' && trashCount > 0 && (
