@@ -20,7 +20,7 @@ Only the latest release family receives security updates and patches.
 If you discover a security vulnerability within MailHub, please follow responsible disclosure practices:
 
 1. **Do NOT open a public GitHub issue** for security vulnerabilities.
-2. Email your findings privately to **`security@mailhub.app`** or contact project maintainers via private communication channels / GitHub Security Advisories.
+2. Email your findings privately to **`tommy.chankawing@gmail.com`** or contact project maintainers via private communication channels / GitHub Security Advisories.
 3. Include the following details in your report:
    - Type of vulnerability (e.g. XSS, SQLi, Auth Bypass, Credential Exposure)
    - Step-by-step instructions or proof-of-concept (PoC) script to reproduce the issue
