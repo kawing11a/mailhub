@@ -39,18 +39,18 @@ export function Sidebar() {
         </button>
 
         <Link
-          href="/new-emails"
-          onClick={() => useAccountStore.getState().setSelectedAccountId('new-emails')}
+          href="/all-emails"
+          onClick={() => useAccountStore.getState().setSelectedAccountId('all')}
           className={clsx(
             "w-full flex items-center justify-between px-3 py-2 rounded-md font-medium transition-colors text-sm",
-            pathname === '/new-emails'
+            (pathname === '/all-emails' || pathname === '/new-emails')
               ? 'bg-accent-100 text-accent-900'
               : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
           )}
         >
           <div className="flex items-center space-x-2">
             <Inbox className="w-4 h-4" />
-            <span>New Emails</span>
+            <span>All Emails</span>
           </div>
           {newEmailsCount > 0 && (
             <span className="bg-accent-600 text-white text-xs px-2 py-0.5 rounded-full font-bold">
