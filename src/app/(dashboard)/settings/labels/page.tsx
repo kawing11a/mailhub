@@ -36,10 +36,13 @@ type AssignmentMode = 'account' | 'label';
 
 export default function LabelAssignmentPage() {
   const queryClient = useQueryClient();
-  const [assignmentMode, setAssignmentMode] = useState<AssignmentMode>('account');
+  // Assign-by-account was removed from the UI; the mode is pinned to 'label'.
+  // The 'account' branches below are kept so the toggle can be restored easily.
+  const [assignmentMode] = useState<AssignmentMode>('label');
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
   const [labelSearch, setLabelSearch] = useState('');
+  const [accountSearch, setAccountSearch] = useState('');
   const [isCreatingLabel, setIsCreatingLabel] = useState(false);
   const [newLabelName, setNewLabelName] = useState('');
   const [newLabelColor, setNewLabelColor] = useState(LABEL_COLORS[0]);
@@ -279,6 +282,14 @@ export default function LabelAssignmentPage() {
   const filteredLabels = labels.filter((l) =>
     l.name.toLowerCase().includes(labelSearch.toLowerCase())
   );
+  const accountSearchTerm = accountSearch.trim().toLowerCase();
+  const filteredAccounts = accountSearchTerm
+    ? accounts.filter(
+        (account) =>
+          (account.label || '').toLowerCase().includes(accountSearchTerm) ||
+          (account.emailAddress || '').toLowerCase().includes(accountSearchTerm)
+      )
+    : accounts;
   const assignedLabelCount = activeAccountId
     ? labels.filter((label) => label.accountIds?.includes(activeAccountId)).length
     : 0;
@@ -325,53 +336,6 @@ export default function LabelAssignmentPage() {
         </section>
       ) : (
         <div className="space-y-4">
-          <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-900">Assignment method</h2>
-              <p className="mt-0.5 text-xs text-gray-500">
-                {assignmentMode === 'account'
-                  ? 'Select an email account, then assign its labels.'
-                  : 'Select a label, then assign it to multiple email accounts.'}
-              </p>
-            </div>
-            <div
-              role="group"
-              aria-label="Assignment method"
-              className="inline-flex self-start sm:self-auto p-1 bg-gray-100 rounded-lg"
-            >
-              <button
-                type="button"
-                aria-pressed={assignmentMode === 'account'}
-                onClick={() => setAssignmentMode('account')}
-                disabled={mutation.isPending}
-                className={clsx(
-                  'inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  assignmentMode === 'account'
-                    ? 'bg-white text-accent-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                )}
-              >
-                <Mail className="w-4 h-4" />
-                <span>By account</span>
-              </button>
-              <button
-                type="button"
-                aria-pressed={assignmentMode === 'label'}
-                onClick={() => setAssignmentMode('label')}
-                disabled={mutation.isPending}
-                className={clsx(
-                  'inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors',
-                  assignmentMode === 'label'
-                    ? 'bg-white text-accent-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-900'
-                )}
-              >
-                <Tag className="w-4 h-4" />
-                <span>By label</span>
-              </button>
-            </div>
-          </section>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
             {/* Labels column */}
             <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -736,9 +700,11 @@ export default function LabelAssignmentPage() {
                   </span>
                 ) : (
                   <span className="text-xs text-gray-500 flex-shrink-0">
-                    {assignmentMode === 'account'
-                      ? `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`
-                      : `${selectedLabel?.accountIds?.length || 0} assigned`}
+                    {accountSearchTerm
+                      ? `${filteredAccounts.length} of ${accounts.length} shown`
+                      : assignmentMode === 'account'
+                        ? `${accounts.length} ${accounts.length === 1 ? 'account' : 'accounts'}`
+                        : `${selectedLabel?.accountIds?.length || 0} assigned`}
                   </span>
                 )}
               </div>
@@ -750,12 +716,28 @@ export default function LabelAssignmentPage() {
                       ? 'Click each account that should use the selected label.'
                       : 'Create a label before assigning email accounts.'}
                 </p>
+                <div className="relative mb-3">
+                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={accountSearch}
+                    onChange={(event) => setAccountSearch(event.target.value)}
+                    placeholder="Search accounts..."
+                    aria-label="Search accounts"
+                    className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+                  />
+                </div>
                 <div
                   role="group"
                   aria-label="Email accounts"
                   className="space-y-2 max-h-[60vh] overflow-y-auto"
                 >
-                  {accounts.map((account) => {
+                  {accountSearchTerm && filteredAccounts.length === 0 && (
+                    <p className="py-6 text-center text-sm text-gray-500">
+                      No accounts match “{accountSearch}”.
+                    </p>
+                  )}
+                  {filteredAccounts.map((account) => {
                     const isSelected = account.id === activeAccountId;
                     const isAssigned = !!selectedLabel?.accountIds?.includes(account.id);
                     const accountLabelCount = labels.filter((label) =>
