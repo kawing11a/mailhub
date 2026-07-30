@@ -1,10 +1,34 @@
 'use client';
 
 import { useAccountStore } from '@/stores/accountStore';
-import { X, Send, Paperclip, Trash2, Maximize2, Minimize2, FileText, Settings } from 'lucide-react';
+import {
+  X,
+  Send,
+  Paperclip,
+  Trash2,
+  Maximize2,
+  Minimize2,
+  FileText,
+  Settings,
+  Bold,
+  Italic,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Quote,
+  Link as LinkIcon,
+  Unlink,
+  Image as ImageIcon,
+  Upload,
+  Undo,
+  Redo,
+  Type,
+  Code,
+} from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import LinkExtension from '@tiptap/extension-link';
 import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
 import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
@@ -57,10 +81,19 @@ export function ComposeModal() {
   // body-only edits without putting the live HTML in a dependency array.
   const [bodyVersion, setBodyVersion] = useState(0);
 
+  const [showFormatting, setShowFormatting] = useState(true);
+  const imageFileInputRef = useRef<HTMLInputElement>(null);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Write your message...' }),
+      LinkExtension.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-accent-600 underline cursor-pointer',
+        },
+      }),
       ResizableImage.configure({
         inline: true,
         allowBase64: true,
@@ -529,6 +562,220 @@ export function ComposeModal() {
           </div>
         )}
 
+        {/* Hidden File Input for Image Upload */}
+        <input
+          type="file"
+          ref={imageFileInputRef}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file || !editor) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              editor.chain().focus().setImage({ src: dataUrl }).run();
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+          }}
+          accept="image/*"
+          className="hidden"
+        />
+
+        {/* Rich Formatting Toolbar */}
+        {showFormatting && editor && (
+          <div className="border-b border-gray-200 bg-gray-50 px-3 py-1.5 flex flex-wrap items-center gap-1 flex-shrink-0 text-gray-600 select-none">
+            {/* Heading / Text Size Selector */}
+            <select
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'p') editor.chain().focus().setParagraph().run();
+                else if (val === 'h1') editor.chain().focus().toggleHeading({ level: 1 }).run();
+                else if (val === 'h2') editor.chain().focus().toggleHeading({ level: 2 }).run();
+                else if (val === 'h3') editor.chain().focus().toggleHeading({ level: 3 }).run();
+              }}
+              value={
+                editor.isActive('heading', { level: 1 })
+                  ? 'h1'
+                  : editor.isActive('heading', { level: 2 })
+                  ? 'h2'
+                  : editor.isActive('heading', { level: 3 })
+                  ? 'h3'
+                  : 'p'
+              }
+              className="text-xs border border-gray-300 rounded bg-white px-2 py-1 font-medium text-gray-700 outline-none focus:border-accent-500"
+            >
+              <option value="p">Normal Text</option>
+              <option value="h1">Heading 1</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+            </select>
+
+            <div className="h-4 w-px bg-gray-300 mx-1" />
+
+            {/* Bold */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleBold().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('bold') && 'bg-gray-200 text-accent-700 font-bold'
+              )}
+              title="Bold"
+            >
+              <Bold className="w-4 h-4" />
+            </button>
+
+            {/* Italic */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('italic') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Italic"
+            >
+              <Italic className="w-4 h-4" />
+            </button>
+
+            {/* Strikethrough */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleStrike().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('strike') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Strikethrough"
+            >
+              <Strikethrough className="w-4 h-4" />
+            </button>
+
+            {/* Code */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleCode().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('code') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Inline Code"
+            >
+              <Code className="w-4 h-4" />
+            </button>
+
+            <div className="h-4 w-px bg-gray-300 mx-1" />
+
+            {/* Bullet List */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('bulletList') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Bulleted List"
+            >
+              <List className="w-4 h-4" />
+            </button>
+
+            {/* Numbered List */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('orderedList') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Numbered List"
+            >
+              <ListOrdered className="w-4 h-4" />
+            </button>
+
+            {/* Blockquote */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().toggleBlockquote().run()}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('blockquote') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Quote"
+            >
+              <Quote className="w-4 h-4" />
+            </button>
+
+            <div className="h-4 w-px bg-gray-300 mx-1" />
+
+            {/* Link */}
+            <button
+              type="button"
+              onClick={() => {
+                const prev = editor.getAttributes('link').href;
+                const url = window.prompt('Enter Link URL:', prev);
+                if (url === null) return;
+                if (url === '') {
+                  editor.chain().focus().extendMarkRange('link').unsetLink().run();
+                  return;
+                }
+                editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
+              }}
+              className={clsx(
+                'p-1.5 rounded hover:bg-gray-200 transition-colors',
+                editor.isActive('link') && 'bg-gray-200 text-accent-700'
+              )}
+              title="Insert Link"
+            >
+              <LinkIcon className="w-4 h-4" />
+            </button>
+
+            {/* Image Upload */}
+            <button
+              type="button"
+              onClick={() => imageFileInputRef.current?.click()}
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors"
+              title="Upload Image"
+            >
+              <Upload className="w-4 h-4" />
+            </button>
+
+            {/* Image URL */}
+            <button
+              type="button"
+              onClick={() => {
+                const url = window.prompt('Enter Image URL:');
+                if (url && editor) {
+                  editor.chain().focus().setImage({ src: url }).run();
+                }
+              }}
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors"
+              title="Insert Image URL"
+            >
+              <ImageIcon className="w-4 h-4" />
+            </button>
+
+            <div className="h-4 w-px bg-gray-300 mx-1" />
+
+            {/* Undo / Redo */}
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().undo().run()}
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors"
+              title="Undo"
+            >
+              <Undo className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => editor.chain().focus().redo().run()}
+              className="p-1.5 rounded hover:bg-gray-200 transition-colors"
+              title="Redo"
+            >
+              <Redo className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* TipTap Editor */}
         <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto">
           <EditorContent editor={editor} className="h-full" />
@@ -545,6 +792,17 @@ export function ComposeModal() {
           >
             <span>{isSending ? 'Sending...' : 'Send'}</span>
             {!isSending && <Send className="w-3.5 h-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFormatting(!showFormatting)}
+            className={clsx(
+              'p-2 rounded text-gray-500 transition-colors',
+              showFormatting ? 'bg-gray-200 text-accent-700' : 'hover:bg-gray-200'
+            )}
+            title="Formatting options"
+          >
+            <Type className="w-4 h-4" />
           </button>
           <button
             type="button"

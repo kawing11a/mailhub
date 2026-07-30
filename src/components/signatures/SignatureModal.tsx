@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import LinkExtension from '@tiptap/extension-link';
 import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
 import {
   X,
@@ -70,6 +71,12 @@ export function SignatureModal({
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Design your signature content...' }),
+      LinkExtension.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-accent-600 underline cursor-pointer',
+        },
+      }),
       ResizableImage.configure({
         inline: true,
         allowBase64: true,
