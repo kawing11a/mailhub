@@ -86,23 +86,26 @@ export function ComposeModal() {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [editingSignatureInModal, setEditingSignatureInModal] = useState<Signature | null>(null);
 
+  const hasAutoInsertedRef = useRef(false);
+  const prevFromAccountIdRef = useRef<string | null>(null);
+
   // Swaps or removes the signature HTML block in TipTap editor cleanly
   const applySignature = (signatureHtml: string | null, sigId: string | null = null) => {
     if (!editor) return;
     const currentHtml = editor.getHTML();
-    const signatureRegex = /<div data-signature="true"[^>]*>[\s\S]*?<\/div>/i;
 
-    let newHtml = currentHtml;
-    if (signatureHtml) {
-      const wrappedSignature = `<div data-signature="true" data-signature-id="${sigId || ''}"><br/><br/>--<br/>${signatureHtml}</div>`;
-      if (signatureRegex.test(currentHtml)) {
-        newHtml = currentHtml.replace(signatureRegex, wrappedSignature);
-      } else {
-        newHtml = currentHtml + wrappedSignature;
-      }
+    // Pattern matching previous signature delimiter
+    const sigRegex = /(?:<p[^>]*class="sig-dash"[^>]*>[\s\S]*|<hr[^>]*class="sig-divider"[^>]*>[\s\S]*)/i;
+
+    // Extract user's typed body text (everything before the signature block)
+    const userBody = currentHtml.replace(sigRegex, '').trimEnd();
+
+    let newHtml = userBody;
+    if (signatureHtml && signatureHtml.trim() !== '') {
+      const wrappedSig = `<p class="sig-dash"><br></p><p class="sig-dash">-- </p>${signatureHtml}`;
+      newHtml = userBody ? `${userBody}${wrappedSig}` : wrappedSig;
       setActiveSignatureId(sigId);
     } else {
-      newHtml = currentHtml.replace(signatureRegex, '');
       setActiveSignatureId(null);
     }
 
@@ -110,18 +113,47 @@ export function ComposeModal() {
     setBodyVersion((v) => v + 1);
   };
 
+  // Reset auto-insertion tracking when compose modal closes
   useEffect(() => {
-    if (isComposeModalOpen && editor && hasHydratedRef.current && defaultSignature) {
-      const currentHtml = editor.getHTML();
-      const hasSignatureBlock = /data-signature="true"/.test(currentHtml);
+    if (!isComposeModalOpen) {
+      hasAutoInsertedRef.current = false;
+      prevFromAccountIdRef.current = null;
+    }
+  }, [isComposeModalOpen]);
 
-      if (!hasSignatureBlock && (!composeDraft?.bodyHtml || composeDraft.bodyHtml.trim() === '')) {
+  // Handle auto-insertion on open and clean signature swap when From account changes
+  useEffect(() => {
+    if (!isComposeModalOpen || !editor || !hasHydratedRef.current) return;
+
+    // 1. Initial open for a new draft (no existing bodyHtml) -> auto insert default signature once
+    if (!hasAutoInsertedRef.current && (!composeDraft?.bodyHtml || composeDraft.bodyHtml.trim() === '')) {
+      if (defaultSignature) {
         applySignature(defaultSignature.contentHtml, defaultSignature.id);
-      } else if (hasSignatureBlock) {
+        hasAutoInsertedRef.current = true;
+        prevFromAccountIdRef.current = fromAccount?.id || null;
+      }
+      return;
+    }
+
+    // If opening an existing draft with bodyHtml, mark as hydrated so auto-insert won't overwrite
+    if (!hasAutoInsertedRef.current && composeDraft?.bodyHtml) {
+      hasAutoInsertedRef.current = true;
+      prevFromAccountIdRef.current = fromAccount?.id || null;
+    }
+
+    // 2. User explicitly switched the "From" account dropdown
+    if (
+      prevFromAccountIdRef.current !== null &&
+      prevFromAccountIdRef.current !== (fromAccount?.id || null)
+    ) {
+      prevFromAccountIdRef.current = fromAccount?.id || null;
+      if (defaultSignature) {
         applySignature(defaultSignature.contentHtml, defaultSignature.id);
+      } else {
+        applySignature(null);
       }
     }
-  }, [fromAccount?.id, defaultSignature]);
+  }, [isComposeModalOpen, editor, defaultSignature, fromAccount?.id]);
 
   // Snapshot the live editor on every bodyVersion render. The autosave hook
   // debounces and serializes these snapshots without rehydrating TipTap.
