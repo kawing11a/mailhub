@@ -112,6 +112,16 @@ input, select, textarea {
   outline-offset: 2px;
 }
 
+.ProseMirror,
+.ProseMirror:focus,
+.ProseMirror:focus-visible,
+.ProseMirror-focused,
+[contenteditable="true"]:focus,
+[contenteditable="true"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 @keyframes dashboard-switch-sheen {
   0% {
     transform: translateX(-145%) skewX(-18deg);

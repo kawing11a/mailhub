@@ -78,7 +78,7 @@ export function SignatureModal({
     content: signature ? signature.contentHtml : '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm max-w-none focus:outline-none min-h-[160px] p-3 text-gray-900',
+        class: 'prose prose-sm max-w-none outline-none focus:outline-none focus-visible:outline-none min-h-[160px] p-3 text-gray-900',
       },
       handleDrop: imageDropAndPasteProps.handleDrop,
       handlePaste: imageDropAndPasteProps.handlePaste,

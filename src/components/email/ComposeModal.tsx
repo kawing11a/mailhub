@@ -71,7 +71,7 @@ export function ComposeModal() {
     onUpdate: () => setBodyVersion((v) => v + 1),
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose max-w-none focus:outline-none min-h-[200px] h-full px-4 py-3',
+        class: 'prose prose-sm sm:prose max-w-none outline-none focus:outline-none focus-visible:outline-none min-h-[200px] h-full px-4 py-3',
       },
       handleDrop: imageDropAndPasteProps.handleDrop,
       handlePaste: imageDropAndPasteProps.handlePaste,
