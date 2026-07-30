@@ -86,8 +86,7 @@ export function ComposeModal() {
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [editingSignatureInModal, setEditingSignatureInModal] = useState<Signature | null>(null);
 
-  const hasAutoInsertedRef = useRef(false);
-  const prevFromAccountIdRef = useRef<string | null>(null);
+  const autoInsertedAccountIdRef = useRef<string | null>(null);
 
   // Swaps or removes the signature HTML block in TipTap editor cleanly
   const applySignature = (signatureHtml: string | null, sigId: string | null = null) => {
@@ -113,11 +112,10 @@ export function ComposeModal() {
     setBodyVersion((v) => v + 1);
   };
 
-  // Reset auto-insertion tracking when compose modal closes
+  // Reset tracking when compose modal closes
   useEffect(() => {
     if (!isComposeModalOpen) {
-      hasAutoInsertedRef.current = false;
-      prevFromAccountIdRef.current = null;
+      autoInsertedAccountIdRef.current = null;
     }
   }, [isComposeModalOpen]);
 
@@ -125,35 +123,16 @@ export function ComposeModal() {
   useEffect(() => {
     if (!isComposeModalOpen || !editor || !hasHydratedRef.current) return;
 
-    // 1. Initial open for a new draft (no existing bodyHtml) -> auto insert default signature once
-    if (!hasAutoInsertedRef.current && (!composeDraft?.bodyHtml || composeDraft.bodyHtml.trim() === '')) {
-      if (defaultSignature) {
-        applySignature(defaultSignature.contentHtml, defaultSignature.id);
-        hasAutoInsertedRef.current = true;
-        prevFromAccountIdRef.current = fromAccount?.id || null;
-      }
-      return;
-    }
+    // Do not overwrite existing saved drafts that already have bodyHtml
+    const isNewDraft = !composeDraft?.id && (!composeDraft?.bodyHtml || composeDraft.bodyHtml.trim() === '');
 
-    // If opening an existing draft with bodyHtml, mark as hydrated so auto-insert won't overwrite
-    if (!hasAutoInsertedRef.current && composeDraft?.bodyHtml) {
-      hasAutoInsertedRef.current = true;
-      prevFromAccountIdRef.current = fromAccount?.id || null;
-    }
-
-    // 2. User explicitly switched the "From" account dropdown
-    if (
-      prevFromAccountIdRef.current !== null &&
-      prevFromAccountIdRef.current !== (fromAccount?.id || null)
-    ) {
-      prevFromAccountIdRef.current = fromAccount?.id || null;
-      if (defaultSignature) {
+    if (isNewDraft && defaultSignature) {
+      if (autoInsertedAccountIdRef.current !== (fromAccount?.id || null)) {
         applySignature(defaultSignature.contentHtml, defaultSignature.id);
-      } else {
-        applySignature(null);
+        autoInsertedAccountIdRef.current = fromAccount?.id || null;
       }
     }
-  }, [isComposeModalOpen, editor, defaultSignature, fromAccount?.id]);
+  }, [isComposeModalOpen, editor, defaultSignature, fromAccount?.id, composeDraft]);
 
   // Snapshot the live editor on every bodyVersion render. The autosave hook
   // debounces and serializes these snapshots without rehydrating TipTap.
