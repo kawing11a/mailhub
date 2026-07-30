@@ -1,10 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { X, Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Loader2 } from 'lucide-react';
+import ImageExtension from '@tiptap/extension-image';
+import {
+  X,
+  Bold,
+  Italic,
+  Strikethrough,
+  List,
+  ListOrdered,
+  Undo,
+  Redo,
+  Loader2,
+  Image as ImageIcon,
+  Link,
+  Upload,
+} from 'lucide-react';
 import clsx from 'clsx';
 import { useSignatures, Signature } from '@/hooks/useSignatures';
 
@@ -34,6 +48,7 @@ export function SignatureModal({
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId);
   const [name, setName] = useState('');
   const [isDefault, setIsDefault] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { createSignature, updateSignature, isCreating, isUpdating } = useSignatures(selectedAccountId);
 
@@ -55,6 +70,13 @@ export function SignatureModal({
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Design your signature content...' }),
+      ImageExtension.configure({
+        inline: true,
+        allowBase64: true,
+        HTMLAttributes: {
+          class: 'max-w-full h-auto inline-block my-1 rounded-sm',
+        },
+      }),
     ],
     content: signature ? signature.contentHtml : '',
     editorProps: {
@@ -73,6 +95,27 @@ export function SignatureModal({
   if (!isOpen) return null;
 
   const isSaving = isCreating || isUpdating;
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      editor.chain().focus().setImage({ src: dataUrl }).run();
+    };
+    reader.readAsDataURL(file);
+    // Reset file input value
+    e.target.value = '';
+  };
+
+  const handleAddImageUrl = () => {
+    const url = window.prompt('Enter image URL (e.g. logo or photo link):');
+    if (url && editor) {
+      editor.chain().focus().setImage({ src: url }).run();
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,6 +168,15 @@ export function SignatureModal({
               <X className="h-6 w-6" />
             </button>
           </div>
+
+          {/* Hidden File Input for Image Upload */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageFileChange}
+            accept="image/*"
+            className="hidden"
+          />
 
           {/* Form Content */}
           <form onSubmit={handleSave}>
@@ -228,6 +280,26 @@ export function SignatureModal({
                         title="Numbered List"
                       >
                         <ListOrdered className="h-4 w-4" />
+                      </button>
+                      <div className="h-4 w-[1px] bg-gray-300 mx-1" />
+                      {/* Image Upload / URL Buttons */}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors flex items-center space-x-1"
+                        title="Upload Local Image"
+                      >
+                        <Upload className="h-4 w-4" />
+                        <span className="text-xs font-medium hidden sm:inline">Upload Image</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAddImageUrl}
+                        className="p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors flex items-center space-x-1"
+                        title="Insert Image URL"
+                      >
+                        <ImageIcon className="h-4 w-4" />
+                        <span className="text-xs font-medium hidden sm:inline">Image URL</span>
                       </button>
                       <div className="h-4 w-[1px] bg-gray-300 mx-1" />
                       <button
