@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import { X, Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Check } from 'lucide-react';
+import { X, Bold, Italic, Strikethrough, List, ListOrdered, Undo, Redo, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useSignatures, Signature } from '@/hooks/useSignatures';
 
@@ -54,13 +54,12 @@ export function SignatureModal({
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Placeholder.configure({ placeholder: 'Design your rich-text signature...' }),
+      Placeholder.configure({ placeholder: 'Design your signature content...' }),
     ],
     content: signature ? signature.contentHtml : '',
     editorProps: {
       attributes: {
-        class:
-          'prose prose-sm dark:prose-invert max-w-none p-3 min-h-[140px] focus:outline-none text-slate-800 dark:text-slate-100',
+        class: 'prose prose-sm max-w-none focus:outline-none min-h-[160px] p-3 text-gray-900',
       },
     },
   });
@@ -100,194 +99,203 @@ export function SignatureModal({
       }
       onClose();
     } catch (err) {
-      // toast error handled by hook
+      // Toast error handled by hook
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
-          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-            {signature ? 'Edit Signature' : 'Create New Signature'}
-          </h2>
-          <button
-            onClick={onClose}
-            type="button"
-            className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className="flex min-h-screen items-center justify-center p-4 text-center sm:p-0">
+        <div
+          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+          onClick={onClose}
+        />
 
-        {/* Form */}
-        <form onSubmit={handleSave} className="p-6 space-y-4">
-          {/* Account Selector (if multiple accounts available) */}
-          {accounts.length > 1 && !signature && (
-            <div>
-              <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-                Email Account
-              </label>
-              <select
-                value={selectedAccountId}
-                onChange={(e) => setSelectedAccountId(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              >
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.label ? `${acc.label} (${acc.emailAddress})` : acc.emailAddress}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Signature Name */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Signature Name
-            </label>
-            <input
-              type="text"
-              required
-              placeholder="e.g. Work Signature, Short Mobile, Sales"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-            />
+        <div className="relative w-full max-w-2xl transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8">
+          {/* Modal Header */}
+          <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+            <h3 className="text-lg font-semibold leading-6 text-gray-900">
+              {signature ? 'Edit Signature' : 'Create New Signature'}
+            </h3>
+            <button
+              onClick={onClose}
+              type="button"
+              className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
+            >
+              <X className="h-6 w-6" />
+            </button>
           </div>
 
-          {/* Rich Text Editor */}
-          <div>
-            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
-              Signature Content
-            </label>
-            <div className="rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
-              {/* TipTap Toolbar */}
-              {editor && (
-                <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 bg-slate-50 p-2 dark:border-slate-700 dark:bg-slate-900/50">
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleBold().run()}
-                    className={clsx(
-                      'rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700',
-                      editor.isActive('bold') && 'bg-slate-200 dark:bg-slate-700 text-blue-600 font-bold'
-                    )}
-                    title="Bold"
+          {/* Form Content */}
+          <form onSubmit={handleSave}>
+            <div className="p-6 space-y-4">
+              {/* Account Selector (if multiple accounts provided) */}
+              {accounts.length > 1 && !signature && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email Account
+                  </label>
+                  <select
+                    value={selectedAccountId}
+                    onChange={(e) => setSelectedAccountId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500 text-sm text-gray-900 bg-white"
                   >
-                    <Bold className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                    className={clsx(
-                      'rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700',
-                      editor.isActive('italic') && 'bg-slate-200 dark:bg-slate-700 text-blue-600'
-                    )}
-                    title="Italic"
-                  >
-                    <Italic className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleStrike().run()}
-                    className={clsx(
-                      'rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700',
-                      editor.isActive('strike') && 'bg-slate-200 dark:bg-slate-700 text-blue-600'
-                    )}
-                    title="Strikethrough"
-                  >
-                    <Strikethrough className="h-4 w-4" />
-                  </button>
-                  <div className="h-4 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1" />
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleBulletList().run()}
-                    className={clsx(
-                      'rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700',
-                      editor.isActive('bulletList') && 'bg-slate-200 dark:bg-slate-700 text-blue-600'
-                    )}
-                    title="Bullet List"
-                  >
-                    <List className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                    className={clsx(
-                      'rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700',
-                      editor.isActive('orderedList') && 'bg-slate-200 dark:bg-slate-700 text-blue-600'
-                    )}
-                    title="Numbered List"
-                  >
-                    <ListOrdered className="h-4 w-4" />
-                  </button>
-                  <div className="h-4 w-[1px] bg-slate-300 dark:bg-slate-700 mx-1" />
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().undo().run()}
-                    className="rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700"
-                    title="Undo"
-                  >
-                    <Undo className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => editor.chain().focus().redo().run()}
-                    className="rounded p-1 text-slate-600 hover:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-700"
-                    title="Redo"
-                  >
-                    <Redo className="h-4 w-4" />
-                  </button>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.label ? `${acc.label} (${acc.emailAddress})` : acc.emailAddress}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               )}
-              <EditorContent editor={editor} />
+
+              {/* Signature Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signature Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Work Signature, Mobile Brief"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-accent-500 text-sm text-gray-900"
+                />
+              </div>
+
+              {/* Signature Content (TipTap Editor) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Signature Content
+                </label>
+                <div className="border border-gray-300 rounded-md overflow-hidden bg-white">
+                  {/* TipTap Toolbar */}
+                  {editor && (
+                    <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 bg-gray-50 p-2">
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().toggleBold().run()}
+                        className={clsx(
+                          'p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors',
+                          editor.isActive('bold') && 'bg-gray-200 text-accent-700 font-bold'
+                        )}
+                        title="Bold"
+                      >
+                        <Bold className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                        className={clsx(
+                          'p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors',
+                          editor.isActive('italic') && 'bg-gray-200 text-accent-700'
+                        )}
+                        title="Italic"
+                      >
+                        <Italic className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().toggleStrike().run()}
+                        className={clsx(
+                          'p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors',
+                          editor.isActive('strike') && 'bg-gray-200 text-accent-700'
+                        )}
+                        title="Strikethrough"
+                      >
+                        <Strikethrough className="h-4 w-4" />
+                      </button>
+                      <div className="h-4 w-[1px] bg-gray-300 mx-1" />
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        className={clsx(
+                          'p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors',
+                          editor.isActive('bulletList') && 'bg-gray-200 text-accent-700'
+                        )}
+                        title="Bullet List"
+                      >
+                        <List className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                        className={clsx(
+                          'p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors',
+                          editor.isActive('orderedList') && 'bg-gray-200 text-accent-700'
+                        )}
+                        title="Numbered List"
+                      >
+                        <ListOrdered className="h-4 w-4" />
+                      </button>
+                      <div className="h-4 w-[1px] bg-gray-300 mx-1" />
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().undo().run()}
+                        className="p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors"
+                        title="Undo"
+                      >
+                        <Undo className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => editor.chain().focus().redo().run()}
+                        className="p-1.5 rounded text-gray-600 hover:bg-gray-200 transition-colors"
+                        title="Redo"
+                      >
+                        <Redo className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                  <EditorContent editor={editor} />
+                </div>
+              </div>
+
+              {/* Default Checkbox */}
+              <div className="flex items-center space-x-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="isDefaultSignature"
+                  checked={isDefault}
+                  onChange={(e) => setIsDefault(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-accent-600 focus:ring-accent-500"
+                />
+                <label
+                  htmlFor="isDefaultSignature"
+                  className="text-sm font-medium text-gray-700 cursor-pointer"
+                >
+                  Set as default signature for this account
+                </label>
+              </div>
             </div>
-          </div>
 
-          {/* Set as Default Checkbox */}
-          <div className="flex items-center gap-2 pt-1">
-            <input
-              type="checkbox"
-              id="isDefaultSignature"
-              checked={isDefault}
-              onChange={(e) => setIsDefault(e.target.checked)}
-              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-800"
-            />
-            <label
-              htmlFor="isDefaultSignature"
-              className="text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer"
-            >
-              Set as default signature for this account
-            </label>
-          </div>
-
-          {/* Footer Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving || !name.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isSaving ? (
-                <span>Saving...</span>
-              ) : (
-                <>
-                  <Check className="h-4 w-4" />
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 border-t border-gray-100 bg-gray-50 px-6 py-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving || !name.trim()}
+                className="px-4 py-2 bg-accent-600 text-white rounded-md text-sm font-medium hover:bg-accent-700 disabled:opacity-50 transition-colors shadow-sm inline-flex items-center space-x-2"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
                   <span>Save Signature</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
