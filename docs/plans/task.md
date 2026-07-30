@@ -1,3 +1,11 @@
-| Task | Status | Description |
-| --- | --- | --- |
-| Task 1: Enhance `AccountLabelList` with Quick Label Assignment & Popover Picker | done | Add quick label assignment dropdown popover, hover-unassign buttons, and optimistic React Query mutations to `AccountLabelList.tsx` |
+# Task Tracking
+
+| Task ID | Task Name | Status |
+|---|---|---|
+| task-1 | Task 1: Prisma Schema & Client Generation | done |
+| task-2 | Task 2: Validation Schemas | done |
+| task-3 | Task 3: Backend API Routes | in_progress |
+| task-4 | Task 4: Custom React Hook `useSignatures` | not_started |
+| task-5 | Task 5: Reusable `SignatureModal` Component | not_started |
+| task-6 | Task 6: Independent Settings Page (`/settings/signatures`) | not_started |
+| task-7 | Task 7: Compose Modal Integration | not_started |

@@ -182,6 +182,20 @@ export const emailListQuerySchema = z.object({
   labelId: z.string().uuid().optional(),
 });
 
+// --- Signature schemas ---
+
+export const signatureSchema = z.object({
+  name: z.string().min(1, 'Signature name is required').max(100),
+  contentHtml: z.string(),
+  isDefault: z.boolean().default(false),
+});
+
+export const updateSignatureSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  contentHtml: z.string().optional(),
+  isDefault: z.boolean().optional(),
+});
+
 // --- Type exports ---
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -199,3 +213,5 @@ export type UpdateLabelInput = z.infer<typeof updateLabelSchema>;
 export type UpdateLabelAccountsInput = z.infer<typeof updateLabelAccountsSchema>;
 export type BulkEmailLabelsInput = z.infer<typeof bulkEmailLabelsSchema>;
 export type EmailListQuery = z.infer<typeof emailListQuerySchema>;
+export type SignatureInput = z.infer<typeof signatureSchema>;
+export type UpdateSignatureInput = z.infer<typeof updateSignatureSchema>;

@@ -90,6 +90,7 @@ model EmailAccount {
   activityLogs   EmailActivityLog[]
   memberAccess   MemberEmailAccountAccess[]
   favouritedBy   FavouriteAccount[]
+  signatures     Signature[]
 
   @@unique([organizationId, emailAddress])
   @@map("email_accounts")
@@ -264,4 +265,19 @@ model MemberEmailAccountAccess {
 
   @@id([organizationId, userId, accountId])
   @@map("member_email_account_access")
+}
+
+model Signature {
+  id          String   @id @default(uuid()) @db.Uuid
+  accountId   String   @map("account_id") @db.Uuid
+  name        String   @db.VarChar(100)
+  contentHtml String   @map("content_html") @db.Text
+  isDefault   Boolean  @default(false) @map("is_default")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  account     EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("signatures")
 }
