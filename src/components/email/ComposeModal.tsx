@@ -12,6 +12,22 @@ import { FromAddressSelect } from './FromAddressSelect';
 import { parseAddresses, isValidEmail } from '@/lib/email/addresses';
 import { useDraftAutosave } from '@/hooks/useDraftAutosave';
 
+interface ComposerAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  content: string; // base64
+}
+
+function formatSize(bytes?: number): string {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
 export function ComposeModal() {
   const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
   const [to, setTo] = useState('');
@@ -23,6 +39,10 @@ export function ComposeModal() {
   const [isSending, setIsSending] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Chosen "From" account for THIS message (null = fall back to the active account).
   const [fromId, setFromId] = useState<string | null>(null);
 
@@ -68,6 +88,7 @@ export function ComposeModal() {
         subject,
         bodyHtml: editor?.getHTML() || '',
         bodyText: editor?.getText() || '',
+        attachments,
       }
     : null;
 
@@ -91,6 +112,15 @@ export function ComposeModal() {
       setShowBcc(!!composeDraft?.bcc);
       setSubject(composeDraft?.subject || '');
       setFromId(composeDraft?.accountId ?? null);
+      setAttachments(
+        (composeDraft?.attachments || []).map((att) => ({
+          id: att.id || crypto.randomUUID(),
+          filename: att.filename,
+          contentType: att.contentType,
+          sizeBytes: att.sizeBytes || 0,
+          content: att.content,
+        }))
+      );
 
       const initialAccountId = composeDraft?.accountId || fromAccount?.id;
       initializeAutosave(
@@ -100,6 +130,7 @@ export function ComposeModal() {
       );
     } else {
       hasHydratedRef.current = false;
+      setIsDragging(false);
     }
     // Callers set composeDraft before opening; later saves must not rehydrate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -115,6 +146,78 @@ export function ComposeModal() {
 
   if (!isComposeModalOpen) return null;
 
+  const addFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    const newAttachments: ComposerAttachment[] = [];
+    for (const file of fileArray) {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64Data = result.split(',')[1] || result;
+          resolve(base64Data);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      newAttachments.push({
+        id: crypto.randomUUID(),
+        filename: file.name,
+        contentType: file.type || 'application/octet-stream',
+        sizeBytes: file.size,
+        content: base64,
+      });
+    }
+
+    setAttachments((prev) => [...prev, ...newAttachments]);
+    setBodyVersion((v) => v + 1);
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      await addFiles(e.target.files);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await addFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((att) => att.id !== id));
+    setBodyVersion((v) => v + 1);
+  };
+
   const resetComposer = () => {
     setTo('');
     setCc('');
@@ -123,6 +226,8 @@ export function ComposeModal() {
     setShowBcc(false);
     setSubject('');
     setFromId(null);
+    setAttachments([]);
+    setIsDragging(false);
     editor?.commands.clearContent();
     initializeAutosave(null);
     hasHydratedRef.current = false;
@@ -164,6 +269,13 @@ export function ComposeModal() {
           subject,
           bodyHtml: editor?.getHTML(),
           bodyText: editor?.getText(),
+          attachments: attachments.map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            contentType: a.contentType,
+            content: a.content,
+            sizeBytes: a.sizeBytes,
+          })),
         }),
       });
 
@@ -213,13 +325,33 @@ export function ComposeModal() {
 
   return (
     <div
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={clsx(
         "fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden transition-all duration-200",
         isFullScreen
           ? "inset-4 sm:inset-8 md:inset-12 rounded-xl"
-          : "bottom-0 right-4 sm:right-12 md:right-24 w-[500px] max-w-[calc(100vw-32px)] rounded-t-xl max-h-[80vh] h-[550px]"
+          : "bottom-0 right-4 sm:right-8 lg:right-16 w-[580px] max-w-[calc(100vw-32px)] rounded-t-xl max-h-[85vh] h-[580px]"
       )}
     >
+      {/* Drag and Drop Overlay */}
+      {isDragging && (
+        <div className="absolute inset-0 bg-accent-50/90 border-2 border-dashed border-accent-500 rounded-xl z-50 flex flex-col items-center justify-center pointer-events-none transition-all">
+          <Paperclip className="w-10 h-10 text-accent-600 mb-2 animate-bounce" />
+          <p className="text-sm font-semibold text-accent-800">Drop files here to attach</p>
+        </div>
+      )}
+
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        multiple
+        className="hidden"
+      />
+
       {/* Header */}
       <div className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between">
         <span className="font-medium text-sm">New Message</span>
@@ -246,7 +378,6 @@ export function ComposeModal() {
           <span className="text-gray-500 w-16">From:</span>
           <FromAddressSelect accounts={accounts} value={fromAccount} onChange={setFromId} />
         </div>
-
 
         <div className="border-b border-gray-100 px-4 py-2 flex items-center text-sm flex-shrink-0">
           <span className="text-gray-500 w-16">To:</span>
@@ -308,6 +439,32 @@ export function ComposeModal() {
           />
         </div>
 
+        {/* Attachments list */}
+        {attachments.length > 0 && (
+          <div className="border-b border-gray-100 px-4 py-2 flex flex-wrap gap-2 max-h-28 overflow-y-auto bg-gray-50 flex-shrink-0">
+            {attachments.map((att) => (
+              <div
+                key={att.id}
+                className="flex items-center space-x-2 bg-white border border-gray-200 rounded-md px-2.5 py-1 text-xs text-gray-700 shadow-sm"
+              >
+                <Paperclip className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                <span className="font-medium truncate max-w-[140px]" title={att.filename}>
+                  {att.filename}
+                </span>
+                <span className="text-gray-400">({formatSize(att.sizeBytes)})</span>
+                <button
+                  type="button"
+                  onClick={() => handleRemoveAttachment(att.id)}
+                  className="p-0.5 text-gray-400 hover:text-red-600 rounded transition-colors"
+                  title="Remove attachment"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* TipTap Editor */}
         <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto">
           <EditorContent editor={editor} className="h-full" />
@@ -325,7 +482,12 @@ export function ComposeModal() {
             <span>{isSending ? 'Sending...' : 'Send'}</span>
             {!isSending && <Send className="w-3.5 h-3.5" />}
           </button>
-          <button className="p-2 hover:bg-gray-200 rounded text-gray-500 transition-colors">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2 hover:bg-gray-200 rounded text-gray-500 transition-colors"
+            title="Attach file"
+          >
             <Paperclip className="w-4 h-4" />
           </button>
           <span

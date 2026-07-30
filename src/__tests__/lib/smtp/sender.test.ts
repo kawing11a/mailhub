@@ -120,8 +120,44 @@ describe('sendEmail sender', () => {
         pass: 'secretpassword',
       },
     });
-    expect(mockSendMail).toHaveBeenCalled();
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['recipient@example.com'],
+        bcc: undefined,
+      })
+    );
     expect(result).toEqual({ messageId: '<smtp-msg-456>' });
+  });
+
+  it('passes bcc recipients correctly to SMTP transporter when specified', async () => {
+    const mockSendMail = jest.fn().mockResolvedValue({ messageId: '<smtp-bcc-789>' });
+    mockCreateTransport.mockReturnValue({ sendMail: mockSendMail });
+
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-imap-1',
+      label: 'Custom IMAP Account',
+      emailAddress: 'user@custom.com',
+      provider: 'imap',
+      smtpHost: 'mail.custom.com',
+      smtpPort: 465,
+      smtpSecure: true,
+      decryptedPassword: 'secretpassword',
+    });
+
+    const result = await sendEmail('acc-imap-1', {
+      to: ['recipient@example.com'],
+      bcc: ['bcc1@example.com', 'bcc2@example.com'],
+      subject: 'Test BCC Email',
+      bodyText: 'Hello with BCC',
+    });
+
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: ['recipient@example.com'],
+        bcc: ['bcc1@example.com', 'bcc2@example.com'],
+      })
+    );
+    expect(result).toEqual({ messageId: '<smtp-bcc-789>' });
   });
 
   it('throws an error if SMTP credentials are missing for non-OAuth account', async () => {

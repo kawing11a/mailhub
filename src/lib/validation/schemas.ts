@@ -89,6 +89,14 @@ export const updateAccountSchema = z.object({
 
 // --- Email operation schemas ---
 
+export const attachmentInputSchema = z.object({
+  id: z.string().optional(),
+  filename: z.string(),
+  contentType: z.string(),
+  content: z.string(), // base64 string
+  sizeBytes: z.number().optional(),
+});
+
 export const sendEmailSchema = z.object({
   draftId: z.string().optional(),
   to: z.array(z.string().email('Invalid email address')),
@@ -99,6 +107,7 @@ export const sendEmailSchema = z.object({
   bodyText: z.string().optional(),
   inReplyTo: z.string().optional(),
   references: z.string().optional(),
+  attachments: z.array(attachmentInputSchema).optional(),
 });
 
 export const updateEmailSchema = z.object({
@@ -183,6 +192,7 @@ export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;
 export type CreateAccountInput = z.infer<typeof createAccountSchema>;
 export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;
 export type SendEmailInput = z.infer<typeof sendEmailSchema>;
+export type AttachmentInput = z.infer<typeof attachmentInputSchema>;
 export type UpdateEmailInput = z.infer<typeof updateEmailSchema>;
 export type CreateLabelInput = z.infer<typeof createLabelSchema>;
 export type UpdateLabelInput = z.infer<typeof updateLabelSchema>;

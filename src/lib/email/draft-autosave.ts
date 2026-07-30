@@ -11,6 +11,13 @@ export interface DraftSnapshot {
   subject: string;
   bodyHtml: string;
   bodyText: string;
+  attachments?: Array<{
+    id?: string;
+    filename: string;
+    contentType: string;
+    sizeBytes?: number;
+    content: string;
+  }>;
 }
 
 export type DraftSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -26,12 +33,15 @@ export function isEmptyDraft(snapshot: DraftSnapshot): boolean {
     .replace(/<p><br><\/p>/gi, '')
     .trim();
 
+  const hasAttachments = !!(snapshot.attachments && snapshot.attachments.length > 0);
+
   return !snapshot.to.trim()
     && !snapshot.cc.trim()
     && !snapshot.bcc.trim()
     && !snapshot.subject.trim()
     && !bodyText
-    && !bodyHtml;
+    && !bodyHtml
+    && !hasAttachments;
 }
 
 /**

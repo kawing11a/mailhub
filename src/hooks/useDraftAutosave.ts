@@ -37,6 +37,7 @@ async function saveDraft(
       subject: snapshot.subject,
       bodyHtml: snapshot.bodyHtml,
       bodyText: snapshot.bodyText,
+      attachments: snapshot.attachments,
     }),
   });
 
@@ -97,6 +98,7 @@ export function useDraftAutosave({
     snapshot?.cc,
     snapshot?.bcc,
     snapshot?.subject,
+    snapshot?.attachments?.length,
     changeVersion,
   ]);
 

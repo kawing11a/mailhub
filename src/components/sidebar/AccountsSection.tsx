@@ -502,6 +502,7 @@ export function AccountsSection() {
             labels={labels}
             selectedLabelId={effectiveSelectedLabelId}
             onSelect={setSelectedLabelId}
+            wrap={true}
           />
         </div>
       )}

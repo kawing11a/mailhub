@@ -6,6 +6,10 @@ import { logActivity } from '@/lib/activity/log';
 import { prisma } from '@/lib/db/prisma';
 import { createEmailSnippet } from '@/lib/email/snippet';
 
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import { randomUUID } from 'crypto';
+
 interface RouteParams {
   params: Promise<{ id: string }>;
 }
@@ -36,6 +40,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       bodyHtml: parsed.data.bodyHtml,
     });
 
+    const hasAttachments = !!(parsed.data.attachments && parsed.data.attachments.length > 0);
+
     // Save sent email record
     const email = await prisma.email.create({
       data: {
@@ -52,6 +58,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         inReplyTo: parsed.data.inReplyTo,
         referencesHeader: parsed.data.references,
         isRead: true, // Sent emails are read
+        hasAttachments,
         sentAt,
         receivedAt: sentAt,
         body: {
@@ -62,6 +69,29 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
         },
       },
     });
+
+    if (hasAttachments && parsed.data.attachments) {
+      const storageDir = path.join(process.cwd(), '.storage', 'attachments');
+      await fs.mkdir(storageDir, { recursive: true });
+
+      for (const att of parsed.data.attachments) {
+        const attachmentId = randomUUID();
+        const storagePath = path.join(storageDir, attachmentId);
+        const buffer = Buffer.from(att.content, 'base64');
+        await fs.writeFile(storagePath, buffer);
+
+        await prisma.attachment.create({
+          data: {
+            id: attachmentId,
+            emailId: email.id,
+            filename: att.filename,
+            contentType: att.contentType,
+            sizeBytes: att.sizeBytes || buffer.length,
+            storagePath,
+          },
+        });
+      }
+    }
 
     await logActivity({
       organizationId: auth.organizationId,

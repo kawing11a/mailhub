@@ -181,7 +181,7 @@ export function LabelFilterChips({
   );
 
   if (wrap) {
-    return <div className="flex flex-wrap items-center gap-1.5">{chips}</div>;
+    return <div className="flex flex-wrap items-center gap-1.5 w-full">{chips}</div>;
   }
 
   return (

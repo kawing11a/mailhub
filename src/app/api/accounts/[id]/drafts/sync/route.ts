@@ -6,6 +6,8 @@ import { ImapFlow } from 'imapflow';
 import { decrypt } from '@/lib/crypto';
 import { getValidAccessToken, syncDraftRaw } from '@/lib/gmail/api';
 
+import * as fs from 'fs/promises';
+
 const syncDraftSchema = z.object({
   draftId: z.string(),
 });
@@ -41,7 +43,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const draft = await prisma.email.findFirst({
     where: { id: draftId, accountId },
-    include: { body: true },
+    include: { body: true, attachments: true },
   });
 
   if (!draft || !draft.isDraft) {
@@ -59,6 +61,25 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return addrs.length ? addrs.join(', ') : undefined;
     };
 
+    const attachmentsList = await Promise.all(
+      (draft.attachments || []).map(async (att) => {
+        if (!att.storagePath) return null;
+        try {
+          const content = await fs.readFile(att.storagePath);
+          return {
+            filename: att.filename || 'attachment',
+            content,
+            contentType: att.contentType || 'application/octet-stream',
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const validAttachments = attachmentsList.filter(
+      (a): a is NonNullable<typeof a> => a !== null
+    );
+
     const composer = new MailComposer({
       from: `"${account.label}" <${account.emailAddress}>`,
       to: joinAddresses(draft.toAddresses),
@@ -67,6 +88,8 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       subject: draft.subject,
       html: draft.body?.bodyHtml,
       text: draft.body?.bodyText,
+      attachments: validAttachments.length > 0 ? validAttachments : undefined,
+      keepBcc: true,
     });
     const rawBuffer = await composer.compile().build();
 

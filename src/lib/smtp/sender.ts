@@ -19,6 +19,13 @@ export async function sendGraphEmail(
     emailAddress: { address },
   }));
 
+  const graphAttachments = input.attachments?.map((att) => ({
+    '@odata.type': '#microsoft.graph.fileAttachment',
+    name: att.filename,
+    contentType: att.contentType,
+    contentBytes: att.content,
+  }));
+
   const emailData = {
     message: {
       subject: input.subject,
@@ -29,6 +36,7 @@ export async function sendGraphEmail(
       toRecipients,
       ...(ccRecipients && ccRecipients.length > 0 && { ccRecipients }),
       ...(bccRecipients && bccRecipients.length > 0 && { bccRecipients }),
+      ...(graphAttachments && graphAttachments.length > 0 && { attachments: graphAttachments }),
     },
     saveToSentItems: 'true',
   };
@@ -56,22 +64,32 @@ export async function sendEmail(
 ): Promise<{ messageId: string }> {
   const account = await getDecryptedAccount(accountId);
 
+  const nodemailerAttachments = input.attachments?.map((att) => ({
+    filename: att.filename,
+    content: Buffer.from(att.content, 'base64'),
+    contentType: att.contentType,
+  }));
+
   const mailOptions = {
     from: `"${account.label}" <${account.emailAddress}>`,
     to: input.to,
-    cc: input.cc,
-    bcc: input.bcc,
+    cc: input.cc && input.cc.length > 0 ? input.cc : undefined,
+    bcc: input.bcc && input.bcc.length > 0 ? input.bcc : undefined,
     subject: input.subject,
     text: input.bodyText,
     html: input.bodyHtml,
     inReplyTo: input.inReplyTo,
     references: input.references,
+    attachments: nodemailerAttachments,
   };
 
   if (account.provider === 'gmail') {
-    // For Gmail accounts, construct raw email and use the REST API
+    // For Gmail accounts, construct raw email with keepBcc so Gmail API parses BCC recipients
     const MailComposer = require('nodemailer/lib/mail-composer');
-    const composer = new MailComposer(mailOptions);
+    const composer = new MailComposer({
+      ...mailOptions,
+      keepBcc: true,
+    });
     const rawBuffer = await composer.compile().build();
 
     const accessToken = await getValidAccessToken(account.id);
@@ -100,6 +118,46 @@ export async function sendEmail(
     });
 
     const info = await transporter.sendMail(mailOptions);
+
+    // If IMAP settings are available, attempt to append sent message to IMAP Sent folder
+    if (account.imapHost && account.passwordEncrypted) {
+      try {
+        const MailComposer = require('nodemailer/lib/mail-composer');
+        const composer = new MailComposer({
+          ...mailOptions,
+          keepBcc: true,
+        });
+        const rawBuffer = await composer.compile().build();
+
+        const { ImapFlow } = await import('imapflow');
+        const { decrypt } = await import('@/lib/crypto');
+        const client = new ImapFlow({
+          host: account.imapHost,
+          port: account.imapPort || 993,
+          secure: account.imapSecure ?? true,
+          auth: {
+            user: account.username || account.emailAddress,
+            pass: decrypt(account.passwordEncrypted),
+          },
+          logger: false,
+        });
+
+        await client.connect();
+        const list = await client.list();
+        const sentMailbox =
+          list.find(
+            (m) =>
+              (m.specialUse && m.specialUse.toLowerCase().includes('sent')) ||
+              m.path.toLowerCase().includes('sent')
+          )?.path || 'Sent';
+
+        await client.append(sentMailbox, rawBuffer, ['\\Seen']);
+        await client.logout();
+      } catch (err) {
+        console.error('Failed to append sent message to IMAP Sent folder:', err);
+      }
+    }
+
     return { messageId: info.messageId };
   }
 }

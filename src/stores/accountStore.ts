@@ -15,6 +15,13 @@ interface AccountState {
     bcc?: string;
     subject: string;
     bodyHtml: string;
+    attachments?: Array<{
+      id?: string;
+      filename: string;
+      contentType: string;
+      sizeBytes?: number;
+      content: string;
+    }>;
   } | null;
   setComposeDraft: (draft: any) => void;
   selectedFolder: string;

@@ -559,7 +559,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         </div>
 
         {(selectedAccountId === 'all' || selectedAccountId === 'new-emails') && (
-          <div className="flex items-center gap-2.5 overflow-x-auto pt-3 pb-0.5 scrollbar-none text-xs">
+          <div className="flex flex-wrap items-center gap-2.5 pt-3 pb-0.5 text-xs">
             {/* Group 1: Accounts (Always 1 active: All vs Favourites) */}
             <div className="flex flex-col gap-1 flex-shrink-0">
               <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wider pl-1">Accounts</span>
