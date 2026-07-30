@@ -52,6 +52,7 @@
     "react-hook-form": "^7.80.0",
     "react-hot-toast": "^2.6.0",
     "tailwind-merge": "^3.6.0",
+    "tiptap-extension-resize-image": "^1.4.4",
     "uuid": "^14.0.1",
     "web-push": "^3.6.7",
     "zod": "^4.4.3",

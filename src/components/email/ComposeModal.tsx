@@ -5,7 +5,7 @@ import { X, Send, Paperclip, Trash2, Maximize2, Minimize2, FileText, Settings } 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import ImageExtension from '@tiptap/extension-image';
+import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
 import { useState, useEffect, useRef } from 'react';
 import clsx from 'clsx';
 import { useAccounts } from '@/hooks/useFavouriteMutations';
@@ -61,12 +61,9 @@ export function ComposeModal() {
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Write your message...' }),
-      ImageExtension.configure({
+      ResizableImage.configure({
         inline: true,
         allowBase64: true,
-        HTMLAttributes: {
-          class: 'max-w-full h-auto inline-block my-1 rounded-sm',
-        },
       }),
     ],
     content: '',
@@ -76,6 +73,8 @@ export function ComposeModal() {
       attributes: {
         class: 'prose prose-sm sm:prose max-w-none focus:outline-none min-h-[200px] h-full px-4 py-3',
       },
+      handleDrop: imageDropAndPasteProps.handleDrop,
+      handlePaste: imageDropAndPasteProps.handlePaste,
     },
   });
 

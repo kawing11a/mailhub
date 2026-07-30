@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
-import ImageExtension from '@tiptap/extension-image';
+import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
 import {
   X,
   Bold,
@@ -70,12 +70,9 @@ export function SignatureModal({
     extensions: [
       StarterKit,
       Placeholder.configure({ placeholder: 'Design your signature content...' }),
-      ImageExtension.configure({
+      ResizableImage.configure({
         inline: true,
         allowBase64: true,
-        HTMLAttributes: {
-          class: 'max-w-full h-auto inline-block my-1 rounded-sm',
-        },
       }),
     ],
     content: signature ? signature.contentHtml : '',
@@ -83,6 +80,8 @@ export function SignatureModal({
       attributes: {
         class: 'prose prose-sm max-w-none focus:outline-none min-h-[160px] p-3 text-gray-900',
       },
+      handleDrop: imageDropAndPasteProps.handleDrop,
+      handlePaste: imageDropAndPasteProps.handlePaste,
     },
   });
 
