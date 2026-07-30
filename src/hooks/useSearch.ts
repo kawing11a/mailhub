@@ -1,7 +1,8 @@
 'use client';
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
 
 export function useSearch(initialQuery = '', accountId?: string, folder?: string) {
   const [query, setQuery] = useState(initialQuery);
@@ -32,10 +33,33 @@ export function useSearch(initialQuery = '', accountId?: string, folder?: string
     staleTime: 60 * 1000, // Cache results for 1 minute to reduce API calls
   });
 
+  const results = useMemo(() => {
+    const hits = data?.hits;
+    if (!hits || !Array.isArray(hits)) return [];
+
+    // Attach original index as similarity rank (0 is most relevant)
+    const indexed = hits.map((hit: any, index: number) => ({ hit, index }));
+
+    indexed.sort((a, b) => {
+      const dateA = getEmailDisplayTimestamp(a.hit);
+      const dateB = getEmailDisplayTimestamp(b.hit);
+
+      const timeA = dateA ? dateA.getTime() : 0;
+      const timeB = dateB ? dateB.getTime() : 0;
+
+      if (timeB !== timeA) {
+        return timeB - timeA; // sort by time desc
+      }
+      return a.index - b.index; // tie-breaker: sort by similarity (original search rank)
+    });
+
+    return indexed.map((item) => item.hit);
+  }, [data?.hits]);
+
   return {
     query,
     setQuery,
-    results: data?.hits || [],
+    results,
     isLoading,
     error,
   };

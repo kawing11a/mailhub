@@ -1,11 +1,11 @@
 export interface EmailTimestamps {
   folder?: string | null;
-  sentAt?: string | Date | null;
-  receivedAt?: string | Date | null;
-  createdAt?: string | Date | null;
+  sentAt?: string | Date | number | null;
+  receivedAt?: string | Date | number | null;
+  createdAt?: string | Date | number | null;
 }
 
-function toValidDate(value: string | Date | null | undefined): Date | null {
+function toValidDate(value: string | Date | number | null | undefined): Date | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;

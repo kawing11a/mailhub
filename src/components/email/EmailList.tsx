@@ -7,6 +7,7 @@ import { useAccountStore } from '@/stores/accountStore';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { EmailRow } from './EmailRow';
@@ -25,14 +26,23 @@ interface EmailListProps {
 export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const queryClient = useQueryClient();
   const { selectedAccountId, selectedFolder, setComposeDraft, setComposeModalOpen } = useAccountStore();
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+
+  const urlQ = searchParams.get('q') || '';
+  const urlReadStatus = searchParams.get('readStatus') as 'all' | 'unread' | null;
+  const urlAccountScope = searchParams.get('accountScope') as 'all' | 'favourite-accounts' | null;
+  const urlStarred = searchParams.get('starred');
+
+  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch(urlQ, selectedAccountId || undefined, selectedFolder);
+  const isSearching = searchQuery.length > 0;
+
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   // Final on-screen position after clamping the menu to the viewport. Null until
   // the menu is measured (falls back to the raw cursor point for that one frame).
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const { query: searchQuery, setQuery: setSearchQuery, results: searchResults, isLoading: isSearchLoading } = useSearch('', selectedAccountId || undefined, selectedFolder);
-  const isSearching = searchQuery.length > 0;
 
   // Escape closes the context menu first, then clears the selection
   useEffect(() => {
@@ -376,21 +386,96 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     onSelectEmail(email.id);
   };
 
-  const [readStatus, setReadStatus] = useState<'all' | 'unread'>(
-    (selectedAccountId === 'all' || selectedAccountId === 'new-emails') ? 'unread' : 'all'
-  );
-  const [accountScope, setAccountScope] = useState<'all' | 'favourite-accounts'>('all');
-  const [isFavouriteEmailsOnly, setIsFavouriteEmailsOnly] = useState<boolean>(false);
+  const [readStatus, setReadStatusState] = useState<'all' | 'unread'>(() => {
+    if (urlReadStatus === 'all' || urlReadStatus === 'unread') return urlReadStatus;
+    const activeAccount = searchParams.get('accountId') || selectedAccountId;
+    const isAllAccount = activeAccount === 'all' || activeAccount === 'new-emails' || (!searchParams.get('accountId') && pathname === '/all-emails');
+    return isAllAccount ? 'unread' : 'all';
+  });
+
+  const [accountScope, setAccountScopeState] = useState<'all' | 'favourite-accounts'>(() => {
+    if (urlAccountScope === 'all' || urlAccountScope === 'favourite-accounts') return urlAccountScope;
+    return 'all';
+  });
+
+  const [isFavouriteEmailsOnly, setIsFavouriteEmailsOnlyState] = useState<boolean>(() => {
+    if (urlStarred !== null) return urlStarred === 'true';
+    return false;
+  });
+
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<string> | null>(null);
 
-  // Automatically update default readStatus depending on view (unread for All Emails, all for Inbox / account view)
-  useEffect(() => {
-    if (selectedAccountId === 'all' || selectedAccountId === 'new-emails') {
-      setReadStatus('unread');
-    } else {
-      setReadStatus('all');
+  const updateQueryParam = useCallback((updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(window.location.search);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === null || value === '' || value === undefined) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
     }
-  }, [selectedAccountId]);
+    const queryString = params.toString();
+    const newUrl = queryString ? `${pathname}?${queryString}` : pathname;
+    window.history.pushState(null, '', newUrl);
+  }, [pathname]);
+
+  const setReadStatus = (status: 'all' | 'unread') => {
+    setReadStatusState(status);
+    updateQueryParam({ readStatus: status });
+  };
+
+  const setAccountScope = (scope: 'all' | 'favourite-accounts') => {
+    setAccountScopeState(scope);
+    updateQueryParam({ accountScope: scope === 'all' ? null : scope });
+  };
+
+  const setIsFavouriteEmailsOnly = (valOrFn: boolean | ((prev: boolean) => boolean)) => {
+    const nextVal = typeof valOrFn === 'function' ? valOrFn(isFavouriteEmailsOnly) : valOrFn;
+    setIsFavouriteEmailsOnlyState(nextVal);
+    updateQueryParam({ starred: nextVal ? 'true' : null });
+  };
+
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q);
+    updateQueryParam({ q: q || null });
+  };
+
+  // Sync state when URL searchParams change
+  useEffect(() => {
+    if (urlQ !== searchQuery) {
+      setSearchQuery(urlQ);
+    }
+  }, [urlQ, searchQuery, setSearchQuery]);
+
+  useEffect(() => {
+    if (urlReadStatus) {
+      if (urlReadStatus !== readStatus) {
+        setReadStatusState(urlReadStatus);
+      }
+    } else {
+      const activeAccount = searchParams.get('accountId') || selectedAccountId;
+      const isAllAccount = activeAccount === 'all' || activeAccount === 'new-emails' || (!searchParams.get('accountId') && pathname === '/all-emails');
+      const defaultStatus = isAllAccount ? 'unread' : 'all';
+      if (readStatus !== defaultStatus) {
+        setReadStatusState(defaultStatus);
+      }
+    }
+  }, [urlReadStatus, readStatus, selectedAccountId, pathname, searchParams]);
+
+  useEffect(() => {
+    if (urlAccountScope && urlAccountScope !== accountScope) {
+      setAccountScopeState(urlAccountScope);
+    }
+  }, [urlAccountScope, accountScope]);
+
+  useEffect(() => {
+    if (urlStarred !== null) {
+      const isStarred = urlStarred === 'true';
+      if (isStarred !== isFavouriteEmailsOnly) {
+        setIsFavouriteEmailsOnlyState(isStarred);
+      }
+    }
+  }, [urlStarred, isFavouriteEmailsOnly]);
 
   // Reset sticky unread retention set whenever filter settings change
   useEffect(() => {
@@ -553,7 +638,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             suppressHydrationWarning
             placeholder="Search emails..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white transition-all"
           />
         </div>

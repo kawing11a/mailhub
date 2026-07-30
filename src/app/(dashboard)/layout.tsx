@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense, useEffect } from 'react';
 import { Sidebar } from '@/components/sidebar/Sidebar';
 import { ComposeModal } from '@/components/email/ComposeModal';
 import { useSSE } from '@/hooks/useSSE';
@@ -10,7 +11,6 @@ import { ShortcutProvider } from '@/components/providers/ShortcutProvider';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { Toaster, useToasterStore, toast } from 'react-hot-toast';
-import { useEffect } from 'react';
 
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
 
@@ -41,7 +41,9 @@ export default function DashboardLayout({
         </div>
 
         <div className="hidden md:flex h-full">
-          <Sidebar />
+          <Suspense fallback={<div className="w-64 border-r border-gray-200 bg-gray-50 h-full" />}>
+            <Sidebar />
+          </Suspense>
         </div>
 
         {/* Mobile Sidebar overlay */}

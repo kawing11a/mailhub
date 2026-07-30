@@ -1,7 +1,7 @@
 'use client';
 
 import { useAccountStore } from '@/stores/accountStore';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -398,7 +398,31 @@ export function AccountsSection() {
 
   const [query, setQuery] = useState('');
   const labels = useLabels();
-  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const accountIdParam = searchParams.get('accountId');
+  const folderParam = searchParams.get('folder');
+  const labelIdParam = searchParams.get('labelId');
+
+  const [selectedLabelId, setSelectedLabelIdState] = useState<string | null>(labelIdParam);
+
+  useLayoutEffect(() => {
+    if (labelIdParam !== selectedLabelId) {
+      setSelectedLabelIdState(labelIdParam);
+    }
+  }, [labelIdParam]);
+
+  const handleLabelSelect = (id: string | null) => {
+    setSelectedLabelIdState(id);
+    const params = new URLSearchParams(window.location.search);
+    if (id) {
+      params.set('labelId', id);
+    } else {
+      params.delete('labelId');
+    }
+    const queryString = params.toString();
+    const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') || pathname.startsWith('/labels') ? pathname : '/inbox';
+    window.history.pushState(null, '', `${targetPath}?${queryString}`);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -440,6 +464,32 @@ export function AccountsSection() {
     };
   }, [filtered, isFiltering, favouriteAccounts]);
 
+  // Keep store in sync with URL searchParams
+  useLayoutEffect(() => {
+    if (accountIdParam && accountIdParam !== selectedAccountId) {
+      setSelectedAccountId(accountIdParam);
+    }
+  }, [accountIdParam, selectedAccountId, setSelectedAccountId]);
+
+  useLayoutEffect(() => {
+    if (folderParam && folderParam !== selectedFolder) {
+      setSelectedFolder(folderParam);
+    }
+  }, [folderParam, selectedFolder, setSelectedFolder]);
+
+  // Set default account ID in URL if none selected & accounts available
+  useLayoutEffect(() => {
+    if (!accountIdParam && !selectedAccountId && accounts.length > 0 && pathname.startsWith('/inbox')) {
+      const defaultId = favouriteAccounts[0]?.id || accounts[0]?.id;
+      if (defaultId) {
+        setSelectedAccountId(defaultId);
+        const params = new URLSearchParams(window.location.search);
+        params.set('accountId', defaultId);
+        window.history.replaceState(null, '', `${pathname}?${params.toString()}`);
+      }
+    }
+  }, [accountIdParam, selectedAccountId, accounts, favouriteAccounts, pathname, setSelectedAccountId]);
+
   const duplicates = useMemo(() => duplicateDisplayNames(accounts), [accounts]);
 
   const showEmailInList = (account: SidebarAccount) =>
@@ -448,16 +498,23 @@ export function AccountsSection() {
 
   const handleSelect = (id: string) => {
     setSelectedAccountId(id);
-    if (!pathname.startsWith('/inbox')) {
-      router.push('/inbox');
-    }
+    const params = new URLSearchParams(window.location.search);
+    params.set('accountId', id);
+    params.delete('emailId');
+    params.delete('readStatus');
+    const queryString = params.toString();
+    const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') ? pathname : '/inbox';
+    window.history.pushState(null, '', `${targetPath}?${queryString}`);
   };
 
   const handleFolderSelect = (folderId: string) => {
     setSelectedFolder(folderId);
-    if (!pathname.startsWith('/inbox') && !pathname.startsWith('/labels')) {
-      router.push('/inbox');
-    }
+    const params = new URLSearchParams(window.location.search);
+    params.set('folder', folderId);
+    params.delete('emailId');
+    const queryString = params.toString();
+    const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') || pathname.startsWith('/labels') ? pathname : '/inbox';
+    window.history.pushState(null, '', `${targetPath}?${queryString}`);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -501,7 +558,7 @@ export function AccountsSection() {
           <LabelFilterChips
             labels={labels}
             selectedLabelId={effectiveSelectedLabelId}
-            onSelect={setSelectedLabelId}
+            onSelect={handleLabelSelect}
             wrap={true}
           />
         </div>

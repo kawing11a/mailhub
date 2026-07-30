@@ -1,16 +1,28 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, use } from 'react';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { EmailRow } from '@/components/email/EmailRow';
 import { EmailViewer } from '@/components/email/EmailViewer';
 import { Loader2 } from 'lucide-react';
 
-import { use } from 'react';
+function LabelContent({ labelId }: { labelId: string }) {
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const selectedEmailId = searchParams.get('emailId');
 
-export default function LabelPage({ params }: { params: Promise<{ labelId: string }> }) {
-  const { labelId } = use(params);
-  const [selectedEmailId, setSelectedEmailId] = useState<string | null>(null);
+  const handleSelectEmail = (id: string | null) => {
+    const newParams = new URLSearchParams(searchParams.toString());
+    if (id) {
+      newParams.set('emailId', id);
+    } else {
+      newParams.delete('emailId');
+    }
+    const queryString = newParams.toString();
+    const url = queryString ? `${pathname}?${queryString}` : pathname;
+    window.history.pushState(null, '', url);
+  };
 
   const { data: labelData } = useQuery({
     queryKey: ['labels'],
@@ -63,7 +75,7 @@ export default function LabelPage({ params }: { params: Promise<{ labelId: strin
                 <EmailRow
                   key={email.id}
                   email={email}
-                  onClick={setSelectedEmailId}
+                  onClick={(id) => handleSelectEmail(id)}
                   isSelected={selectedEmailId === email.id}
                 />
               ))}
@@ -76,7 +88,7 @@ export default function LabelPage({ params }: { params: Promise<{ labelId: strin
         {selectedEmailId ? (
           <EmailViewer 
             emailId={selectedEmailId} 
-            onBack={() => setSelectedEmailId(null)}
+            onBack={() => handleSelectEmail(null)}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center text-gray-500 bg-gray-50/50">
@@ -85,5 +97,14 @@ export default function LabelPage({ params }: { params: Promise<{ labelId: strin
         )}
       </div>
     </div>
+  );
+}
+
+export default function LabelPage({ params }: { params: Promise<{ labelId: string }> }) {
+  const { labelId } = use(params);
+  return (
+    <Suspense fallback={<div className="flex flex-1 items-center justify-center bg-gray-50/50"><Loader2 className="w-6 h-6 animate-spin text-accent-500" /></div>}>
+      <LabelContent labelId={labelId} />
+    </Suspense>
   );
 }

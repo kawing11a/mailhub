@@ -33,16 +33,23 @@ export async function GET(req: NextRequest) {
         // Listen for messages on the channel
         subscriber.on('message', (chan, message) => {
           if (chan === channel) {
+            let eventName: string | null = null;
             try {
               const parsed = JSON.parse(message);
               if (parsed.event) {
-                controller.enqueue(`event: ${parsed.event}\n`);
+                eventName = parsed.event;
               }
             } catch (e) {
               // Ignore parse errors
             }
-            // Push event to the client
-            controller.enqueue(`data: ${message}\n\n`);
+
+            // SSE spec: event: and data: must be part of the same block
+            // (separated by \n, terminated by \n\n) for named events to fire.
+            if (eventName) {
+              controller.enqueue(`event: ${eventName}\ndata: ${message}\n\n`);
+            } else {
+              controller.enqueue(`data: ${message}\n\n`);
+            }
           }
         });
 

@@ -66,10 +66,14 @@ export function SearchModal() {
           const email = results[selectedIndex];
           setSearchOpen(false);
           useAccountStore.getState().setSelectedAccountId(email.accountId);
+          const params = new URLSearchParams(window.location.search);
+          params.set('accountId', email.accountId);
+          params.set('emailId', email.id);
+          const targetUrl = `/inbox?${params.toString()}`;
           if (window.location.pathname === '/inbox') {
-            window.history.pushState(null, '', `/inbox?emailId=${email.id}`);
+            window.history.pushState(null, '', targetUrl);
           } else {
-            router.push(`/inbox?emailId=${email.id}`);
+            router.push(targetUrl);
           }
         }
       }
@@ -136,10 +140,14 @@ export function SearchModal() {
                       onClick={() => {
                         setSearchOpen(false);
                         useAccountStore.getState().setSelectedAccountId(email.accountId);
+                        const params = new URLSearchParams(window.location.search);
+                        params.set('accountId', email.accountId);
+                        params.set('emailId', email.id);
+                        const targetUrl = `/inbox?${params.toString()}`;
                         if (window.location.pathname === '/inbox') {
-                          window.history.pushState(null, '', `/inbox?emailId=${email.id}`);
+                          window.history.pushState(null, '', targetUrl);
                         } else {
-                          router.push(`/inbox?emailId=${email.id}`);
+                          router.push(targetUrl);
                         }
                       }}
                     >

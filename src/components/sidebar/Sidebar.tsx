@@ -39,7 +39,7 @@ export function Sidebar() {
         </button>
 
         <Link
-          href="/all-emails"
+          href="/all-emails?accountId=all"
           onClick={() => useAccountStore.getState().setSelectedAccountId('all')}
           className={clsx(
             "w-full flex items-center justify-between px-3 py-2 rounded-md font-medium transition-colors text-sm",

@@ -12,17 +12,19 @@ function AllEmailsContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const selectedEmailId = searchParams.get('emailId');
+  const accountIdParam = searchParams.get('accountId');
   const { readingPane } = useUIStore();
   const { setSelectedAccountId } = useAccountStore();
 
   useEffect(() => {
-    setSelectedAccountId('all');
+    const targetAccountId = accountIdParam || 'all';
+    setSelectedAccountId(targetAccountId);
     return () => {
-      if (useAccountStore.getState().selectedAccountId === 'all') {
+      if (useAccountStore.getState().selectedAccountId === targetAccountId) {
         setSelectedAccountId(null);
       }
     };
-  }, [setSelectedAccountId]);
+  }, [accountIdParam, setSelectedAccountId]);
 
   const handleSelectEmail = (id: string | null) => {
     const newParams = new URLSearchParams(searchParams.toString());

@@ -48,3 +48,4 @@ reverse_proxy/
 .agent/
 AGENTS.md
 CLAUDE.md
+.storage/
