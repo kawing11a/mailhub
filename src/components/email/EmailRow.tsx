@@ -108,11 +108,11 @@ export function EmailRow({
             <span className="truncate">{email.fromName || email.fromAddress}</span>
             {showAccountBadge && accountLabel && (
               <span
-                className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 max-w-[130px] truncate flex-shrink-0 border border-gray-200"
+                className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-100 text-gray-800 max-w-[220px] truncate flex-shrink-0 border border-gray-300 shadow-2xs"
                 title={accountInfo?.emailAddress || accountLabel}
               >
                 <span
-                  className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                  className="w-2 h-2 rounded-full flex-shrink-0"
                   style={{ backgroundColor: accountColor }}
                 />
                 <span className="truncate">{accountLabel}</span>

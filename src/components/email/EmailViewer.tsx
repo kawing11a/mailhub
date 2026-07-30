@@ -315,8 +315,21 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             </div>
           )}
           <div>
-            <div className="font-medium text-gray-900">
-              {email.fromName} <span className="text-gray-500 text-sm font-normal">&lt;{email.fromAddress}&gt;</span>
+            <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+              <span>{email.fromName}</span>
+              <span className="text-gray-500 text-sm font-normal">&lt;{email.fromAddress}&gt;</span>
+              {email.account && (
+                <span
+                  className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-300"
+                  title={email.account.emailAddress}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: email.account.color || '#3B82F6' }}
+                  />
+                  <span>{email.account.label || email.account.emailAddress}</span>
+                </span>
+              )}
             </div>
             <div className="text-sm text-gray-500 mt-0.5">
               To: {toRecipients}
