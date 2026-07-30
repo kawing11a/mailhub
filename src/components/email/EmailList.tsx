@@ -311,8 +311,11 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       return;
     }
     if (!email.isRead) {
+      // Update the infinite query cache – the key must include ALL query key fields
+      // that were used to register it, otherwise setQueryData targets the wrong entry
+      // and the list continues to show the email as unread.
       queryClient.setQueryData(
-        ['emails', selectedAccountId, selectedFolder],
+        ['emails', selectedAccountId, selectedFolder, readStatus, accountScope, isFavouriteEmailsOnly],
         (oldData: any) => {
           if (!oldData) return oldData;
           return {
@@ -362,12 +365,14 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
         const next = { ...oldData };
 
+        // Always filter the emails array so the Sidebar badge (which reads
+        // emails.length) immediately reflects the read email being dismissed.
         if (next.emails) {
           next.emails = next.emails.filter((e: any) => e.id !== email.id);
         }
 
         // The sidebar account badge reads countsByAccount first and only falls back
-        // to `emails`, so the filter above alone leaves it stale until the 30s poll.
+        // to `emails`, so keep both in sync.
         if (next.countsByAccount && readAccountId && email.folder === 'INBOX') {
           const counts = { ...next.countsByAccount };
           const remaining = (counts[readAccountId] || 0) - 1;
@@ -381,6 +386,14 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
         return next;
       });
+
+      // Invalidate after a short delay so the server's read-marking write (which
+      // happens when the viewer fetches the email) has time to complete before we
+      // re-fetch the counts. This ensures the badge always reflects server truth.
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+        queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      }, 1500);
     }
 
     onSelectEmail(email.id);
@@ -403,7 +416,12 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     return false;
   });
 
-  const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<string> | null>(null);
+  // Stores email objects seen this session in unread mode.
+  // Using a Map (id → email) so emails stay visible in the list even after
+  // the server re-fetches and drops them (because they're now read). The Map
+  // resets naturally on component unmount (page navigation), so on the next
+  // visit only genuinely unread emails from the fresh server response are shown.
+  const [retainedEmailsMap, setRetainedEmailsMap] = useState<Map<string, any> | null>(null);
 
   const updateQueryParam = useCallback((updates: Record<string, string | null>) => {
     const params = new URLSearchParams(window.location.search);
@@ -477,9 +495,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     }
   }, [urlStarred, isFavouriteEmailsOnly]);
 
-  // Reset sticky unread retention set whenever filter settings change
+  // Reset the retention map whenever filter settings change (new filter = fresh session)
   useEffect(() => {
-    setRetainedUnreadIds(null);
+    setRetainedEmailsMap(null);
   }, [readStatus, accountScope, isFavouriteEmailsOnly, selectedAccountId, selectedFolder]);
 
   const { data: accounts } = useQuery({
@@ -543,19 +561,45 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   // Flatten the pages for the main list
   const flatEmails = useMemo(() => data?.pages.flatMap(page => page.emails) || [], [data?.pages]);
 
-  // Seed retained unread IDs when unread filter is active
+  // Merge incoming emails into the retention map whenever the server list updates.
+  // - New emails are added to the map (only if they are unread at seed time).
+  // - Existing entries are updated with fresh data (e.g. isRead toggled via optimistic
+  //   update) so the row renders correctly (bold/un-bold, etc.).
+  // - Emails that left the server list (read + filtered out) are kept in the map
+  //   so they stay visible until the user navigates away.
   useEffect(() => {
-    if (readStatus === 'unread' && flatEmails.length > 0 && !retainedUnreadIds) {
-      setRetainedUnreadIds(new Set(flatEmails.map((e: any) => e.id)));
-    }
-  }, [readStatus, flatEmails, retainedUnreadIds]);
+    if (readStatus !== 'unread' || flatEmails.length === 0) return;
+
+    setRetainedEmailsMap((prev) => {
+      const next = new Map(prev ?? []);
+      for (const email of flatEmails) {
+        if (!prev) {
+          // Initial seed: only include emails that are still unread
+          if (!email.isRead) next.set(email.id, email);
+        } else {
+          // Subsequent update: refresh existing entries with latest data, or add new ones
+          if (next.has(email.id)) {
+            next.set(email.id, email); // keep data fresh (e.g. isRead=true after click)
+          } else if (!email.isRead) {
+            next.set(email.id, email); // genuinely new unread email arrived
+          }
+        }
+      }
+      return next;
+    });
+  }, [readStatus, flatEmails]);
 
   const displayableFlatEmails = useMemo(() => {
-    if (readStatus === 'unread' && retainedUnreadIds) {
-      return flatEmails.filter((e: any) => retainedUnreadIds.has(e.id) || !e.isRead);
+    if (readStatus === 'unread' && retainedEmailsMap) {
+      // Return all retained email objects, sorted newest-first.
+      // This preserves emails that have been read (and thus dropped by the server
+      // unread filter) until the user navigates away from the page.
+      return Array.from(retainedEmailsMap.values()).sort(
+        (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
+      );
     }
     return flatEmails;
-  }, [flatEmails, readStatus, retainedUnreadIds]);
+  }, [flatEmails, readStatus, retainedEmailsMap]);
 
   const emailsToDisplay = searchQuery ? searchResults : displayableFlatEmails;
   const loading = isLoading || isSearchLoading;

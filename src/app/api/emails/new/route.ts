@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
   const orConditions = readyAccounts.map((acc) => ({
     accountId: acc.id,
     isRead: false,
-    folder: { notIn: ['SPAM', 'TRASH'] },
+    folder: 'INBOX',
     receivedAt: { gt: acc.initialSyncCompletedAt! },
   }));
 

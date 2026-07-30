@@ -6,6 +6,7 @@ import { EmailList } from '@/components/email/EmailList';
 import { EmailViewer } from '@/components/email/EmailViewer';
 import { useUIStore } from '@/stores/uiStore';
 import { useAccountStore } from '@/stores/accountStore';
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 
 function AllEmailsContent() {
@@ -15,6 +16,7 @@ function AllEmailsContent() {
   const accountIdParam = searchParams.get('accountId');
   const { readingPane } = useUIStore();
   const { setSelectedAccountId } = useAccountStore();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const targetAccountId = accountIdParam || 'all';
@@ -25,6 +27,13 @@ function AllEmailsContent() {
       }
     };
   }, [accountIdParam, setSelectedAccountId]);
+
+  // Whenever the user visits (or returns to) All Emails, immediately re-fetch
+  // the badge counts so they reflect server truth rather than stale optimistic state.
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+    queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+  }, [accountIdParam, queryClient]);
 
   const handleSelectEmail = (id: string | null) => {
     const newParams = new URLSearchParams(searchParams.toString());
