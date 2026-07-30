@@ -1,80 +1,93 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
-/* Rich Text Formatting Styles for Email Editor, Composer & Viewer */
-.prose h1, .email-content h1 {
-  font-size: 1.5rem !important;
+/* Rich Text Formatting Styles for TipTap Editor (.ProseMirror, .tiptap), Composer & Email Viewer */
+.ProseMirror, .tiptap, .prose, .email-content {
+  color: #111827;
+}
+
+.ProseMirror p, .tiptap p, .prose p, .email-content p {
+  margin-top: 0.375rem !important;
+  margin-bottom: 0.375rem !important;
+  line-height: 1.6 !important;
+}
+
+.ProseMirror h1, .tiptap h1, .prose h1, .email-content h1 {
+  font-size: 1.75rem !important;
   font-weight: 700 !important;
   margin-top: 1rem !important;
   margin-bottom: 0.5rem !important;
-  line-height: 1.3 !important;
+  line-height: 1.25 !important;
   color: #111827 !important;
+  display: block !important;
 }
 
-.prose h2, .email-content h2 {
-  font-size: 1.25rem !important;
+.ProseMirror h2, .tiptap h2, .prose h2, .email-content h2 {
+  font-size: 1.35rem !important;
   font-weight: 600 !important;
   margin-top: 0.875rem !important;
   margin-bottom: 0.5rem !important;
-  line-height: 1.35 !important;
+  line-height: 1.3 !important;
   color: #1f2937 !important;
+  display: block !important;
 }
 
-.prose h3, .email-content h3 {
-  font-size: 1.125rem !important;
+.ProseMirror h3, .tiptap h3, .prose h3, .email-content h3 {
+  font-size: 1.15rem !important;
   font-weight: 600 !important;
   margin-top: 0.75rem !important;
   margin-bottom: 0.375rem !important;
-  line-height: 1.4 !important;
+  line-height: 1.35 !important;
   color: #374151 !important;
+  display: block !important;
 }
 
-.prose p, .email-content p {
-  margin-top: 0.375rem !important;
-  margin-bottom: 0.375rem !important;
-}
-
-.prose ul, .email-content ul {
+.ProseMirror ul, .tiptap ul, .prose ul, .email-content ul {
   list-style-type: disc !important;
-  padding-left: 1.5rem !important;
+  padding-left: 1.75rem !important;
   margin-top: 0.5rem !important;
   margin-bottom: 0.5rem !important;
 }
 
-.prose ol, .email-content ol {
+.ProseMirror ol, .tiptap ol, .prose ol, .email-content ol {
   list-style-type: decimal !important;
-  padding-left: 1.5rem !important;
+  padding-left: 1.75rem !important;
   margin-top: 0.5rem !important;
   margin-bottom: 0.5rem !important;
 }
 
-.prose li, .email-content li {
+.ProseMirror li, .tiptap li, .prose li, .email-content li {
   margin-top: 0.25rem !important;
   margin-bottom: 0.25rem !important;
   display: list-item !important;
 }
 
-.prose blockquote, .email-content blockquote {
-  border-left: 3px solid #cbd5e1 !important;
+.ProseMirror blockquote, .tiptap blockquote, .prose blockquote, .email-content blockquote {
+  border-left: 4px solid #3b82f6 !important;
   padding-left: 1rem !important;
   margin-top: 0.75rem !important;
   margin-bottom: 0.75rem !important;
   color: #4b5563 !important;
   font-style: italic !important;
+  background-color: #f8fafc !important;
+  padding-top: 0.375rem !important;
+  padding-bottom: 0.375rem !important;
+  border-radius: 0 0.25rem 0.25rem 0 !important;
 }
 
-.prose code, .email-content code {
-  background-color: #f3f4f6 !important;
-  color: #111827 !important;
-  padding: 0.125rem 0.375rem !important;
+.ProseMirror code, .tiptap code, .prose code, .email-content code {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+  padding: 0.15rem 0.4rem !important;
   border-radius: 0.25rem !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 0.875em !important;
+  border: 1px solid #e2e8f0 !important;
 }
 
-.prose pre, .email-content pre {
-  background-color: #1f2937 !important;
-  color: #f9fafb !important;
+.ProseMirror pre, .tiptap pre, .prose pre, .email-content pre {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
   padding: 0.75rem 1rem !important;
   border-radius: 0.375rem !important;
   overflow-x: auto !important;
@@ -83,27 +96,37 @@
   margin-bottom: 0.75rem !important;
 }
 
-.prose a, .email-content a {
+.ProseMirror a, .tiptap a, .prose a, .email-content a {
   color: #2563eb !important;
   text-decoration: underline !important;
   font-weight: 500 !important;
+  cursor: pointer !important;
 }
 
-.prose s, .prose del, .prose strike, .email-content s, .email-content del, .email-content strike {
+.ProseMirror s, .ProseMirror del, .ProseMirror strike,
+.tiptap s, .tiptap del, .tiptap strike,
+.prose s, .prose del, .prose strike,
+.email-content s, .email-content del, .email-content strike {
   text-decoration: line-through !important;
   color: #6b7280 !important;
 }
 
-.prose strong, .prose b, .email-content strong, .email-content b {
+.ProseMirror strong, .ProseMirror b,
+.tiptap strong, .tiptap b,
+.prose strong, .prose b,
+.email-content strong, .email-content b {
   font-weight: 700 !important;
   color: #111827 !important;
 }
 
-.prose em, .prose i, .email-content em, .email-content i {
+.ProseMirror em, .ProseMirror i,
+.tiptap em, .tiptap i,
+.prose em, .prose i,
+.email-content em, .email-content i {
   font-style: italic !important;
 }
 
-.prose hr, .email-content hr {
+.ProseMirror hr, .tiptap hr, .prose hr, .email-content hr {
   border: 0 !important;
   border-top: 1px solid #e5e7eb !important;
   margin-top: 1rem !important;
