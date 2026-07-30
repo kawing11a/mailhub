@@ -41,6 +41,7 @@ export default function SettingsLayout({
         ]
       : []),
     { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
+    { name: 'Signatures', href: '/settings/signatures', icon: CreditCard },
     { name: 'Preferences', href: '/settings/preferences', icon: Settings },
     { name: 'Security', href: '/settings/security', icon: Shield },
   ];
