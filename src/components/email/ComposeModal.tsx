@@ -13,6 +13,7 @@ import { parseAddresses, isValidEmail } from '@/lib/email/addresses';
 import { useDraftAutosave } from '@/hooks/useDraftAutosave';
 import { useSignatures, Signature } from '@/hooks/useSignatures';
 import { SignatureModal } from '@/components/signatures/SignatureModal';
+import { SignatureSelect } from './SignatureSelect';
 
 interface ComposerAttachment {
   id: string;
@@ -81,7 +82,7 @@ export function ComposeModal() {
 
   // Signatures for current fromAccount
   const { signatures, defaultSignature } = useSignatures(fromAccount?.id);
-  const [showSignatureMenu, setShowSignatureMenu] = useState(false);
+  const [activeSignatureId, setActiveSignatureId] = useState<string | null>(null);
   const [isSignatureModalOpen, setIsSignatureModalOpen] = useState(false);
   const [editingSignatureInModal, setEditingSignatureInModal] = useState<Signature | null>(null);
 
@@ -99,8 +100,10 @@ export function ComposeModal() {
       } else {
         newHtml = currentHtml + wrappedSignature;
       }
+      setActiveSignatureId(sigId);
     } else {
       newHtml = currentHtml.replace(signatureRegex, '');
+      setActiveSignatureId(null);
     }
 
     editor.commands.setContent(newHtml);
@@ -535,68 +538,21 @@ export function ComposeModal() {
           </button>
 
           {/* Signature Selector Dropdown */}
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setShowSignatureMenu((v) => !v)}
-              className="p-2 hover:bg-gray-200 rounded text-gray-500 transition-colors flex items-center gap-1"
-              title="Insert or Manage Signature"
-            >
-              <FileText className="w-4 h-4" />
-            </button>
-
-            {showSignatureMenu && (
-              <div className="absolute left-0 bottom-10 z-50 w-60 rounded-lg bg-white p-1.5 shadow-xl border border-gray-200 text-xs dark:bg-slate-800 dark:border-slate-700">
-                <div className="px-2 py-1 font-semibold text-gray-500 dark:text-gray-400">
-                  Select Signature
-                </div>
-                {signatures.length > 0 ? (
-                  signatures.map((sig) => (
-                    <button
-                      key={sig.id}
-                      type="button"
-                      onClick={() => {
-                        applySignature(sig.contentHtml, sig.id);
-                        setShowSignatureMenu(false);
-                      }}
-                      className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center justify-between text-gray-700 dark:text-gray-200"
-                    >
-                      <span className="truncate">{sig.name}</span>
-                      {sig.isDefault && (
-                        <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium ml-1">
-                          Default
-                        </span>
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-2 py-1.5 text-gray-400 italic">No signatures created</div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    applySignature(null);
-                    setShowSignatureMenu(false);
-                  }}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400 border-t border-gray-100 dark:border-slate-700 mt-1"
-                >
-                  None (Remove Signature)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSignatureMenu(false);
-                    setEditingSignatureInModal(null);
-                    setIsSignatureModalOpen(true);
-                  }}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-blue-50 text-blue-600 dark:hover:bg-blue-900/30 dark:text-blue-400 font-medium flex items-center gap-1.5 border-t border-gray-100 dark:border-slate-700 mt-1"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  <span>⚙️ Edit / New Signature...</span>
-                </button>
-              </div>
-            )}
-          </div>
+          <SignatureSelect
+            signatures={signatures}
+            activeSignatureId={activeSignatureId}
+            onSelectSignature={(sig) => {
+              if (sig) {
+                applySignature(sig.contentHtml, sig.id);
+              } else {
+                applySignature(null);
+              }
+            }}
+            onOpenManageModal={() => {
+              setEditingSignatureInModal(null);
+              setIsSignatureModalOpen(true);
+            }}
+          />
 
           <span
             className={clsx(
