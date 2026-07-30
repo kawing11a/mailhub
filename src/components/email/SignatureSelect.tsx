@@ -61,9 +61,7 @@ export function SignatureSelect({
         title="Signature options"
       >
         <FileText className="h-3.5 w-3.5 text-gray-500" />
-        <span className="max-w-[130px] truncate">
-          {activeSig ? activeSig.name : 'Signature'}
-        </span>
+        <span className="truncate">Signatures</span>
         <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
       </button>
 

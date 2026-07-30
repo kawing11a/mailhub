@@ -42,8 +42,11 @@ describe('crypto', () => {
   it('throws on tampered ciphertext', () => {
     const encrypted = encrypt('test');
     const parts = encrypted.split(':');
-    // Tamper with ciphertext
-    const tampered = `${parts[0]}:${parts[1]}:ff${parts[2].slice(2)}`;
+    // Tamper with ciphertext by flipping first byte
+    const firstByteFlipped = (parseInt(parts[2].slice(0, 2), 16) ^ 0xff)
+      .toString(16)
+      .padStart(2, '0');
+    const tampered = `${parts[0]}:${parts[1]}:${firstByteFlipped}${parts[2].slice(2)}`;
     expect(() => decrypt(tampered)).toThrow();
   });
 });
