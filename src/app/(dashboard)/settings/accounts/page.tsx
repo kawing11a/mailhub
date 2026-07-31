@@ -7,6 +7,7 @@ import { format } from 'date-fns';
 import { AddAccountModal } from '@/components/settings/AddAccountModal';
 import { EditAccountModal } from '@/components/settings/EditAccountModal';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useAccountStore } from '@/stores/accountStore';
 import toast from 'react-hot-toast';
 
 import { Suspense } from 'react';
@@ -18,6 +19,12 @@ function EmailAccountsContent() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const setSelectedAccountId = useAccountStore((s) => s.setSelectedAccountId);
+
+  const handleAccountClick = (accountId: string) => {
+    setSelectedAccountId(accountId);
+    router.push(`/inbox?accountId=${accountId}`);
+  };
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -153,78 +160,102 @@ function EmailAccountsContent() {
             {providerAccounts.map((account: any) => (
               <div 
                 key={account.id} 
-                className={`bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col transition-all duration-200 ${authData?.role === 'admin' ? 'hover:border-accent-300 hover:shadow-md cursor-pointer' : ''}`}
-                onClick={() => {
-                  if (authData?.role === 'admin') setEditingAccount(account);
-                }}
+                className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col transition-all duration-200 hover:border-accent-300 hover:shadow-md cursor-pointer group"
+                onClick={() => handleAccountClick(account.id)}
               >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center space-x-3 overflow-hidden">
-                        <div 
-                          className="flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-white font-medium shadow-sm"
-                          style={{ backgroundColor: account.color || '#3B82F6' }}
-                        >
-                          {account.avatarInitials || account.label.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <h3 className="text-sm font-semibold text-gray-900 truncate" title={account.label}>{account.label}</h3>
-                          <p className="text-xs text-gray-500 truncate" title={account.emailAddress}>{account.emailAddress}</p>
-                        </div>
-                      </div>
-                      
-                      {authData?.role === 'admin' && (
-                        <div className="flex items-center space-x-1 ml-2">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (confirm('Are you sure you want to disconnect this account? All synchronized emails will be deleted from the system.')) {
-                                deleteMutation.mutate(account.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending && deleteMutation.variables === account.id}
-                            className="text-gray-400 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 flex-shrink-0"
-                            title="Disconnect"
-                          >
-                            {deleteMutation.isPending && deleteMutation.variables === account.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-4 h-4" />
-                            )}
-                          </button>
-                        </div>
-                      )}
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center space-x-3 overflow-hidden">
+                    <div 
+                      className="flex-shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-white font-medium shadow-sm"
+                      style={{ backgroundColor: account.color || '#3B82F6' }}
+                    >
+                      {account.avatarInitials || account.label.substring(0, 2).toUpperCase()}
                     </div>
-                    
-                    <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                          {account.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                        {!account.isActive && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingAccount(account);
-                            }}
-                            className="text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-0.5 rounded-md transition-colors"
-                          >
-                            Reauthorize
-                          </button>
-                        )}
-                        {account.authError && (
-                          <span className="flex items-center text-red-600 text-xs font-medium" title={account.authError}>
-                            <AlertTriangle className="w-3.5 h-3.5 mr-1" />
-                            Auth Error
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="flex items-center space-x-1.5 text-xs text-gray-500" title="Last Synced">
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>{account.lastSyncedAt ? format(new Date(account.lastSyncedAt), 'MMM d, HH:mm') : 'Never'}</span>
-                      </div>
+                    <div className="min-w-0">
+                      <h3 className="text-sm font-semibold text-gray-900 group-hover:text-accent-600 transition-colors truncate" title={account.label}>{account.label}</h3>
+                      <p className="text-xs text-gray-500 truncate" title={account.emailAddress}>{account.emailAddress}</p>
                     </div>
                   </div>
+                  
+                  <div className="flex items-center space-x-1 ml-2">
+                    {authData?.role === 'admin' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingAccount(account);
+                        }}
+                        className="text-gray-400 hover:text-gray-600 p-1.5 rounded-md hover:bg-gray-100 transition-colors flex-shrink-0"
+                        title="Edit Account Settings"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                    )}
+                    {authData?.role === 'admin' && (
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('Are you sure you want to disconnect this account? All synchronized emails will be deleted from the system.')) {
+                            deleteMutation.mutate(account.id);
+                          }
+                        }}
+                        disabled={deleteMutation.isPending && deleteMutation.variables === account.id}
+                        className="text-gray-400 hover:text-red-500 p-1.5 rounded-md hover:bg-red-50 transition-colors disabled:opacity-50 flex-shrink-0"
+                        title="Disconnect"
+                      >
+                        {deleteMutation.isPending && deleteMutation.variables === account.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mt-auto pt-4 border-t border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                      {account.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                    {!account.isActive && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingAccount(account);
+                        }}
+                        className="text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-0.5 rounded-md transition-colors"
+                      >
+                        Reauthorize
+                      </button>
+                    )}
+                    {account.authError && (
+                      <span className="flex items-center text-red-600 text-xs font-medium" title={account.authError}>
+                        <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                        Auth Error
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-1.5 text-xs text-gray-500" title="Last Synced">
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>{account.lastSyncedAt ? format(new Date(account.lastSyncedAt), 'MMM d, HH:mm') : 'Never'}</span>
+                    </div>
+
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAccountClick(account.id);
+                      }}
+                      className="text-xs font-medium text-accent-600 hover:text-accent-700 bg-accent-50 hover:bg-accent-100 border border-accent-200 px-2 py-1 rounded-md transition-colors inline-flex items-center space-x-1"
+                      title="View Inbox"
+                    >
+                      <Mail className="w-3 h-3" />
+                      <span>Inbox</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         </div>

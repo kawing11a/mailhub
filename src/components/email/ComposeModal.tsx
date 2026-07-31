@@ -30,7 +30,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import LinkExtension from '@tiptap/extension-link';
 import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import clsx from 'clsx';
 import { useAccounts } from '@/hooks/useFavouriteMutations';
 import { FromAddressSelect } from './FromAddressSelect';
@@ -56,6 +56,10 @@ function formatSize(bytes?: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+// Default floating modal dimensions
+const DEFAULT_WIDTH = 580;
+const DEFAULT_HEIGHT = 580;
+
 export function ComposeModal() {
   const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
   const [to, setTo] = useState('');
@@ -70,6 +74,147 @@ export function ComposeModal() {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Modal position (floating mode) — null means anchor bottom-right via CSS
+  const [modalPos, setModalPos] = useState<{ x: number; y: number } | null>(null);
+  // Modal size (floating mode)
+  const [modalSize, setModalSize] = useState({ w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT });
+  // Refs for drag-to-move
+  const modalRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
+  // Refs for resize
+  const resizeState = useRef<{
+    edge: string;
+    startX: number;
+    startY: number;
+    origX: number;
+    origY: number;
+    origW: number;
+    origH: number;
+  } | null>(null);
+
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = modalRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = rect.left;
+    const origY = rect.top;
+
+    document.body.style.userSelect = 'none';
+
+    let animationFrameId: number | null = null;
+    let currentX = origX;
+    let currentY = origY;
+
+    const onMouseMove = (me: MouseEvent) => {
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+      currentX = origX + dx;
+      currentY = origY + dy;
+
+      if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(() => {
+          if (el) {
+            el.style.left = `${currentX}px`;
+            el.style.top = `${currentY}px`;
+            el.style.bottom = 'auto';
+            el.style.right = 'auto';
+            el.style.transform = 'none';
+          }
+          animationFrameId = null;
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setModalPos({ x: currentX, y: currentY });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, []);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent, edge: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const el = modalRef.current;
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = rect.left;
+    const origY = rect.top;
+    const origW = rect.width;
+    const origH = rect.height;
+
+    document.body.style.userSelect = 'none';
+
+    let animationFrameId: number | null = null;
+    let newW = origW;
+    let newH = origH;
+    let newX = origX;
+    let newY = origY;
+
+    const MIN_W = 400;
+    const MIN_H = 320;
+
+    const onMouseMove = (me: MouseEvent) => {
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+
+      newW = origW;
+      newH = origH;
+      newX = origX;
+      newY = origY;
+
+      if (edge.includes('e')) newW = Math.max(MIN_W, origW + dx);
+      if (edge.includes('s')) newH = Math.max(MIN_H, origH + dy);
+      if (edge.includes('w')) {
+        newW = Math.max(MIN_W, origW - dx);
+        newX = origX + origW - newW;
+      }
+      if (edge.includes('n')) {
+        newH = Math.max(MIN_H, origH - dy);
+        newY = origY + origH - newH;
+      }
+
+      if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(() => {
+          if (el) {
+            el.style.width = `${newW}px`;
+            el.style.height = `${newH}px`;
+            el.style.left = `${newX}px`;
+            el.style.top = `${newY}px`;
+            el.style.bottom = 'auto';
+            el.style.right = 'auto';
+            el.style.transform = 'none';
+          }
+          animationFrameId = null;
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setModalSize({ w: newW, h: newH });
+      setModalPos({ x: newX, y: newY });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   // Chosen "From" account for THIS message (null = fall back to the active account).
   const [fromId, setFromId] = useState<string | null>(null);
@@ -104,7 +249,7 @@ export function ComposeModal() {
     onUpdate: () => setBodyVersion((v) => v + 1),
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose max-w-none outline-none focus:outline-none focus-visible:outline-none min-h-[200px] h-full px-4 py-3',
+        class: 'outline-none focus:outline-none focus-visible:outline-none min-h-[200px] w-full max-w-none px-4 py-3',
       },
       handleDrop: imageDropAndPasteProps.handleDrop,
       handlePaste: imageDropAndPasteProps.handlePaste,
@@ -420,47 +565,114 @@ export function ComposeModal() {
     }
   };
 
+  // Compute inline styles for the modal
+  const modalStyle: React.CSSProperties = isFullScreen
+    ? modalPos
+      ? {
+          top: modalPos.y,
+          left: modalPos.x,
+          width: modalSize.w,
+          height: modalSize.h,
+          bottom: 'auto',
+          right: 'auto',
+          borderRadius: '12px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+        }
+      : {
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: '98vw',
+          height: '95vh',
+          borderRadius: '12px',
+          boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+        }
+    : modalPos
+    ? {
+        top: modalPos.y,
+        left: modalPos.x,
+        width: modalSize.w,
+        height: modalSize.h,
+        bottom: 'auto',
+        right: 'auto',
+        borderRadius: '12px 12px 0 0',
+      }
+    : {
+        bottom: 0,
+        right: 'clamp(16px, 4vw, 64px)',
+        width: modalSize.w,
+        height: modalSize.h,
+        borderRadius: '12px 12px 0 0',
+      };
+
   return (
-    <div
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={clsx(
-        "fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden transition-all duration-200",
-        isFullScreen
-          ? "inset-0 rounded-none"
-          : "bottom-0 right-4 sm:right-8 lg:right-16 w-[580px] max-w-[calc(100vw-32px)] rounded-t-xl max-h-[85vh] h-[580px]"
-      )}
-    >
-      {/* Drag and Drop Overlay */}
-      {isDragging && (
-        <div className="absolute inset-0 bg-accent-50/90 border-2 border-dashed border-accent-500 rounded-xl z-50 flex flex-col items-center justify-center pointer-events-none transition-all">
-          <Paperclip className="w-10 h-10 text-accent-600 mb-2 animate-bounce" />
-          <p className="text-sm font-semibold text-accent-800">Drop files here to attach</p>
-        </div>
+    <>
+      {/* Fullscreen backdrop overlay */}
+      {isFullScreen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 backdrop-blur-[1px] transition-opacity"
+          onClick={() => setIsFullScreen(false)}
+        />
       )}
 
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileSelect}
-        multiple
-        className="hidden"
-      />
+      <div
+        ref={modalRef}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        className="fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden"
+        style={modalStyle}
+      >
+        {/* Resize handles */}
+        {/* Edges */}
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'n')} className="absolute top-0 left-2 right-2 h-1 cursor-n-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 's')} className="absolute bottom-0 left-2 right-2 h-1 cursor-s-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'w')} className="absolute left-0 top-2 bottom-2 w-1 cursor-w-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'e')} className="absolute right-0 top-2 bottom-2 w-1 cursor-e-resize z-20" />
+        {/* Corners */}
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'nw')} className="absolute top-0 left-0 w-3 h-3 cursor-nw-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'ne')} className="absolute top-0 right-0 w-3 h-3 cursor-ne-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'sw')} className="absolute bottom-0 left-0 w-3 h-3 cursor-sw-resize z-20" />
+        <div onMouseDown={(e) => handleResizeMouseDown(e, 'se')} className="absolute bottom-0 right-0 w-3 h-3 cursor-se-resize z-20" />
 
-      {/* Header */}
-      <div className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between">
-        <span className="font-medium text-sm">New Message</span>
-        <div className="flex items-center space-x-1">
-          <button
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
-          >
+        {/* Drag and Drop Overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 bg-accent-50/90 border-2 border-dashed border-accent-500 rounded-xl z-50 flex flex-col items-center justify-center pointer-events-none transition-all">
+            <Paperclip className="w-10 h-10 text-accent-600 mb-2 animate-bounce" />
+            <p className="text-sm font-semibold text-accent-800">Drop files here to attach</p>
+          </div>
+        )}
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          multiple
+          className="hidden"
+        />
+
+        {/* Header — drag handle */}
+        <div
+          className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between flex-shrink-0 select-none cursor-move"
+          onMouseDown={handleHeaderMouseDown}
+        >
+          <span className="font-medium text-sm">New Message</span>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => {
+                setIsFullScreen(!isFullScreen);
+                setModalPos(null);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
+              title={isFullScreen ? 'Restore' : 'Fullscreen'}
+            >
             {isFullScreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
             onClick={handleClose}
+            onMouseDown={(e) => e.stopPropagation()}
             disabled={isClosing || isSending}
             className="p-1 text-gray-400 hover:text-white hover:bg-gray-800 rounded transition-colors"
           >
@@ -777,8 +989,8 @@ export function ComposeModal() {
         )}
 
         {/* TipTap Editor */}
-        <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto w-full">
-          <EditorContent editor={editor} className="h-full w-full" />
+        <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto w-full max-w-none" style={{ minWidth: 0 }}>
+          <EditorContent editor={editor} className="w-full max-w-none" style={{ display: 'block', width: '100%', maxWidth: 'none' }} />
         </div>
       </div>
 
@@ -863,6 +1075,7 @@ export function ComposeModal() {
           }}
         />
       )}
-    </div>
+      </div>
+    </>
   );
 }
