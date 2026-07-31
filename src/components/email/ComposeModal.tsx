@@ -429,7 +429,7 @@ export function ComposeModal() {
       className={clsx(
         "fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden transition-all duration-200",
         isFullScreen
-          ? "inset-4 sm:inset-8 md:inset-12 rounded-xl"
+          ? "inset-0 rounded-none"
           : "bottom-0 right-4 sm:right-8 lg:right-16 w-[580px] max-w-[calc(100vw-32px)] rounded-t-xl max-h-[85vh] h-[580px]"
       )}
     >
@@ -777,8 +777,8 @@ export function ComposeModal() {
         )}
 
         {/* TipTap Editor */}
-        <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto">
-          <EditorContent editor={editor} className="h-full" />
+        <div className="flex-1 text-sm bg-white cursor-text overflow-y-auto w-full">
+          <EditorContent editor={editor} className="h-full w-full" />
         </div>
       </div>
 

@@ -133,6 +133,14 @@
   margin-bottom: 1rem !important;
 }
 
+/* Ensure the Tiptap editor always fills the available width (important for fullscreen compose) */
+.ProseMirror {
+  width: 100%;
+  min-height: 100%;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
