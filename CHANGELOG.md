@@ -5,6 +5,17 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-07-31
+
+### Added
+- **Fullscreen Compose Modal & Full Width Editor** – expanded the compose window experience to support clean fullscreen writing and auto-expanding rich text editor widths.
+
+### Fixed
+- **Filter Scoping for Email Accounts** – quick filters (`readStatus`, `accountScope`, `favouriteEmailsOnly`) are now strictly scoped to unified inbox views (`all` / `new-emails`). Viewing individual email accounts now displays all emails for that account without interference from unified inbox filters.
+
+### Changed
+- Updated `docker-compose.yml` image tags to `kawing11a/mailhub:0.1.3`.
+
 ## [0.1.2] - 2026-07-30
 
 ### Added

@@ -59,6 +59,7 @@ Managing multiple email accounts across local clients is a disjointed, sluggish 
 - 🔍 **Instant Full-Text Search**: Search headers, body content, and senders seamlessly across all connected accounts powered by Meilisearch.
 - 🏷️ **Drag & Drop Label Management**: Organize emails using customizable organization labels and interactive drag-and-drop actions.
 - 📱 **Progressive Web App (PWA)**: Installable desktop/mobile experience with offline Service Worker caching, automated background update polling, system installation detection, and dynamic UI install buttons.
+- 📝 **Rich Text Composer & Fullscreen Mode**: Full-featured TipTap rich text editor with image resizing, attachments, signature auto-insertion, and seamless fullscreen composition.
 - 🔔 **Real-Time SSE & Push Notifications**: Instant inbox updates via Server-Sent Events (SSE) and native Web Push notifications.
 
 ## Architecture
