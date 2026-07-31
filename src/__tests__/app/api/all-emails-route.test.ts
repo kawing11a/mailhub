@@ -88,4 +88,25 @@ describe('GET /api/accounts/all/emails', () => {
       })
     );
   });
+
+  it('ignores filters (readStatus, accountScope, favouriteEmailsOnly) when accountId is a specific email account', async () => {
+    (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValue({ id: 'specific-acc-1' });
+
+    const req = new Request(
+      'http://localhost/api/accounts/specific-acc-1/emails?readStatus=unread&accountScope=favourite-accounts&favouriteEmailsOnly=true'
+    ) as NextRequest;
+    const response = await GET(req, { params: Promise.resolve({ id: 'specific-acc-1' }) });
+    expect(response.status).toBe(200);
+    expect(mockFindEmails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          accountId: 'specific-acc-1',
+        }),
+      })
+    );
+    // Verify filters are not present in where clause
+    const lastCallWhere = mockFindEmails.mock.calls[0][0].where;
+    expect(lastCallWhere.isRead).toBeUndefined();
+    expect(lastCallWhere.isStarred).toBeUndefined();
+  });
 });

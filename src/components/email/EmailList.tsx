@@ -480,11 +480,22 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     }
   }, [urlReadStatus, readStatus, selectedAccountId, pathname, searchParams]);
 
+  const isUnifiedInbox = selectedAccountId === 'all' || selectedAccountId === 'new-emails';
+  const effectiveAccountScope = isUnifiedInbox ? accountScope : 'all';
+  const effectiveReadStatus = isUnifiedInbox ? readStatus : 'all';
+  const effectiveFavouriteEmailsOnly = isUnifiedInbox ? isFavouriteEmailsOnly : false;
+
   useEffect(() => {
-    if (urlAccountScope && urlAccountScope !== accountScope) {
+    const activeAccount = searchParams.get('accountId') || selectedAccountId;
+    const isUnified = activeAccount === 'all' || activeAccount === 'new-emails';
+    if (!isUnified) {
+      if (accountScope !== 'all') {
+        setAccountScopeState('all');
+      }
+    } else if (urlAccountScope && urlAccountScope !== accountScope) {
       setAccountScopeState(urlAccountScope);
     }
-  }, [urlAccountScope, accountScope]);
+  }, [urlAccountScope, accountScope, selectedAccountId, searchParams]);
 
   useEffect(() => {
     if (urlStarred !== null) {
@@ -498,7 +509,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   // Reset the retention map whenever filter settings change (new filter = fresh session)
   useEffect(() => {
     setRetainedEmailsMap(null);
-  }, [readStatus, accountScope, isFavouriteEmailsOnly, selectedAccountId, selectedFolder]);
+  }, [effectiveReadStatus, effectiveAccountScope, effectiveFavouriteEmailsOnly, selectedAccountId, selectedFolder]);
 
   const { data: accounts } = useQuery({
     queryKey: ['accounts'],
@@ -520,7 +531,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     hasNextPage,
     isFetchingNextPage
   } = useInfiniteQuery({
-    queryKey: ['emails', selectedAccountId, selectedFolder, readStatus, accountScope, isFavouriteEmailsOnly],
+    queryKey: ['emails', selectedAccountId, selectedFolder, effectiveReadStatus, effectiveAccountScope, effectiveFavouriteEmailsOnly],
     queryFn: async ({ pageParam = 1 }) => {
       let url = `/api/accounts/${selectedAccountId}/emails?folder=${selectedFolder}&page=${pageParam}&limit=20`;
 
@@ -528,9 +539,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         url = `/api/accounts/all/emails?folder=INBOX&page=${pageParam}&limit=20`;
       }
 
-      if (readStatus !== 'all') url += `&readStatus=${readStatus}`;
-      if (accountScope !== 'all') url += `&accountScope=${accountScope}`;
-      if (isFavouriteEmailsOnly) url += `&favouriteEmailsOnly=true`;
+      if (effectiveReadStatus !== 'all') url += `&readStatus=${effectiveReadStatus}`;
+      if (effectiveAccountScope !== 'all') url += `&accountScope=${effectiveAccountScope}`;
+      if (effectiveFavouriteEmailsOnly) url += `&favouriteEmailsOnly=true`;
 
       const res = await fetch(url);
       if (!res.ok) throw new Error('Failed to fetch emails');
@@ -568,7 +579,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   // - Emails that left the server list (read + filtered out) are kept in the map
   //   so they stay visible until the user navigates away.
   useEffect(() => {
-    if (readStatus !== 'unread' || flatEmails.length === 0) return;
+    if (effectiveReadStatus !== 'unread' || flatEmails.length === 0) return;
 
     setRetainedEmailsMap((prev) => {
       const next = new Map(prev ?? []);
@@ -587,10 +598,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       }
       return next;
     });
-  }, [readStatus, flatEmails]);
+  }, [effectiveReadStatus, flatEmails]);
 
   const displayableFlatEmails = useMemo(() => {
-    if (readStatus === 'unread' && retainedEmailsMap) {
+    if (effectiveReadStatus === 'unread' && retainedEmailsMap) {
       // Return all retained email objects, sorted newest-first.
       // This preserves emails that have been read (and thus dropped by the server
       // unread filter) until the user navigates away from the page.
@@ -599,7 +610,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       );
     }
     return flatEmails;
-  }, [flatEmails, readStatus, retainedEmailsMap]);
+  }, [flatEmails, effectiveReadStatus, retainedEmailsMap]);
 
   const emailsToDisplay = searchQuery ? searchResults : displayableFlatEmails;
   const loading = isLoading || isSearchLoading;

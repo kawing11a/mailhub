@@ -52,26 +52,23 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   if (folder) where.folder = folder;
 
-  if (unreadOnly || readStatus === 'unread' || filter === 'unread') {
-    where.isRead = false;
-  }
+  const isUnifiedInbox = accountId === 'all' || accountId === 'new-emails';
 
-  if (favouriteEmailsOnly || filter === 'favourite-emails') {
-    where.isStarred = true;
-  }
+  if (isUnifiedInbox) {
+    if (unreadOnly || readStatus === 'unread' || filter === 'unread') {
+      where.isRead = false;
+    }
 
-  if (accountScope === 'favourite-accounts' || filter === 'favourite-accounts') {
-    const favourites = await prisma.favouriteAccount.findMany({
-      where: { userId: auth.userId, deletedAt: null },
-      select: { accountId: true },
-    });
-    const favIds = favourites.map((f) => f.accountId);
-    if (where.accountId) {
-      // If already constrained by single accountId
-      if (!favIds.includes(where.accountId as string)) {
-        where.accountId = '00000000-0000-0000-0000-000000000000'; // match nothing
-      }
-    } else {
+    if (favouriteEmailsOnly || filter === 'favourite-emails') {
+      where.isStarred = true;
+    }
+
+    if (accountScope === 'favourite-accounts' || filter === 'favourite-accounts') {
+      const favourites = await prisma.favouriteAccount.findMany({
+        where: { userId: auth.userId, deletedAt: null },
+        select: { accountId: true },
+      });
+      const favIds = favourites.map((f) => f.accountId);
       where.accountId = { in: favIds };
     }
   }
