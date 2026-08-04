@@ -49,3 +49,4 @@ reverse_proxy/
 AGENTS.md
 CLAUDE.md
 .storage/
+.worktrees/
