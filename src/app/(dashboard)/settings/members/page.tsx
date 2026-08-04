@@ -58,7 +58,7 @@ export default function MembersPage() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Members</h1>
+          <h1 className="app-title text-2xl font-semibold">Members</h1>
           <p className="text-sm text-gray-500 mt-1">
             Manage who has access to your organization's inbox.
           </p>
