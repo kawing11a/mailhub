@@ -64,36 +64,38 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
 
     const labelName = label ? label.name : 'Selected Label';
 
-    // 4. Query emails by label ID and optional time window filter
+    // 4. Query assigned accounts for this label
     const timeFilter = timeRangeHours && timeRangeHours > 0
       ? { gte: new Date(Date.now() - timeRangeHours * 60 * 60 * 1000) }
       : undefined;
 
-    const emailLabels = await prisma.emailLabel.findMany({
-      where: {
-        labelId,
-        email: {
-          account: { organizationId },
-          ...(timeFilter && { receivedAt: timeFilter }),
-        },
-      },
-      ...(limit && limit > 0 ? { take: limit } : {}),
-      orderBy: { email: { receivedAt: 'desc' } },
-      include: {
-        email: {
-          select: {
-            id: true,
-            subject: true,
-            fromName: true,
-            fromAddress: true,
-            snippet: true,
-            receivedAt: true,
-          },
-        },
-      },
+    const assignedAccounts = await prisma.accountLabel.findMany({
+      where: { labelId },
+      select: { accountId: true },
     });
+    const assignedAccountIds = assignedAccounts.map((a) => a.accountId);
 
-    const emailsToSummarize = emailLabels.map((el) => el.email);
+    // Query emails matching either direct email tag or assigned account
+    const emailsToSummarize = await prisma.email.findMany({
+      where: {
+        account: { organizationId },
+        ...(timeFilter && { receivedAt: timeFilter }),
+        OR: [
+          { emailLabels: { some: { labelId } } },
+          ...(assignedAccountIds.length > 0 ? [{ accountId: { in: assignedAccountIds } }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        subject: true,
+        fromName: true,
+        fromAddress: true,
+        snippet: true,
+        receivedAt: true,
+      },
+      orderBy: { receivedAt: 'desc' },
+      ...(limit && limit > 0 ? { take: limit } : {}),
+    });
 
     // 5. Generate AI Summary
     const summaryText = await generateEmailBatchSummary({

@@ -52,7 +52,7 @@ interface SummaryRunStatus {
 
 export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: SummarizeLabelModalProps) {
   const [selectedLabelId, setSelectedLabelId] = useState<string>(initialLabelId || '');
-  const [timeRangeHours, setTimeRangeHours] = useState<number>(24);
+  const [timeRangeHours, setTimeRangeHours] = useState<number>(0);
   const [limit, setLimit] = useState<number>(0);
   const [selectedWebhookIds, setSelectedWebhookIds] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
@@ -223,12 +223,12 @@ export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: Summari
                   <select
                     value={timeRangeHours}
                     onChange={(e) => setTimeRangeHours(Number(e.target.value))}
-                    className="w-full text-sm border-gray-300 rounded-md p-2.5 border"
+                    className="w-full text-sm border-gray-300 rounded-md p-2.5 border font-medium text-gray-800"
                   >
+                    <option value={0}>All Time (Recommended)</option>
                     <option value={24}>Last 24 Hours</option>
                     <option value={168}>Last 7 Days</option>
                     <option value={720}>Last 30 Days</option>
-                    <option value={0}>All Time</option>
                   </select>
                 </div>
 
