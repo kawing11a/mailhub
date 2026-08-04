@@ -7,6 +7,7 @@ import { redis } from '@/lib/redis';
 import { initMeilisearch } from '@/lib/search/meilisearch';
 import { syncWorker } from '@/lib/queue/workers/sync';
 import { searchWorker } from '@/lib/queue/workers/search';
+import { summaryWorker } from '@/lib/queue/workers/summary';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
 
 const WORKER_PARTITION = process.env.WORKER_PARTITION || 'default';
@@ -51,6 +52,7 @@ async function bootstrap() {
     clearInterval(heartbeat);
     await syncWorker.close();
     await searchWorker.close();
+    await summaryWorker.close();
     await imapManager.shutdown();
     await gmailSyncManager.shutdown();
     await prisma.$disconnect();

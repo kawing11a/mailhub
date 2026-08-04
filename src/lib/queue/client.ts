@@ -29,6 +29,7 @@ export const syncQueue = new Queue('imap-sync', defaultOptions);
 export const searchQueue = new Queue('search-index', defaultOptions);
 export const emailSendQueue = new Queue('email-send', defaultOptions);
 export const workerHealthQueue = new Queue('worker-health', defaultOptions);
+export const summaryQueue = new Queue('email-summary', defaultOptions);
 
 export async function closeQueues() {
   await Promise.all([
@@ -36,5 +37,6 @@ export async function closeQueues() {
     searchQueue.close(),
     emailSendQueue.close(),
     workerHealthQueue.close(),
+    summaryQueue.close(),
   ]);
 }
