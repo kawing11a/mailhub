@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
-import { Users, Shield, CreditCard, Mail, Settings, Tag, LogOut } from 'lucide-react';
+import { Users, Shield, CreditCard, Mail, Settings, Tag, LogOut, FlaskConical } from 'lucide-react';
 
 export default function SettingsLayout({
   children,
@@ -43,6 +43,7 @@ export default function SettingsLayout({
     { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
     { name: 'Signatures', href: '/settings/signatures', icon: CreditCard },
     { name: 'Preferences', href: '/settings/preferences', icon: Settings },
+    { name: 'Experimental', href: '/settings/experiments', icon: FlaskConical },
     { name: 'Security', href: '/settings/security', icon: Shield },
   ];
 
