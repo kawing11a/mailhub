@@ -282,15 +282,19 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <Forward className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
-          <button
-            onClick={handleMarkUnread}
-            disabled={updateEmailMutation.isPending}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-            title="Mark as unread"
-          >
-            {updateEmailMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-          </button>
-          <div className="w-px h-6 bg-gray-200 mx-1" />
+          {email.folder === 'INBOX' && (
+            <>
+              <button
+                onClick={handleMarkUnread}
+                disabled={updateEmailMutation.isPending}
+                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
+                title="Mark as unread"
+              >
+                {updateEmailMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
+              </button>
+              <div className="w-px h-6 bg-gray-200 mx-1" />
+            </>
+          )}
           <button
             onClick={handleDelete}
             disabled={deleteEmailMutation.isPending}

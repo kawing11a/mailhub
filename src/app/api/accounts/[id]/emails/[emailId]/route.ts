@@ -99,9 +99,14 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const emailToUpdate = await prisma.email.findFirst({ where });
     if (!emailToUpdate) return apiError('Email not found', 404);
 
+    const data =
+      parsed.data.isRead === false && emailToUpdate.folder !== 'INBOX'
+        ? { ...parsed.data, isRead: true }
+        : parsed.data;
+
     const updated = await prisma.email.update({
       where: { id: emailId },
-      data: parsed.data,
+      data,
     });
     return apiResponse(updated);
   } catch {

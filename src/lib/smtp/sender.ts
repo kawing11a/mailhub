@@ -90,7 +90,9 @@ export async function sendEmail(
       ...mailOptions,
       keepBcc: true,
     });
-    const rawBuffer = await composer.compile().build();
+    const message = composer.compile();
+    message.keepBcc = true;
+    const rawBuffer = await message.build();
 
     const accessToken = await getValidAccessToken(account.id);
     const result = await sendMessageRaw(accessToken, rawBuffer);

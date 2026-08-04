@@ -5,6 +5,20 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-08-04
+
+### Added
+- **Flexible Compose Window** - compose can now be centered, moved, resized, or expanded to fullscreen, with the editor adapting to the available width.
+
+### Fixed
+- **Gmail BCC Delivery** - BCC recipients are preserved in raw messages sent through the Gmail API.
+- **Read State Outside the Inbox** - sent and other non-inbox messages no longer appear unread or offer actions that would mark them unread.
+
+### Changed
+- Refreshed the application-wide visual system, including navigation, dashboard, authentication, settings, email selection, compose, and overlay surfaces.
+- Gmail initial synchronization now imports the complete available message history instead of limiting results to the previous 90 days.
+- Updated `docker-compose.yml` image tags to `kawing11a/mailhub:0.1.4`.
+
 ## [0.1.3] - 2026-07-31
 
 ### Added

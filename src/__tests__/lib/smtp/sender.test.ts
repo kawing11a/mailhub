@@ -1,15 +1,19 @@
 import { sendEmail } from '@/lib/smtp/sender';
 import { getDecryptedAccount } from '@/lib/accounts/service';
 import { getValidOAuthAccessToken } from '@/lib/accounts/tokens';
+import { getValidAccessToken, sendMessageRaw } from '@/lib/gmail/api';
 import nodemailer from 'nodemailer';
 
 jest.mock('@/lib/accounts/service');
 jest.mock('@/lib/accounts/tokens');
+jest.mock('@/lib/gmail/api');
 jest.mock('nodemailer');
 
 describe('sendEmail sender', () => {
   const mockGetDecryptedAccount = getDecryptedAccount as jest.Mock;
   const mockGetValidOAuthAccessToken = getValidOAuthAccessToken as jest.Mock;
+  const mockGetValidAccessToken = getValidAccessToken as jest.Mock;
+  const mockSendMessageRaw = sendMessageRaw as jest.Mock;
   const mockCreateTransport = nodemailer.createTransport as jest.Mock;
 
   beforeEach(() => {
@@ -158,6 +162,31 @@ describe('sendEmail sender', () => {
       })
     );
     expect(result).toEqual({ messageId: '<smtp-bcc-789>' });
+  });
+
+  it('includes bcc recipients in the raw message sent through the Gmail API', async () => {
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-gmail-1',
+      label: 'Gmail Account',
+      emailAddress: 'sender@gmail.com',
+      provider: 'gmail',
+    });
+    mockGetValidAccessToken.mockResolvedValue('mock.gmail.access.token');
+    mockSendMessageRaw.mockResolvedValue({
+      id: 'gmail-message-1',
+      threadId: 'gmail-thread-1',
+      labelIds: ['SENT'],
+    });
+
+    await sendEmail('acc-gmail-1', {
+      to: ['recipient@example.com'],
+      bcc: ['bcc1@example.com', 'bcc2@example.com'],
+      subject: 'Test Gmail BCC Email',
+      bodyText: 'Hello with Gmail BCC',
+    });
+
+    const rawMessage = mockSendMessageRaw.mock.calls[0][1] as Buffer;
+    expect(rawMessage.toString()).toMatch(/^Bcc: bcc1@example\.com, bcc2@example\.com$/mi);
   });
 
   it('throws an error if SMTP credentials are missing for non-OAuth account', async () => {

@@ -903,22 +903,24 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               <span>Forward</span>
             </button>
             <div className="border-t border-gray-100 my-1"></div>
-            {contextMenu.email.isRead ? (
-              <button
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
-                onClick={() => handleContextAction('unread')}
-              >
-                <Mail className="w-4 h-4 text-gray-500" />
-                <span>Mark as unread</span>
-              </button>
-            ) : (
-              <button
-                className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
-                onClick={() => handleContextAction('read')}
-              >
-                <MailOpen className="w-4 h-4 text-gray-500" />
-                <span>Mark as read</span>
-              </button>
+            {contextMenu.email.folder === 'INBOX' && (
+              contextMenu.email.isRead ? (
+                <button
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
+                  onClick={() => handleContextAction('unread')}
+                >
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  <span>Mark as unread</span>
+                </button>
+              ) : (
+                <button
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
+                  onClick={() => handleContextAction('read')}
+                >
+                  <MailOpen className="w-4 h-4 text-gray-500" />
+                  <span>Mark as read</span>
+                </button>
+              )
             )}
             <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"

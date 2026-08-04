@@ -23,7 +23,7 @@ export class GmailSyncManager {
     }
 
     console.log(`Initializing Gmail polling for account ${account.id}`);
-    
+
     // Poll every 60 seconds
     const interval = setInterval(() => {
       this.pollNewEmails(account.id, account.organizationId).catch((err) => {
@@ -53,8 +53,8 @@ export class GmailSyncManager {
       ];
 
       // 90 days ago cutoff for initial sync
-      const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
-      const q = `after:${ninetyDaysAgo}`;
+      // const ninetyDaysAgo = Math.floor((Date.now() - 90 * 24 * 60 * 60 * 1000) / 1000);
+      // const q = `after:${ninetyDaysAgo}`;
 
       for (const { labelId, folder } of folders) {
         let pageToken: string | undefined = undefined;
@@ -63,12 +63,12 @@ export class GmailSyncManager {
             labelIds: [labelId],
             maxResults: 50,
             pageToken,
-            q,
+            // q,
           });
 
           if (result.messages && result.messages.length > 0) {
             console.log(`Fetched ${result.messages.length} messages for ${folder} (Account ${accountId})`);
-            
+
             // Process in batches of 10 for concurrency
             const batchSize = 10;
             for (let i = 0; i < result.messages.length; i += batchSize) {
@@ -100,12 +100,12 @@ export class GmailSyncManager {
       }
 
       const accessToken = await getValidAccessToken(accountId);
-      
+
       // Query messages newer than the last synced timestamp, or just unread INBOX messages.
       // To catch all new things safely without missing, we can use history API or a date query.
       // For simplicity, let's query the INBOX for recent messages.
-      const q = account.lastSyncedAt 
-        ? `after:${Math.floor(account.lastSyncedAt.getTime() / 1000)}` 
+      const q = account.lastSyncedAt
+        ? `after:${Math.floor(account.lastSyncedAt.getTime() / 1000)}`
         : '';
 
       const result = await fetchMessagesList(accessToken, {
@@ -123,12 +123,12 @@ export class GmailSyncManager {
 
       await prisma.emailAccount.update({
         where: { id: accountId },
-        data: { 
+        data: {
           lastSyncedAt: new Date(),
           ...(account.initialSyncCompletedAt ? {} : { initialSyncCompletedAt: new Date() })
         }
       });
-      
+
     } catch (error) {
       console.error(`Polling failed for account ${accountId}:`, error);
     }
@@ -168,7 +168,7 @@ export class GmailSyncManager {
       let finalFolder = folder;
       let isHighRisk = false;
       let riskReason: string | null = null;
-      
+
       // Only check spam for INBOX and non-historical syncs
       if (!skipNotifications && folder === 'INBOX') {
         const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '');
@@ -239,9 +239,9 @@ export class GmailSyncManager {
           for (const att of parsed.attachments) {
             const attachmentId = randomUUID();
             const storagePath = path.join(storageDir, attachmentId);
-            
+
             await fs.writeFile(storagePath, att.content);
-            
+
             await tx.attachment.create({
               data: {
                 id: attachmentId,
@@ -255,7 +255,7 @@ export class GmailSyncManager {
             });
           }
         }
-        
+
         return email;
       });
 
@@ -301,7 +301,7 @@ export class GmailSyncManager {
                 url: '/inbox',
               });
 
-              const pushPromises = subscriptions.map((sub: any) => 
+              const pushPromises = subscriptions.map((sub: any) =>
                 webpush.sendNotification({
                   endpoint: sub.endpoint,
                   keys: {
