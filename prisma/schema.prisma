@@ -33,6 +33,8 @@ model Organization {
   labels             Label[]
   activityLogs       EmailActivityLog[]
   pushSubscriptions  PushSubscription[]
+  experimentSetting  ExperimentSetting?
+  webhooks           NotificationWebhook[]
 
   @@map("organizations")
 }
@@ -280,4 +282,57 @@ model Signature {
 
   @@index([accountId])
   @@map("signatures")
+}
+
+model ExperimentSetting {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @unique @map("organization_id") @db.Uuid
+  isAiEnabled    Boolean  @default(true) @map("is_ai_enabled")
+  
+  aiProvider     String   @default("openai") @map("ai_provider") @db.VarChar(50)
+  aiApiKey       String?  @map("ai_api_key")
+  aiBaseUrl      String?  @map("ai_base_url") @db.VarChar(512)
+  aiModelName    String   @default("gpt-4o-mini") @map("ai_model_name") @db.VarChar(100)
+  aiCustomPrompt String?  @map("ai_custom_prompt")
+  
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("experiment_settings")
+}
+
+model NotificationWebhook {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  name           String   @db.VarChar(100)
+  type           String   @db.VarChar(50)
+  config         Json
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("notification_webhooks")
+}
+
+model EmailSummaryRun {
+  id             String   @id @default(uuid()) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  labelId        String   @map("label_id") @db.Uuid
+  labelName      String   @map("label_name") @db.VarChar(100)
+  
+  status         String   @default("QUEUED") @db.VarChar(50)
+  emailCount     Int      @default(0) @map("email_count")
+  summaryText    String?  @map("summary_text") @db.Text
+  errorMessage   String?  @map("error_message")
+  webhookLogs    Json?    @map("webhook_logs")
+
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("email_summary_runs")
 }
