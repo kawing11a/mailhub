@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { Sparkles } from 'lucide-react';
 import type { AccountLabel } from '@/components/accounts/LabelFilterMenu';
+import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
 
 /** Translucent version of a label colour, for the unselected chip background. */
 function hexToRgba(hex: string, alpha: number): string {
@@ -25,14 +27,6 @@ function contrastText(hex: string): string {
 const CHIP_BASE =
   'flex-none cursor-pointer select-none rounded-full border px-3 py-1 text-xs font-medium whitespace-nowrap transition-colors';
 
-/**
- * Single-select label filter chips, with a leading "All" reset chip. Two layouts:
- * - default (`wrap` false): one horizontal row that hides its scrollbar but stays
- *   scrollable via the mouse wheel and by dragging, with a right-edge fade. Used
- *   in the sidebar.
- * - `wrap` true: chips flow onto multiple rows (no scroll/drag/fade). Used in the
- *   all-accounts modal.
- */
 export function LabelFilterChips({
   labels,
   selectedLabelId,
@@ -44,6 +38,7 @@ export function LabelFilterChips({
   onSelect: (labelId: string | null) => void;
   wrap?: boolean;
 }) {
+  const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({
     active: false,
@@ -156,6 +151,16 @@ export function LabelFilterChips({
         All
       </button>
 
+      <button
+        type="button"
+        onClick={() => setIsSummarizeOpen(true)}
+        title="Summarize emails by label using AI"
+        className="flex-none cursor-pointer select-none rounded-full border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-colors flex items-center space-x-1"
+      >
+        <Sparkles className="w-3.5 h-3.5" />
+        <span>AI Summary</span>
+      </button>
+
       {labels.map((label) => {
         const color = label.color || '#3B82F6';
         const selected = selectedLabelId === label.id;
@@ -177,6 +182,12 @@ export function LabelFilterChips({
           </button>
         );
       })}
+
+      <SummarizeLabelModal
+        isOpen={isSummarizeOpen}
+        onClose={() => setIsSummarizeOpen(false)}
+        initialLabelId={selectedLabelId || undefined}
+      />
     </>
   );
 
