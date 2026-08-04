@@ -45,7 +45,7 @@ export default function LoginPage() {
           <span className="text-2xl font-bold tracking-tight text-gray-900">MailHub</span>
         </div>
 
-      <h2 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Welcome back</h2>
+      <h2 className="app-title text-3xl font-semibold mb-2">Welcome back</h2>
       <p className="text-gray-500 mb-8">Sign in to your account to continue</p>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -85,7 +85,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-accent-600 hover:bg-accent-700 text-white font-medium py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed shadow-sm shadow-accent-600/20"
+          className="w-full bg-accent-600 hover:bg-accent-700 text-white font-medium py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-70 disabled:cursor-not-allowed shadow-sm shadow-accent-600/20"
         >
           {isLoading ? (
             <Loader2 className="w-5 h-5 animate-spin" />

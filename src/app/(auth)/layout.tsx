@@ -3,13 +3,13 @@ import React from 'react';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex h-screen w-full bg-white text-gray-900 font-sans selection:bg-accent-200">
+    <div className="mail-surface flex h-screen w-full text-gray-900 font-sans selection:bg-accent-200">
       {/* Left pane: Branding & Visuals (hidden on small screens) */}
-      <div className="hidden lg:flex w-1/2 bg-gray-950 flex-col justify-between relative overflow-hidden">
+      <div className="correspondence-panel hidden lg:flex w-1/2 flex-col justify-between relative overflow-hidden">
         {/* Subtle background gradient / glow */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0 pointer-events-none">
-          <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full bg-accent-900/20 blur-[120px]" />
-          <div className="absolute bottom-[10%] -right-[10%] w-[60%] h-[60%] rounded-full bg-indigo-900/20 blur-[100px]" />
+          <div className="absolute -top-[20%] -left-[10%] w-[70%] h-[70%] rounded-full border border-white/5" />
+          <div className="absolute bottom-[10%] -right-[10%] w-[60%] h-[60%] rounded-full border border-accent-400/10" />
         </div>
         
         {/* Content */}
@@ -20,7 +20,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </div>
           
           <div className="mb-16 max-w-lg">
-            <h1 className="text-4xl md:text-5xl font-extrabold text-white leading-tight mb-6 tracking-tight">
+            <h1 className="correspondence-title text-4xl md:text-5xl text-white leading-tight mb-6">
               Manage all your inboxes from one unified command center.
             </h1>
             <p className="text-gray-400 text-lg leading-relaxed">
@@ -31,7 +31,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
       
       {/* Right pane: Auth forms */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center p-6 sm:p-12 lg:p-24 bg-white relative">
+      <div className="mail-surface w-full lg:w-1/2 flex flex-col justify-center p-6 sm:p-12 lg:p-24 relative">
         <div className="w-full max-w-[400px] mx-auto">
           {children}
         </div>

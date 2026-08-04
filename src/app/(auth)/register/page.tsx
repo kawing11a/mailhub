@@ -57,7 +57,7 @@ export default function RegisterPage() {
           <span className="text-2xl font-bold tracking-tight text-gray-900">MailHub</span>
         </div>
 
-      <h2 className="text-3xl font-bold text-gray-900 mb-2 tracking-tight">Create an account</h2>
+      <h2 className="app-title text-3xl font-semibold mb-2">Create an account</h2>
       <p className="text-gray-500 mb-8">Get started with your unified command center</p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
