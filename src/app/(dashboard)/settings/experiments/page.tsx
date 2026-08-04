@@ -71,8 +71,7 @@ export default function ExperimentsSettingsPage() {
     queryFn: async () => {
       const res = await fetch('/api/experiments/settings');
       if (!res.ok) throw new Error('Failed to load experiment settings');
-      const data = await res.json();
-      return data.data;
+      return res.json();
     },
   });
 
@@ -82,8 +81,7 @@ export default function ExperimentsSettingsPage() {
     queryFn: async () => {
       const res = await fetch('/api/experiments/webhooks');
       if (!res.ok) throw new Error('Failed to load webhooks');
-      const data = await res.json();
-      return data.data;
+      return res.json();
     },
   });
 

@@ -96,7 +96,7 @@ export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: Summari
     enabled: isOpen,
   });
 
-  const webhooks: WebhookItem[] = webhooksData?.data || [];
+  const webhooks: WebhookItem[] = Array.isArray(webhooksData) ? webhooksData : webhooksData?.data || [];
 
   // Poll Summary Run Status
   const { data: runStatus, isFetching: isPolling } = useQuery<SummaryRunStatus>({
@@ -105,7 +105,7 @@ export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: Summari
       const res = await fetch(`/api/experiments/summary/${activeRunId}`);
       if (!res.ok) throw new Error('Failed to fetch summary run status');
       const data = await res.json();
-      return data.data;
+      return data.data || data;
     },
     enabled: Boolean(activeRunId),
     refetchInterval: (query) => {
@@ -147,7 +147,7 @@ export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: Summari
       }
 
       const data = await res.json();
-      setActiveRunId(data.data.summaryRunId);
+      setActiveRunId(data.summaryRunId || data.data?.summaryRunId);
     } catch (err: any) {
       toast.error(err.message || 'Failed to trigger summary');
     }
