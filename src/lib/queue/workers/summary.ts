@@ -77,7 +77,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
           ...(timeFilter && { receivedAt: timeFilter }),
         },
       },
-      take: limit,
+      ...(limit && limit > 0 ? { take: limit } : {}),
       orderBy: { email: { receivedAt: 'desc' } },
       include: {
         email: {

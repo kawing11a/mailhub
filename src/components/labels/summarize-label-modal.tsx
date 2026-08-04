@@ -53,7 +53,7 @@ interface SummaryRunStatus {
 export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: SummarizeLabelModalProps) {
   const [selectedLabelId, setSelectedLabelId] = useState<string>(initialLabelId || '');
   const [timeRangeHours, setTimeRangeHours] = useState<number>(24);
-  const [limit, setLimit] = useState<number>(25);
+  const [limit, setLimit] = useState<number>(0);
   const [selectedWebhookIds, setSelectedWebhookIds] = useState<string[]>([]);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -240,11 +240,12 @@ export function SummarizeLabelModal({ isOpen, onClose, initialLabelId }: Summari
                   <select
                     value={limit}
                     onChange={(e) => setLimit(Number(e.target.value))}
-                    className="w-full text-sm border-gray-300 rounded-md p-2.5 border"
+                    className="w-full text-sm border-gray-300 rounded-md p-2.5 border font-medium text-gray-800"
                   >
-                    <option value={10}>10 Emails</option>
-                    <option value={25}>25 Emails</option>
-                    <option value={50}>50 Emails</option>
+                    <option value={0}>Unlimited (All Emails)</option>
+                    <option value={25}>Max 25 Emails</option>
+                    <option value={50}>Max 50 Emails</option>
+                    <option value={100}>Max 100 Emails</option>
                   </select>
                 </div>
               </div>

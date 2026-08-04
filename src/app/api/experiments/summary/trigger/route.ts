@@ -35,6 +35,8 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    const parsedLimit = Number(limit);
+
     const payload = {
       summaryRunId: summaryRun.id,
       organizationId: auth.organizationId,
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
       labelId: label.id,
       webhookIds,
       timeRangeHours: Number(timeRangeHours),
-      limit: Number(limit),
+      limit: isNaN(parsedLimit) ? 0 : parsedLimit,
     };
 
     // 1. Enqueue to BullMQ for dedicated worker processes
