@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { summaryQueue } from '@/lib/queue/client';
+import { executeSummaryRun } from '@/lib/queue/workers/summary';
 
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
@@ -34,8 +35,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Enqueue summary background job
-    await summaryQueue.add('generate-summary', {
+    const payload = {
       summaryRunId: summaryRun.id,
       organizationId: auth.organizationId,
       userId: auth.userId,
@@ -43,13 +43,28 @@ export async function POST(req: NextRequest) {
       webhookIds,
       timeRangeHours: Number(timeRangeHours),
       limit: Number(limit),
+    };
+
+    // 1. Enqueue to BullMQ for dedicated worker processes
+    try {
+      await summaryQueue.add('generate-summary', payload);
+    } catch (err) {
+      console.warn('BullMQ enqueue skipped/failed:', err);
+    }
+
+    // 2. Trigger asynchronous direct execution fallback in Next.js background context
+    executeSummaryRun(payload).catch((err) => {
+      console.error('Direct summary execution error:', err);
     });
 
-    return apiResponse({
-      summaryRunId: summaryRun.id,
-      status: 'QUEUED',
-      labelName: label.name,
-    }, 201);
+    return apiResponse(
+      {
+        summaryRunId: summaryRun.id,
+        status: 'QUEUED',
+        labelName: label.name,
+      },
+      201
+    );
   } catch (err: any) {
     return apiError(err.message || 'Failed to trigger summary job', 500);
   }
