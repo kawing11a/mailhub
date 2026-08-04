@@ -111,7 +111,7 @@ export default function OverviewPage() {
       <div className="max-w-6xl mx-auto space-y-8">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 tracking-tight flex items-center space-x-2">
+            <h1 className="app-title text-2xl font-semibold flex items-center space-x-2">
               <LayoutDashboard className="w-6 h-6 text-accent-500" />
               <span>Dashboard Overview</span>
             </h1>

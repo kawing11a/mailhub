@@ -178,7 +178,7 @@ export default function TestingSuitePage() {
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50/50 p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Testing Suite</h1>
+        <h1 className="app-title text-3xl font-semibold mb-2">Testing Suite</h1>
         <p className="text-gray-500 mb-8">Run diagnostic tests for your email connections and background notifications.</p>
         
         {/* Tabs */}

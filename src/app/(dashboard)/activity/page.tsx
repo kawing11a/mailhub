@@ -25,7 +25,7 @@ export default function ActivityLogPage() {
             <ActivityIcon className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Activity Log</h1>
+            <h1 className="app-title text-2xl font-semibold">Activity Log</h1>
             <p className="text-sm text-gray-500 mt-1">
               Audit trail of actions taken across the organization.
             </p>
