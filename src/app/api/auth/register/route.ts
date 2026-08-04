@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { hash } from 'bcryptjs';
 import { prisma } from '@/lib/db/prisma';
-import { createToken } from '@/lib/auth/jwt';
+import { createToken, createRefreshToken, ACCESS_TOKEN_MAX_AGE, REFRESH_TOKEN_MAX_AGE } from '@/lib/auth/jwt';
 import { registerSchema } from '@/lib/validation';
 import { apiError, apiResponse } from '@/lib/auth/middleware';
 
@@ -53,11 +53,16 @@ export async function POST(req: NextRequest) {
       return { user, org };
     });
 
-    const token = await createToken({
+    const payload = {
       userId: result.user.id,
       organizationId: result.org.id,
-      role: 'admin',
-    });
+      role: 'admin' as const,
+    };
+
+    // 7 days Access Token
+    const token = await createToken(payload);
+    // 30 days Refresh Token
+    const refreshToken = await createRefreshToken(payload);
 
     const response = apiResponse(
       {
@@ -67,11 +72,21 @@ export async function POST(req: NextRequest) {
       201
     );
 
+    // Access Token Cookie (7 Days)
     response.cookies.set('auth-token', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: ACCESS_TOKEN_MAX_AGE,
+      path: '/',
+    });
+
+    // Refresh Token Cookie (30 Days / 1 Month)
+    response.cookies.set('refresh-token', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: REFRESH_TOKEN_MAX_AGE,
       path: '/',
     });
 

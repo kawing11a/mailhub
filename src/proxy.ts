@@ -9,6 +9,12 @@ function getSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
+function getRefreshSecret(): Uint8Array {
+  const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET environment variable is required');
+  return new TextEncoder().encode(`${secret}_refresh`);
+}
+
 // Protected routes (dashboard)
 const protectedPaths = ['/inbox', '/labels', '/settings'];
 // Auth routes
@@ -26,15 +32,25 @@ export async function proxy(request: NextRequest) {
   }
 
   const token = request.cookies.get('auth-token')?.value;
+  const refreshToken = request.cookies.get('refresh-token')?.value;
 
-  // Try to verify token if it exists
+  // Try to verify access token first
   let isValid = false;
   if (token) {
     try {
       await jwtVerify(token, getSecret());
       isValid = true;
-    } catch (err) {
-      // Invalid or expired token
+    } catch {
+      isValid = false;
+    }
+  }
+
+  // If access token expired, check refresh token
+  if (!isValid && refreshToken) {
+    try {
+      await jwtVerify(refreshToken, getRefreshSecret());
+      isValid = true;
+    } catch {
       isValid = false;
     }
   }
