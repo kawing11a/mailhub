@@ -93,7 +93,7 @@ export function SearchModal() {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white/95 backdrop-blur-xl shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] transition-all border border-white/20 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-200">
+      <div className="mail-surface mail-float mail-rule relative w-full max-w-2xl overflow-hidden rounded-xl border transition-colors animate-in fade-in duration-200">
         <div className="flex items-center border-b border-gray-200 px-5 py-4">
           <Search className="h-6 w-6 text-gray-400 flex-shrink-0" />
           <input
@@ -135,7 +135,7 @@ export function SearchModal() {
                   return (
                   <li key={email.id} id={`search-result-${index}`}>
                     <button
-                      className={`w-full flex flex-col items-start px-3 py-3 rounded-xl transition-all duration-200 text-left group ${index === selectedIndex ? 'bg-gradient-to-r from-accent-50/80 to-transparent ring-1 ring-accent-200 shadow-sm transform scale-[1.01]' : 'hover:bg-gray-50/80 hover:scale-[1.005]'}`}
+                      className={`w-full flex flex-col items-start px-3 py-3 rounded-lg transition-colors duration-150 text-left group ${index === selectedIndex ? 'envelope-active bg-accent-50 ring-1 ring-accent-200' : 'hover:bg-gray-50'}`}
                       onMouseEnter={() => setSelectedIndex(index)}
                       onClick={() => {
                         setSearchOpen(false);

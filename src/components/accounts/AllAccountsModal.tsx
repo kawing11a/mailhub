@@ -297,7 +297,7 @@ export function AllAccountsModal() {
           onClick={() => setOpen(false)}
         />
 
-        <div className="relative flex h-[60vh] w-full transform flex-col overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:max-w-2xl">
+        <div className="mail-surface mail-float mail-rule relative flex h-[60vh] w-full transform flex-col overflow-hidden rounded-lg border text-left transition-colors sm:my-8 sm:max-w-2xl">
           <div className="flex flex-none items-center justify-between border-b border-gray-100 px-6 py-4">
             <h3 className="text-lg font-semibold leading-6 text-gray-900">All accounts</h3>
             <button

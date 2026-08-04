@@ -621,7 +621,7 @@ export function ComposeModal() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className="fixed bg-white shadow-2xl border border-gray-200 z-50 flex flex-col overflow-hidden"
+        className="mail-surface mail-float mail-rule fixed border z-50 flex flex-col overflow-hidden"
         style={modalStyle}
       >
         {/* Resize handles */}
@@ -654,7 +654,7 @@ export function ComposeModal() {
 
         {/* Header — drag handle */}
         <div
-          className="bg-gray-900 text-white px-4 py-2.5 flex items-center justify-between flex-shrink-0 select-none cursor-move"
+          className="bg-ink text-white px-4 py-2.5 flex items-center justify-between flex-shrink-0 select-none cursor-move"
           onMouseDown={handleHeaderMouseDown}
         >
           <span className="font-medium text-sm">New Message</span>
