@@ -163,7 +163,17 @@
 
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #172033;
+  --surface-paper: #ffffff;
+  --surface-ledger: #f6f8fb;
+  --surface-raised: #fbfcfe;
+  --text-ink: #172033;
+  --text-pencil: #667085;
+  --border-rule: #dde3ec;
+  --shadow-float: 0 18px 48px -24px rgb(23 32 51 / 28%);
+  --shadow-control: 0 1px 2px rgb(23 32 51 / 6%);
+  --radius-control: 0.5rem;
+  --motion-fast: 150ms;
 }
 
 @theme inline {
@@ -171,6 +181,25 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-paper: var(--surface-paper);
+  --color-ledger: var(--surface-ledger);
+  --color-raised: var(--surface-raised);
+  --color-ink: var(--text-ink);
+  --color-pencil: var(--text-pencil);
+  --color-rule: var(--border-rule);
+
+  --color-gray-50: #f6f8fb;
+  --color-gray-100: #edf1f6;
+  --color-gray-200: #dde3ec;
+  --color-gray-300: #c8d0dc;
+  --color-gray-400: #98a2b3;
+  --color-gray-500: #667085;
+  --color-gray-600: #4b5565;
+  --color-gray-700: #344054;
+  --color-gray-800: #263145;
+  --color-gray-900: #172033;
+  --color-gray-950: #101828;
   
   --color-accent-50: var(--accent-50);
   --color-accent-100: var(--accent-100);
@@ -261,7 +290,30 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.app-title {
+  color: var(--text-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: -0.025em;
+}
+
+.mail-surface { background-color: var(--surface-paper); }
+.ledger-surface { background-color: var(--surface-ledger); }
+.mail-rule { border-color: var(--border-rule); }
+.mail-float { box-shadow: var(--shadow-float); }
+
+.envelope-active {
+  box-shadow: inset 3px 0 0 var(--accent-500);
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  transition-duration: var(--motion-fast);
 }
 
 input, select, textarea {
@@ -336,12 +388,11 @@ input, select, textarea {
 }
 
 .dashboard-scope-switch:hover {
-  transform: translateY(-2px) scale(1.015);
   filter: saturate(1.08);
 }
 
 .dashboard-scope-switch:active {
-  transform: translateY(0) scale(0.97);
+  filter: saturate(0.96);
 }
 
 .dashboard-switch-active::before {
@@ -377,7 +428,6 @@ input, select, textarea {
 }
 
 .dashboard-stat-card:hover {
-  transform: translateY(-2px);
   box-shadow: 0 12px 28px -18px rgb(15 23 42 / 35%);
 }
 
