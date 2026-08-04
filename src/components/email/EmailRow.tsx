@@ -57,7 +57,7 @@ export function EmailRow({
       className={clsx(
         'group cursor-pointer border-b flex items-center px-[var(--spacing-density-col)] py-[var(--spacing-density-row)] transition-colors duration-150',
         isSelected 
-          ? 'bg-accent-50 border-b-accent-100 relative before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-accent-500' 
+          ? 'envelope-active bg-accent-50 border-b-accent-100 relative' 
           : isUnread 
             ? 'bg-white hover:bg-gray-50 border-b-gray-100' 
             : 'bg-gray-50/40 hover:bg-gray-100/50 border-b-gray-100',
