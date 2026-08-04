@@ -26,9 +26,9 @@ export default function DashboardLayout({
   return (
     <ThemeProvider>
       <ShortcutProvider>
-        <div className="flex h-screen overflow-hidden bg-white">
+        <div className="mail-surface flex h-screen overflow-hidden">
         {/* Mobile header (only visible on small screens) */}
-        <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-gray-200 z-30 flex items-center px-4">
+        <div className="mail-surface mail-rule md:hidden fixed top-0 left-0 right-0 h-14 border-b z-30 flex items-center px-4">
           <button 
             onClick={() => setMobileSidebarOpen(true)}
             className="p-2 -ml-2 text-gray-500 hover:text-gray-700"
@@ -41,7 +41,7 @@ export default function DashboardLayout({
         </div>
 
         <div className="hidden md:flex h-full">
-          <Suspense fallback={<div className="w-64 border-r border-gray-200 bg-gray-50 h-full" />}>
+          <Suspense fallback={<div className="ledger-surface mail-rule w-64 border-r h-full" />}>
             <Sidebar />
           </Suspense>
         </div>
@@ -75,7 +75,7 @@ function MobileSidebarOverlay() {
         className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm" 
         onClick={() => setMobileSidebarOpen(false)}
       />
-      <div className="relative w-64 max-w-sm bg-white h-full shadow-xl">
+      <div className="mail-surface mail-float relative w-64 max-w-sm h-full">
         <Sidebar />
       </div>
     </div>

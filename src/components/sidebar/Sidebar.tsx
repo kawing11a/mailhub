@@ -28,7 +28,7 @@ export function Sidebar() {
   const newEmailsCount = newEmails?.emails?.length || 0;
 
   return (
-    <div className="w-64 border-r border-gray-200 bg-gray-50 flex flex-col h-full overflow-hidden">
+    <div className="ledger-surface mail-rule w-64 border-r flex flex-col h-full overflow-hidden">
       <div className="flex-none p-4 pb-2">
         <button
           onClick={() => setComposeModalOpen(true)}
@@ -44,7 +44,7 @@ export function Sidebar() {
           className={clsx(
             "w-full flex items-center justify-between px-3 py-2 rounded-md font-medium transition-colors text-sm",
             (pathname === '/all-emails' || pathname === '/new-emails')
-              ? 'bg-accent-100 text-accent-900'
+              ? 'envelope-active bg-accent-100 text-accent-900'
               : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
           )}
         >
@@ -64,7 +64,7 @@ export function Sidebar() {
         <AccountsSection />
       </div>
 
-      <div className="flex-none p-3 border-t border-gray-200 space-y-2">
+      <div className="mail-rule flex-none p-3 border-t space-y-2">
         <InstallPWAButton variant="sidebar" />
         <div className="flex items-center justify-end space-x-1">
           <button
