@@ -37,7 +37,7 @@
     "dotenv": "^16.4.7",
     "geist": "^1.7.2",
     "imap-simple": "^5.1.0",
-    "imapflow": "^1.4.2",
+    "imapflow": "^1.6.5",
     "ioredis": "^5.11.1",
     "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.3",
