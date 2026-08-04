@@ -2,11 +2,12 @@
 
 import { KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Tag, Loader2, Plus, Check } from 'lucide-react';
+import { Tag, Loader2, Plus, Check, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
 
 export function LabelSection() {
   const pathname = usePathname();
@@ -14,6 +15,7 @@ export function LabelSection() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [labelName, setLabelName] = useState('');
+  const [isSummarizeModalOpen, setIsSummarizeModalOpen] = useState(false);
 
   const { data: labelsData, isLoading } = useQuery({
     queryKey: ['labels'],
@@ -75,16 +77,32 @@ export function LabelSection() {
         <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
           Labels
         </p>
-        <button
-          type="button"
-          onClick={() => setIsCreating(true)}
-          className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
-          aria-label="Add label"
-          disabled={isCreating}
-        >
-          <Plus className="w-4 h-4" />
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={() => setIsSummarizeModalOpen(true)}
+            className="text-purple-600 hover:text-purple-800 transition-colors"
+            aria-label="AI Summary by label"
+            title="Summarize emails by label with AI"
+          >
+            <Sparkles className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsCreating(true)}
+            className="text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-40"
+            aria-label="Add label"
+            disabled={isCreating}
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      <SummarizeLabelModal
+        isOpen={isSummarizeModalOpen}
+        onClose={() => setIsSummarizeModalOpen(false)}
+      />
 
       {isCreating && (
         <div className="label-create-enter mx-1 flex items-stretch overflow-hidden rounded-md border border-accent-300 bg-white shadow-sm focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-100">
