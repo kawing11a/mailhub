@@ -1,7 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@/lib/db/prisma';
-import { generateEmailBatchSummary } from '@/lib/ai/summary-service';
+import { meilisearch } from '@/lib/search/meilisearch';
+import { generateEmailBatchSummary, EmailForSummary } from '@/lib/ai/summary-service';
 import { dispatchWebhookNotification, WebhookDispatchResult } from '@/lib/notifications';
 
 const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
@@ -75,27 +76,101 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     });
     const assignedAccountIds = assignedAccounts.map((a) => a.accountId);
 
-    // Query emails matching either direct email tag or assigned account
-    const emailsToSummarize = await prisma.email.findMany({
-      where: {
-        account: { organizationId },
-        ...(timeFilter && { receivedAt: timeFilter }),
-        OR: [
-          { emailLabels: { some: { labelId } } },
-          ...(assignedAccountIds.length > 0 ? [{ accountId: { in: assignedAccountIds } }] : []),
-        ],
-      },
-      select: {
-        id: true,
-        subject: true,
-        fromName: true,
-        fromAddress: true,
-        snippet: true,
-        receivedAt: true,
-      },
-      orderBy: { receivedAt: 'desc' },
-      ...(limit && limit > 0 ? { take: limit } : {}),
-    });
+    // Attempt Meilisearch query first for fast recency-ranked email retrieval
+    let emailIdsFromMeilisearch: string[] = [];
+    try {
+      const filterParts: string[] = [`organizationId = "${organizationId}"`];
+
+      const labelAccountFilters: string[] = [`labelIds = "${labelId}"`];
+      if (assignedAccountIds.length > 0) {
+        labelAccountFilters.push(`accountId IN [${assignedAccountIds.map((id) => `"${id}"`).join(', ')}]`);
+      }
+      filterParts.push(`(${labelAccountFilters.join(' OR ')})`);
+
+      if (timeRangeHours && timeRangeHours > 0) {
+        const minTimestamp = Date.now() - timeRangeHours * 60 * 60 * 1000;
+        filterParts.push(`receivedAt >= ${minTimestamp}`);
+      }
+
+      const searchRes = await meilisearch.index('emails').search('', {
+        filter: filterParts.join(' AND '),
+        sort: ['receivedAt:desc'],
+        limit: limit && limit > 0 ? limit : 100,
+      });
+
+      emailIdsFromMeilisearch = (searchRes.hits || []).map((hit: any) => hit.id);
+    } catch (searchError) {
+      console.warn('Meilisearch email query failed, falling back to PostgreSQL query:', searchError);
+    }
+
+    let rawEmails: Array<{
+      id: string;
+      subject: string | null;
+      fromName: string | null;
+      fromAddress: string | null;
+      snippet: string | null;
+      receivedAt: Date | null;
+      body: { bodyText: string | null } | null;
+    }> = [];
+
+    if (emailIdsFromMeilisearch.length > 0) {
+      rawEmails = await prisma.email.findMany({
+        where: {
+          id: { in: emailIdsFromMeilisearch },
+        },
+        select: {
+          id: true,
+          subject: true,
+          fromName: true,
+          fromAddress: true,
+          snippet: true,
+          receivedAt: true,
+          body: {
+            select: {
+              bodyText: true,
+            },
+          },
+        },
+        orderBy: { receivedAt: 'desc' },
+      });
+    } else {
+      // Fallback query matching either direct email tag or assigned account
+      rawEmails = await prisma.email.findMany({
+        where: {
+          account: { organizationId },
+          ...(timeFilter && { receivedAt: timeFilter }),
+          OR: [
+            { emailLabels: { some: { labelId } } },
+            ...(assignedAccountIds.length > 0 ? [{ accountId: { in: assignedAccountIds } }] : []),
+          ],
+        },
+        select: {
+          id: true,
+          subject: true,
+          fromName: true,
+          fromAddress: true,
+          snippet: true,
+          receivedAt: true,
+          body: {
+            select: {
+              bodyText: true,
+            },
+          },
+        },
+        orderBy: { receivedAt: 'desc' },
+        ...(limit && limit > 0 ? { take: limit } : {}),
+      });
+    }
+
+    const emailsToSummarize: EmailForSummary[] = rawEmails.map((e) => ({
+      id: e.id,
+      subject: e.subject,
+      fromName: e.fromName,
+      fromAddress: e.fromAddress,
+      snippet: e.snippet,
+      bodyText: e.body?.bodyText || null,
+      receivedAt: e.receivedAt,
+    }));
 
     // 5. Generate AI Summary
     const summaryText = await generateEmailBatchSummary({
