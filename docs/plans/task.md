@@ -11,5 +11,5 @@
 | task-7 | Ask clarifying questions | done |
 | task-8 | Propose 2-3 approaches | done |
 | task-9 | Present design | done |
-| task-10 | Write design doc | in_progress |
-| task-11 | Transition to implementation | pending |
+| task-10 | Write design doc | done |
+| task-11 | Transition to implementation | in_progress |
