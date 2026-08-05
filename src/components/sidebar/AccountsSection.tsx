@@ -421,7 +421,11 @@ export function AccountsSection() {
     }
     const queryString = params.toString();
     const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') || pathname.startsWith('/labels') ? pathname : '/inbox';
-    window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    if (pathname !== targetPath) {
+      router.push(`${targetPath}?${queryString}`);
+    } else {
+      window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    }
   };
 
   const sensors = useSensors(
@@ -504,7 +508,11 @@ export function AccountsSection() {
     params.delete('readStatus');
     const queryString = params.toString();
     const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') ? pathname : '/inbox';
-    window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    if (pathname !== targetPath) {
+      router.push(`${targetPath}?${queryString}`);
+    } else {
+      window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    }
   };
 
   const handleFolderSelect = (folderId: string) => {
@@ -514,7 +522,11 @@ export function AccountsSection() {
     params.delete('emailId');
     const queryString = params.toString();
     const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') || pathname.startsWith('/labels') ? pathname : '/inbox';
-    window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    if (pathname !== targetPath) {
+      router.push(`${targetPath}?${queryString}`);
+    } else {
+      window.history.pushState(null, '', `${targetPath}?${queryString}`);
+    }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {

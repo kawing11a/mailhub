@@ -12,4 +12,6 @@
 | task-8 | Propose 2-3 approaches | done |
 | task-9 | Present design | done |
 | task-10 | Write design doc | done |
-| task-11 | Transition to implementation | in_progress |
+| task-11 | Transition to implementation | done |
+| task-12 | Task 1: Create Backend Unsaved Credential Testing API Endpoint | done |
+| task-13 | Task 2: Enhance AddAccountModal with Credential Testing & Form Reset | done |

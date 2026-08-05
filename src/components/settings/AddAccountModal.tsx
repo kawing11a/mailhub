@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Loader2, Mail, ArrowLeft } from 'lucide-react';
+import { X, Loader2, Mail, ArrowLeft, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { createAccountSchema, type CreateAccountInput } from '@/lib/validation/schemas';
 
 interface AddAccountModalProps {
@@ -21,11 +21,22 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
   const [provider, setProvider] = useState<ProviderType>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [testResult, setTestResult] = useState<{
+    ok?: boolean;
+    imap?: boolean;
+    smtp?: boolean;
+    imapError?: string;
+    smtpError?: string;
+  } | null>(null);
+
   // --- IMAP Form Setup ---
   const {
     register: registerImap,
     handleSubmit: handleImapSubmit,
     reset: resetImap,
+    watch: watchImap,
+    getValues: getImapValues,
     formState: { errors: imapErrors },
   } = useForm<CreateAccountInput>({
     resolver: zodResolver(createAccountSchema),
@@ -36,6 +47,56 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
       smtpSecure: true,
       imapPort: 993,
       smtpPort: 465,
+    },
+  });
+
+  const watchedConnectionFields = watchImap([
+    'emailAddress',
+    'username',
+    'password',
+    'imapHost',
+    'imapPort',
+    'smtpHost',
+    'smtpPort',
+    'imapSecure',
+    'smtpSecure',
+  ]);
+
+  useEffect(() => {
+    setTestStatus('idle');
+    setTestResult(null);
+  }, [JSON.stringify(watchedConnectionFields)]);
+
+  const testMutation = useMutation({
+    mutationFn: async () => {
+      const data = getImapValues();
+      setTestStatus('testing');
+      setSubmitError(null);
+      setTestResult(null);
+
+      const res = await fetch('/api/accounts/test-credentials', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to test credentials');
+      }
+      return json;
+    },
+    onSuccess: (data) => {
+      setTestResult(data);
+      if (data.ok) {
+        setTestStatus('success');
+      } else {
+        setTestStatus('error');
+      }
+    },
+    onError: (error: Error) => {
+      setTestStatus('error');
+      setSubmitError(error.message || 'Credential test failed');
     },
   });
 
@@ -96,6 +157,8 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
     setStep('provider-selection');
     setProvider(null);
     setSubmitError(null);
+    setTestStatus('idle');
+    setTestResult(null);
     resetImap();
     setOauthEmail('');
     setOauthLabel('');
@@ -373,22 +436,89 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
 
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={handleClose}
-                    className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={imapMutation.isPending}
-                    className="inline-flex items-center justify-center rounded-md border border-transparent bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 disabled:opacity-50"
-                  >
-                    {imapMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Connect Account
-                  </button>
+                {/* Test Feedback Banners */}
+                {testStatus === 'success' && (
+                  <div className="rounded-md bg-green-50 p-4 border border-green-200 text-sm text-green-800 flex items-start space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">Credentials Verified Successfully</p>
+                      <p className="text-xs text-green-700 mt-0.5">
+                        Both IMAP (incoming) and SMTP (outgoing) connection tests passed cleanly. You can now connect this account.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {testStatus === 'error' && (
+                  <div className="rounded-md bg-red-50 p-4 border border-red-200 text-sm text-red-800 space-y-2">
+                    <div className="flex items-center space-x-2 font-semibold">
+                      <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                      <span>Credential Verification Failed</span>
+                    </div>
+                    <ul className="text-xs space-y-1 pl-7 list-disc">
+                      {testResult?.imapError && (
+                        <li><strong>IMAP Error:</strong> {testResult.imapError}</li>
+                      )}
+                      {testResult?.smtpError && (
+                        <li><strong>SMTP Error:</strong> {testResult.smtpError}</li>
+                      )}
+                      {!testResult?.imapError && !testResult?.smtpError && submitError && (
+                        <li>{submitError}</li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="mt-6 flex items-center justify-between pt-4 border-t border-gray-200">
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => testMutation.mutate()}
+                      disabled={testStatus === 'testing' || imapMutation.isPending}
+                      className="inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    >
+                      {testStatus === 'testing' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2 text-accent-600" />
+                          Testing Connection...
+                        </>
+                      ) : testStatus === 'success' ? (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-green-600 mr-2" />
+                          Re-test Credentials
+                        </>
+                      ) : (
+                        <>
+                          <ShieldCheck className="w-4 h-4 text-accent-600 mr-2" />
+                          Test Credentials
+                        </>
+                      )}
+                    </button>
+                    {testStatus !== 'success' && (
+                      <span className="text-xs text-amber-600 font-medium">
+                        * Must test credentials before connecting
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={handleClose}
+                      className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={testStatus !== 'success' || imapMutation.isPending}
+                      title={testStatus !== 'success' ? 'Please test credentials before connecting' : undefined}
+                      className="inline-flex items-center justify-center rounded-md border border-transparent bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-accent-700 disabled:opacity-50 transition-colors"
+                    >
+                      {imapMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                      Connect Account
+                    </button>
+                  </div>
                 </div>
               </form>
             )}
