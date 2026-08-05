@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { Sparkles } from 'lucide-react';
 import type { AccountLabel } from '@/components/accounts/LabelFilterMenu';
-import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
+import { useSummaryStore } from '@/stores/summaryStore';
 
 /** Translucent version of a label colour, for the unselected chip background. */
 function hexToRgba(hex: string, alpha: number): string {
@@ -38,7 +38,7 @@ export function LabelFilterChips({
   onSelect: (labelId: string | null) => void;
   wrap?: boolean;
 }) {
-  const [isSummarizeOpen, setIsSummarizeOpen] = useState(false);
+  const openSummaryModal = useSummaryStore((s) => s.openSummaryModal);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef({
     active: false,
@@ -153,7 +153,7 @@ export function LabelFilterChips({
 
       <button
         type="button"
-        onClick={() => setIsSummarizeOpen(true)}
+        onClick={() => openSummaryModal(selectedLabelId || undefined)}
         title="Summarize emails by label using AI"
         className="flex-none cursor-pointer select-none rounded-full border border-purple-300 bg-purple-50 text-purple-700 hover:bg-purple-100 px-2.5 py-1 text-xs font-semibold whitespace-nowrap transition-colors flex items-center space-x-1"
       >
@@ -182,12 +182,6 @@ export function LabelFilterChips({
           </button>
         );
       })}
-
-      <SummarizeLabelModal
-        isOpen={isSummarizeOpen}
-        onClose={() => setIsSummarizeOpen(false)}
-        initialLabelId={selectedLabelId || undefined}
-      />
     </>
   );
 

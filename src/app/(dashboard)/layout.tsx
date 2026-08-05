@@ -7,6 +7,8 @@ import { useSSE } from '@/hooks/useSSE';
 
 import { SearchModal } from '@/components/search/SearchModal';
 import { AllAccountsModal } from '@/components/accounts/AllAccountsModal';
+import { FloatingSummaryWidget } from '@/components/labels/floating-summary-widget';
+import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
 import { ShortcutProvider } from '@/components/providers/ShortcutProvider';
 import { Menu } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
@@ -56,6 +58,8 @@ export default function DashboardLayout({
         <ComposeModal />
         <SearchModal />
         <AllAccountsModal />
+        <SummarizeLabelModal />
+        <FloatingSummaryWidget />
         <ToastLimit />
         <Toaster position="bottom-right" />
         </div>

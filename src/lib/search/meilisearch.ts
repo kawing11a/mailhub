@@ -27,6 +27,9 @@ export async function initMeilisearch() {
       'hasAttachments',
       'labelIds',
       'organizationId',
+      'receivedAt',
+      'sentAt',
+      'threadId',
     ],
     sortableAttributes: [
       'receivedAt',

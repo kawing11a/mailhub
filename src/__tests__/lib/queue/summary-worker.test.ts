@@ -22,6 +22,7 @@ jest.mock('../../../lib/db/prisma', () => ({
     emailSummaryRun: {
       findUnique: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     experimentSetting: {
       findUnique: jest.fn(),
@@ -57,9 +58,8 @@ describe('Email Summary Worker', () => {
   });
 
   test('queries Meilisearch for matching email IDs and summarizes fetched emails', async () => {
-    (prisma.emailSummaryRun.findUnique as jest.Mock).mockResolvedValueOnce({
-      id: 'run-1',
-      status: 'QUEUED',
+    (prisma.emailSummaryRun.updateMany as jest.Mock).mockResolvedValueOnce({
+      count: 1,
     });
 
     (prisma.experimentSetting.findUnique as jest.Mock).mockResolvedValueOnce({
@@ -112,10 +112,26 @@ describe('Email Summary Worker', () => {
     }));
   });
 
+  test('skips execution if summary run is already claimed or not in QUEUED status', async () => {
+    (prisma.emailSummaryRun.updateMany as jest.Mock).mockResolvedValueOnce({
+      count: 0,
+    });
+
+    await executeSummaryRun({
+      summaryRunId: 'run-already-running',
+      organizationId: 'org-1',
+      userId: 'user-1',
+      labelId: 'label-1',
+      limit: 25,
+    });
+
+    expect(generateEmailBatchSummary).not.toHaveBeenCalled();
+    expect(prisma.email.findMany).not.toHaveBeenCalled();
+  });
+
   test('falls back gracefully to DB query if Meilisearch search fails', async () => {
-    (prisma.emailSummaryRun.findUnique as jest.Mock).mockResolvedValueOnce({
-      id: 'run-2',
-      status: 'QUEUED',
+    (prisma.emailSummaryRun.updateMany as jest.Mock).mockResolvedValueOnce({
+      count: 1,
     });
 
     (prisma.experimentSetting.findUnique as jest.Mock).mockResolvedValueOnce({

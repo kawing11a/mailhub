@@ -20,7 +20,33 @@ export async function GET(
       return apiError('Summary run not found', 404);
     }
 
-    return apiResponse(summaryRun);
+    const { getAgentRunState } = await import('@/lib/ai/agent-tracker');
+    const liveAgentState = await getAgentRunState(id);
+
+    return apiResponse({
+      ...summaryRun,
+      agentState: liveAgentState || {
+        runId: summaryRun.id,
+        status: summaryRun.status,
+        currentStepTitle:
+          summaryRun.status === 'COMPLETED'
+            ? 'AI Summary Completed'
+            : summaryRun.status === 'FAILED'
+            ? 'Summary Failed'
+            : 'Processing email summary...',
+        currentStepDetail: summaryRun.errorMessage || undefined,
+        emailCount: summaryRun.emailCount,
+        summaryText: summaryRun.summaryText,
+        errorMessage: summaryRun.errorMessage,
+        webhookLogs: summaryRun.webhookLogs,
+        logs: [],
+        startedAt: summaryRun.createdAt.toISOString(),
+        completedAt:
+          summaryRun.status === 'COMPLETED' || summaryRun.status === 'FAILED'
+            ? summaryRun.updatedAt.toISOString()
+            : undefined,
+      },
+    });
   } catch (err: any) {
     return apiError(err.message || 'Failed to fetch summary run status', 500);
   }

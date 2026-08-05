@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
+import { useSummaryStore } from '@/stores/summaryStore';
 
 export function LabelSection() {
   const pathname = usePathname();
@@ -15,7 +15,7 @@ export function LabelSection() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [labelName, setLabelName] = useState('');
-  const [isSummarizeModalOpen, setIsSummarizeModalOpen] = useState(false);
+  const openSummaryModal = useSummaryStore((s) => s.openSummaryModal);
 
   const { data: labelsData, isLoading } = useQuery({
     queryKey: ['labels'],
@@ -80,7 +80,7 @@ export function LabelSection() {
         <div className="flex items-center space-x-2">
           <button
             type="button"
-            onClick={() => setIsSummarizeModalOpen(true)}
+            onClick={() => openSummaryModal()}
             className="text-purple-600 hover:text-purple-800 transition-colors"
             aria-label="AI Summary by label"
             title="Summarize emails by label with AI"
@@ -98,11 +98,6 @@ export function LabelSection() {
           </button>
         </div>
       </div>
-
-      <SummarizeLabelModal
-        isOpen={isSummarizeModalOpen}
-        onClose={() => setIsSummarizeModalOpen(false)}
-      />
 
       {isCreating && (
         <div className="label-create-enter mx-1 flex items-stretch overflow-hidden rounded-md border border-accent-300 bg-white shadow-sm focus-within:border-accent-500 focus-within:ring-2 focus-within:ring-accent-100">

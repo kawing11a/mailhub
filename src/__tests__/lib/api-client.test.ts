@@ -53,8 +53,8 @@ describe('Frontend API Client & Token Refresh Interceptor', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: 'success' }) });
     });
 
-    window.fetch = fetchMock;
-    global.fetch = fetchMock;
+    window.fetch = fetchMock as any;
+    global.fetch = fetchMock as any;
     setupGlobalFetchInterceptor();
 
     const response = await window.fetch('/api/emails');

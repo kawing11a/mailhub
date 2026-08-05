@@ -4,6 +4,11 @@ import { prisma } from '@/lib/db/prisma';
 import { meilisearch } from '@/lib/search/meilisearch';
 import { generateEmailBatchSummary, EmailForSummary } from '@/lib/ai/summary-service';
 import { dispatchWebhookNotification, WebhookDispatchResult } from '@/lib/notifications';
+import {
+  updateAgentStep,
+  completeAgentRun,
+  failAgentRun,
+} from '@/lib/ai/agent-tracker';
 
 const workerRedis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
@@ -28,26 +33,38 @@ export interface SummaryJobPayload {
 export async function executeSummaryRun(payload: SummaryJobPayload): Promise<void> {
   const { summaryRunId, organizationId, labelId, webhookIds, timeRangeHours, limit = 25 } = payload;
 
-  const summaryRun = await prisma.emailSummaryRun.findUnique({
-    where: { id: summaryRunId },
+  // Atomically claim the job by transitioning status from QUEUED -> SUMMARIZING
+  const claimResult = await prisma.emailSummaryRun.updateMany({
+    where: {
+      id: summaryRunId,
+      status: 'QUEUED',
+    },
+    data: {
+      status: 'SUMMARIZING',
+    },
   });
 
-  if (!summaryRun) {
-    console.warn(`EmailSummaryRun ${summaryRunId} not found.`);
-    return;
-  }
-
-  // Prevent re-processing if already completed or actively in progress
-  if (summaryRun.status === 'COMPLETED' || summaryRun.status === 'SUMMARIZING' || summaryRun.status === 'NOTIFYING') {
+  if (claimResult.count === 0) {
+    console.log(`EmailSummaryRun ${summaryRunId} is already in progress, completed, or does not exist. Skipping duplicate execution.`);
     return;
   }
 
   try {
-    // 1. Update status to SUMMARIZING
-    await prisma.emailSummaryRun.update({
-      where: { id: summaryRunId },
-      data: { status: 'SUMMARIZING' },
-    });
+
+    await updateAgentStep(
+      summaryRunId,
+      {
+        id: 'step-config',
+        step: 'INITIALIZING',
+        title: 'Verifying AI settings & configuration',
+        detail: 'Loading organization experiment settings and checking provider authorization...',
+        status: 'running',
+      },
+      {
+        status: 'INITIALIZING',
+        currentStepTitle: 'Verifying AI configuration...',
+      }
+    );
 
     // 2. Fetch AI settings
     const settings = await prisma.experimentSetting.findUnique({
@@ -57,6 +74,20 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     if (settings && settings.isAiEnabled === false) {
       throw new Error('AI features are currently disabled for this organization.');
     }
+
+    const provider = settings?.aiProvider || 'openai';
+    const modelName = settings?.aiModelName || 'gpt-4o-mini';
+
+    await updateAgentStep(summaryRunId, {
+      id: 'step-config',
+      step: 'INITIALIZING',
+      title: 'Configuration verified',
+      detail: `Active Provider: ${provider.toUpperCase()} | Model: ${modelName}`,
+      status: 'completed',
+    }, {
+      provider,
+      modelName,
+    });
 
     // 3. Fetch label details
     const label = await prisma.label.findUnique({
@@ -76,7 +107,34 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     });
     const assignedAccountIds = assignedAccounts.map((a) => a.accountId);
 
-    // Attempt Meilisearch query first for fast recency-ranked email retrieval
+    const timeFilterDesc = timeRangeHours && timeRangeHours > 0 ? `Past ${timeRangeHours}h` : 'All time';
+    const limitDesc = limit && limit > 0 ? `Max ${limit} emails` : 'Unlimited';
+
+    await updateAgentStep(
+      summaryRunId,
+      {
+        id: 'step-accounts',
+        step: 'RESOLVING_ACCOUNTS',
+        title: `Resolved label "${labelName}" and accounts`,
+        detail: `Found ${assignedAccountIds.length} linked accounts | Time window: ${timeFilterDesc} | Limit: ${limitDesc}`,
+        status: 'completed',
+      },
+      {
+        status: 'SEARCHING_EMAILS',
+        currentStepTitle: `Scanning emails for label "${labelName}"...`,
+        currentStepDetail: `Time filter: ${timeFilterDesc}`,
+      }
+    );
+
+    // 5. Attempt Meilisearch query first for fast recency-ranked email retrieval
+    await updateAgentStep(summaryRunId, {
+      id: 'step-search',
+      step: 'SEARCHING_EMAILS',
+      title: 'Querying search engine for matching emails',
+      detail: 'Executing hybrid vector search with label and time filters in Meilisearch...',
+      status: 'running',
+    });
+
     let emailIdsFromMeilisearch: string[] = [];
     try {
       const filterParts: string[] = [`organizationId = "${organizationId}"`];
@@ -133,6 +191,14 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         },
         orderBy: { receivedAt: 'desc' },
       });
+
+      await updateAgentStep(summaryRunId, {
+        id: 'step-search',
+        step: 'SEARCHING_EMAILS',
+        title: 'Search completed via Meilisearch',
+        detail: `Found ${rawEmails.length} relevant candidate emails via fast index ranking.`,
+        status: 'completed',
+      });
     } else {
       // Fallback query matching either direct email tag or assigned account
       rawEmails = await prisma.email.findMany({
@@ -160,6 +226,14 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         orderBy: { receivedAt: 'desc' },
         ...(limit && limit > 0 ? { take: limit } : {}),
       });
+
+      await updateAgentStep(summaryRunId, {
+        id: 'step-search',
+        step: 'SEARCHING_EMAILS',
+        title: 'Search completed via PostgreSQL',
+        detail: `Retrieved ${rawEmails.length} matching emails directly from PostgreSQL database.`,
+        status: 'completed',
+      });
     }
 
     const emailsToSummarize: EmailForSummary[] = rawEmails.map((e) => ({
@@ -172,18 +246,51 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       receivedAt: e.receivedAt,
     }));
 
-    // 5. Generate AI Summary
+    // 6. Preparing payload and prompting AI
+    await updateAgentStep(
+      summaryRunId,
+      {
+        id: 'step-extract',
+        step: 'EXTRACTING_EMAILS',
+        title: `Constructed batch of ${emailsToSummarize.length} emails`,
+        detail: `Sanitized snippets & full message bodies into structured context for ${modelName}.`,
+        status: 'completed',
+      },
+      {
+        status: 'AI_SUMMARIZING',
+        emailCount: emailsToSummarize.length,
+        currentStepTitle: `AI model analyzing ${emailsToSummarize.length} emails...`,
+        currentStepDetail: `Provider: ${provider} (${modelName})`,
+      }
+    );
+
+    await updateAgentStep(summaryRunId, {
+      id: 'step-ai',
+      step: 'AI_SUMMARIZING',
+      title: 'Synthesizing threads and executive summary',
+      detail: `Prompting ${provider} (${modelName}) with instructions to distill key topics, updates, and action items...`,
+      status: 'running',
+    });
+
     const summaryText = await generateEmailBatchSummary({
-      provider: settings?.aiProvider || 'openai',
+      provider,
       apiKey: settings?.aiApiKey,
       baseUrl: settings?.aiBaseUrl,
-      modelName: settings?.aiModelName || 'gpt-4o-mini',
+      modelName,
       customPrompt: settings?.aiCustomPrompt,
       labelName,
       emails: emailsToSummarize,
     });
 
-    // 6. Update status to NOTIFYING
+    await updateAgentStep(summaryRunId, {
+      id: 'step-ai',
+      step: 'AI_SUMMARIZING',
+      title: 'AI synthesis completed',
+      detail: `Generated comprehensive summary (${summaryText.length} characters).`,
+      status: 'completed',
+    });
+
+    // 7. Update status to NOTIFYING
     await prisma.emailSummaryRun.update({
       where: { id: summaryRunId },
       data: {
@@ -193,7 +300,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       },
     });
 
-    // 7. Dispatch Webhooks
+    // 8. Dispatch Webhooks
     const webhookLogs: WebhookDispatchResult[] = [];
 
     if (webhookIds && webhookIds.length > 0) {
@@ -205,19 +312,45 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         },
       });
 
-      for (const webhook of webhooks) {
-        const dispatchRes = await dispatchWebhookNotification({
-          type: webhook.type as any,
-          config: webhook.config,
-          labelName,
-          summaryText,
-          emailCount: emailsToSummarize.length,
+      if (webhooks.length > 0) {
+        await updateAgentStep(
+          summaryRunId,
+          {
+            id: 'step-webhooks',
+            step: 'DISPATCHING_NOTIFICATIONS',
+            title: `Dispatching to ${webhooks.length} webhook channels`,
+            detail: `Sending payload to: ${webhooks.map((w) => `${w.name} (${w.type})`).join(', ')}`,
+            status: 'running',
+          },
+          {
+            status: 'NOTIFYING',
+            currentStepTitle: `Dispatching notifications to ${webhooks.length} channels...`,
+          }
+        );
+
+        for (const webhook of webhooks) {
+          const dispatchRes = await dispatchWebhookNotification({
+            type: webhook.type as any,
+            config: webhook.config,
+            labelName,
+            summaryText,
+            emailCount: emailsToSummarize.length,
+          });
+          webhookLogs.push(dispatchRes);
+        }
+
+        const successCount = webhookLogs.filter((w) => w.success).length;
+        await updateAgentStep(summaryRunId, {
+          id: 'step-webhooks',
+          step: 'DISPATCHING_NOTIFICATIONS',
+          title: 'Webhook notifications dispatched',
+          detail: `Delivered to ${successCount}/${webhooks.length} channels successfully.`,
+          status: 'completed',
         });
-        webhookLogs.push(dispatchRes);
       }
     }
 
-    // 8. Update run as COMPLETED
+    // 9. Update run as COMPLETED
     await prisma.emailSummaryRun.update({
       where: { id: summaryRunId },
       data: {
@@ -225,6 +358,8 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         webhookLogs: webhookLogs as any,
       },
     });
+
+    await completeAgentRun(summaryRunId, summaryText, emailsToSummarize.length, webhookLogs);
 
     console.log(`Successfully completed email summary run ${summaryRunId}`);
   } catch (err: unknown) {
@@ -238,6 +373,8 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         errorMessage: errorMsg,
       },
     });
+
+    await failAgentRun(summaryRunId, errorMsg);
     throw err;
   }
 }

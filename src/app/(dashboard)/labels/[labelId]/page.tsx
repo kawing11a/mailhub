@@ -5,14 +5,14 @@ import { useSearchParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { EmailRow } from '@/components/email/EmailRow';
 import { EmailViewer } from '@/components/email/EmailViewer';
-import { SummarizeLabelModal } from '@/components/labels/summarize-label-modal';
+import { useSummaryStore } from '@/stores/summaryStore';
 import { Loader2, Sparkles } from 'lucide-react';
 
 function LabelContent({ labelId }: { labelId: string }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const selectedEmailId = searchParams.get('emailId');
-  const [isSummarizeModalOpen, setIsSummarizeModalOpen] = useState(false);
+  const openSummaryModal = useSummaryStore((s) => s.openSummaryModal);
 
   const handleSelectEmail = (id: string | null) => {
     const newParams = new URLSearchParams(searchParams.toString());
@@ -63,7 +63,7 @@ function LabelContent({ labelId }: { labelId: string }) {
             </h2>
           </div>
           <button
-            onClick={() => setIsSummarizeModalOpen(true)}
+            onClick={() => openSummaryModal(labelId, label?.name)}
             className="px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs font-semibold rounded-md transition-colors flex items-center space-x-1"
             title="Summarize emails in this label using AI"
           >
@@ -71,12 +71,6 @@ function LabelContent({ labelId }: { labelId: string }) {
             <span>AI Summary</span>
           </button>
         </div>
-
-        <SummarizeLabelModal
-          isOpen={isSummarizeModalOpen}
-          onClose={() => setIsSummarizeModalOpen(false)}
-          initialLabelId={labelId}
-        />
         
         <div className="flex-1 overflow-y-auto">
           {isLoading ? (
