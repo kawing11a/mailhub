@@ -98,4 +98,71 @@ describe('AI LLM Email Summarization Service', () => {
       })
     );
   });
+
+  test('includes cleaned bodyText in single pass prompt when bodyText is provided', async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        choices: [{ message: { content: 'Summary of body text email' } }],
+      }),
+    });
+
+    const summary = await generateEmailBatchSummary({
+      provider: 'openai',
+      apiKey: 'sk-test-key',
+      labelName: 'Support',
+      emails: [
+        {
+          id: '10',
+          subject: 'Full Body Email',
+          bodyText: '<p>Hello <b>World</b>!</p><script>alert("xss")</script> This is full body content.',
+        },
+      ],
+    });
+
+    expect(summary).toBe('Summary of body text email');
+    const fetchBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    const userMessageContent = fetchBody.messages.find((m: { role: string }) => m.role === 'user').content;
+    expect(userMessageContent).toContain('This is full body content.');
+    expect(userMessageContent).not.toContain('<script>');
+  });
+
+  test('triggers Map-Reduce chunked summarization for email batches exceeding threshold', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: '- Chunk 1 summary' } }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: '- Chunk 2 summary' } }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ choices: [{ message: { content: 'Final reduced executive summary' } }] }),
+      });
+
+    const dummyEmails = Array.from({ length: 25 }, (_, i) => ({
+      id: `email-${i}`,
+      subject: `Subject ${i}`,
+      snippet: `Snippet ${i}`,
+      bodyText: `Full body content for email ${i}`,
+    }));
+
+    const summary = await generateEmailBatchSummary({
+      provider: 'openai',
+      apiKey: 'sk-test-key',
+      labelName: 'Support',
+      emails: dummyEmails,
+      chunkSize: 15,
+    });
+
+    expect(summary).toBe('Final reduced executive summary');
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+  });
 });
+
