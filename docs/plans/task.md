@@ -15,3 +15,20 @@
 | task-11 | Transition to implementation | done |
 | task-12 | Task 1: Create Backend Unsaved Credential Testing API Endpoint | done |
 | task-13 | Task 2: Enhance AddAccountModal with Credential Testing & Form Reset | done |
+| task-14 | Explore project context for email toolbox, AI compose draft, and AI explanation features | done |
+| task-15 | Ask clarifying questions | done |
+| task-16 | Propose 2-3 approaches | done |
+| task-17 | Present design sections | done |
+| task-18 | Write design doc | done |
+| task-19 | Transition to implementation plan | done |
+| task-20 | Task 1: Backend AI API Routes (/api/ai/draft, /api/ai/explain, /api/ai/toolbox) | done |
+| task-21 | Task 2: AI Compose Draft Assistant (ComposeAiWriter.tsx) | done |
+| task-22 | Task 3: Email Detail AI Explanation Panel (EmailExplainPanel.tsx) | done |
+| task-23 | Task 4: Email AI Toolbox (EmailToolbox.tsx) | done |
+| task-24 | Explore context & codebase for AI writer context extraction | done |
+| task-25 | Clarify requirements & propose approaches | done |
+| task-26 | Present design and write design doc | done |
+| task-27 | Create implementation plan | done |
+| task-28 | Task 1: Create Clean Text Extractor Utility with Unit Tests | done |
+| task-29 | Task 2: Backend AI API Route Sanitization & Tests | done |
+| task-30 | Task 3: Frontend Reply Context Sanitization & Full Verification | done |

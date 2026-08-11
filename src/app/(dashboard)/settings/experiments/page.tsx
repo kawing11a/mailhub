@@ -270,9 +270,11 @@ export default function ExperimentsSettingsPage() {
                 defaultValue={settings?.aiProvider || 'openai'}
                 className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
               >
-                <option value="openai">OpenAI (Official / Compatible)</option>
-                <option value="claude">Anthropic Claude</option>
-                <option value="ollama">Ollama (Local / Self-hosted)</option>
+                <option value="ollama">Local LLM — Ollama (Local Server)</option>
+                <option value="lmstudio">Local LLM — LM Studio (Local Server)</option>
+                <option value="local_llm">Local LLM — Other Self-Hosted Endpoint</option>
+                <option value="openai">OpenAI (Official / Cloud)</option>
+                <option value="claude">Anthropic Claude (Cloud)</option>
                 <option value="custom">Custom Endpoint</option>
               </select>
             </div>
@@ -286,7 +288,7 @@ export default function ExperimentsSettingsPage() {
                 type="text"
                 name="aiModelName"
                 defaultValue={settings?.aiModelName || 'gpt-4o-mini'}
-                placeholder="e.g. gpt-4o-mini, claude-3-5-sonnet, deepseek-r1"
+                placeholder="e.g. llama3, qwen2.5, deepseek-r1, gpt-4o-mini"
                 className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
               />
             </div>
@@ -302,7 +304,7 @@ export default function ExperimentsSettingsPage() {
                 type={showApiKey ? 'text' : 'password'}
                 value={apiKeyInput}
                 onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={settings?.hasApiKey ? 'Leave blank to keep existing API Key' : 'Enter API Key (sk-...)'}
+                placeholder={settings?.hasApiKey ? 'Leave blank to keep existing API Key (Not required for Local LLMs)' : 'Enter API Key (sk-... or leave blank for Local LLM)'}
                 className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border pr-10"
               />
               <button
@@ -315,18 +317,24 @@ export default function ExperimentsSettingsPage() {
             </div>
           </div>
 
-          {/* Base URL */}
+          {/* Base URL & Presets */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-              Custom Base URL (Optional)
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Local / Custom Base URL
+              </label>
+              <span className="text-xs text-purple-600">Local LLM Presets available below</span>
+            </div>
             <input
               type="text"
               name="aiBaseUrl"
               defaultValue={settings?.aiBaseUrl || ''}
-              placeholder="e.g. https://api.openai.com/v1 or http://localhost:11434/v1"
+              placeholder="e.g. http://localhost:11434/v1 or http://localhost:1234/v1"
               className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
             />
+            <p className="mt-1.5 text-xs text-gray-500">
+              For Local LLMs, set Base URL to <code className="bg-gray-100 px-1 py-0.5 rounded text-purple-700">http://localhost:11434/v1</code> (Ollama) or <code className="bg-gray-100 px-1 py-0.5 rounded text-purple-700">http://localhost:1234/v1</code> (LM Studio).
+            </p>
           </div>
 
           {/* Custom Prompt */}

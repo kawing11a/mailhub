@@ -13,7 +13,7 @@ const config: Config = {
   transform: {
     '^.+\\.[tj]sx?$': ['ts-jest', { useESM: true }],
   },
-  testMatch: ['**/__tests__/**/*.test.ts'],
+  testMatch: ['**/__tests__/**/*.test.ts', '**/__tests__/**/*.test.tsx'],
 };
 
 export default config;

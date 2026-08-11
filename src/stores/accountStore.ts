@@ -15,6 +15,8 @@ interface AccountState {
     bcc?: string;
     subject: string;
     bodyHtml: string;
+    replyToSubject?: string;
+    replyToBody?: string;
     attachments?: Array<{
       id?: string;
       filename: string;

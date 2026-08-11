@@ -3,6 +3,7 @@
 import { AccountLabelList } from '@/components/labels/AccountLabelList';
 import { useSearch } from '@/hooks/useSearch';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
+import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { useAccountStore } from '@/stores/accountStore';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
@@ -11,6 +12,7 @@ import { useSearchParams, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { EmailRow } from './EmailRow';
+import { EmailToolbox } from './EmailToolbox';
 
 interface ContextMenuState {
   x: number;
@@ -271,6 +273,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             bodyHtml = `<br><br>-------- Forwarded Message --------<br>Subject: ${fullEmail.subject}<br>Date: ${new Date(fullEmail.receivedAt).toString()}<br>From: ${fullEmail.fromName} &lt;${fullEmail.fromAddress}&gt;<br><br>${fullEmail.body?.bodyHtml || fullEmail.snippet || ''}`;
           }
 
+          const cleanBody = fullEmail.body?.bodyText || extractCleanEmailText(fullEmail.body?.bodyHtml || fullEmail.snippet);
           setComposeDraft({
             id: undefined, // New draft
             accountId: fullEmail.accountId || email.accountId,
@@ -278,6 +281,8 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             cc,
             subject,
             bodyHtml,
+            replyToSubject: fullEmail.subject,
+            replyToBody: cleanBody,
           });
           setComposeModalOpen(true);
         } catch (error) {
@@ -659,32 +664,40 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   return (
     <div className="flex flex-col h-full bg-white border-r border-gray-200">
       <div className="p-4 border-b border-gray-200">
-        <div className="mb-4 flex flex-col justify-center min-h-[40px]">
-          {activeAccount || selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
-            <>
-              {selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                  <span>All Emails</span>
-                </h2>
-              ) : (
-                <>
+        <div className="mb-4 flex items-center justify-between min-h-[40px]">
+          <div>
+            {activeAccount || selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
+              <>
+                {selectedAccountId === 'new-emails' || selectedAccountId === 'all' ? (
                   <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: activeAccount?.color || '#3B82F6' }}
-                    />
-                    <span className="truncate">{activeAccount?.label || activeAccount?.emailAddress}</span>
+                    <span>All Emails</span>
                   </h2>
-                  {activeAccount?.label && (
-                    <p className="text-xs text-gray-500 truncate mt-0.5 ml-5">{activeAccount.emailAddress}</p>
-                  )}
-                  <AccountLabelList
-                    accountId={activeAccount!.id}
-                  />
-                </>
-              )}
-            </>
-          ) : null}
+                ) : (
+                  <>
+                    <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                      <div
+                        className="w-3 h-3 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: activeAccount?.color || '#3B82F6' }}
+                      />
+                      <span className="truncate">{activeAccount?.label || activeAccount?.emailAddress}</span>
+                    </h2>
+                    {activeAccount?.label && (
+                      <p className="text-xs text-gray-500 truncate mt-0.5 ml-5">{activeAccount.emailAddress}</p>
+                    )}
+                    <AccountLabelList
+                      accountId={activeAccount!.id}
+                    />
+                  </>
+                )}
+              </>
+            ) : null}
+          </div>
+
+          <EmailToolbox
+            emailSubject={selectedEmails[0]?.subject || flatEmails[0]?.subject || ''}
+            emailText={selectedEmails[0]?.bodyText || flatEmails[0]?.snippet || ''}
+            selectedEmailCount={selectedIds.size}
+          />
         </div>
         <div className="relative">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

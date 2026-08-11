@@ -4,15 +4,18 @@ import { CalendarEventSection } from '@/components/calendar/CalendarEventSection
 import { isCalendarAttachment } from '@/lib/calendar/ics-parser';
 import { LabelBadge } from '@/components/labels/LabelBadge';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
+import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { formatStoredAddresses } from '@/lib/email/display-addresses';
 import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
 import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { EmailExplainPanel } from './EmailExplainPanel';
+import { EmailToolbox } from './EmailToolbox';
 
 interface EmailViewerProps {
   emailId: string;
@@ -25,6 +28,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
 
   const [downloadConfirmStep, setDownloadConfirmStep] = useState(0);
   const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
+  const [isExplainOpen, setIsExplainOpen] = useState(false);
 
   const queryClient = useQueryClient();
   const { data: email, isLoading } = useQuery({
@@ -174,11 +178,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </blockquote>
       </div>
     `;
+    const cleanBody = email.body?.bodyText || extractCleanEmailText(email.body?.bodyHtml);
     setComposeDraft({
       accountId: email.accountId,
       to: email.fromAddress,
       subject: email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject || ''}`,
-      bodyHtml: quoteHtml
+      bodyHtml: quoteHtml,
+      replyToSubject: email.subject,
+      replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
   };
@@ -205,12 +212,15 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       currentAccountAddress: email.account?.emailAddress,
     });
 
+    const cleanBody = email.body?.bodyText || extractCleanEmailText(email.body?.bodyHtml);
     setComposeDraft({
       accountId: email.accountId,
       to: recipients.to.join(', '),
       cc: recipients.cc.join(', '),
       subject: email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || ''}`,
-      bodyHtml: quoteHtml
+      bodyHtml: quoteHtml,
+      replyToSubject: email.subject,
+      replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
   };
@@ -231,11 +241,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         ${email.body?.bodyHtml || email.body?.bodyText || ''}
       </div>
     `;
+    const cleanBody = email.body?.bodyText || extractCleanEmailText(email.body?.bodyHtml);
     setComposeDraft({
       accountId: email.accountId,
       to: '',
       subject: email.subject?.startsWith('Fwd:') ? email.subject : `Fwd: ${email.subject || ''}`,
-      bodyHtml: quoteHtml
+      bodyHtml: quoteHtml,
+      replyToSubject: email.subject,
+      replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
   };
@@ -272,6 +285,23 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
 
         <div className="flex items-center space-x-2">
+          <EmailToolbox
+            emailSubject={email.subject || ''}
+            emailText={email.body?.bodyText || email.snippet || ''}
+          />
+          <button
+            onClick={() => setIsExplainOpen(!isExplainOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors shadow-xs ${
+              isExplainOpen
+                ? 'bg-purple-600 text-white border-purple-600'
+                : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200'
+            }`}
+            title="AI Explain Email"
+          >
+            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+            <span>AI Explain</span>
+          </button>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
           </button>
@@ -443,17 +473,37 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
       )}
 
-      {/* Body Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {email.body?.bodyHtml ? (
-          <iframe
-            title="Email Content"
-            className="w-full h-full min-h-[400px] border-none"
-            srcDoc={
-              email.body.bodyHtml.includes('<head>')
-                ? email.body.bodyHtml.replace(
-                    '<head>',
-                    `<head><style>
+      {/* Body Content & Side Explanation Panel Layout */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto p-6">
+          {email.body?.bodyHtml ? (
+            <iframe
+              title="Email Content"
+              className="w-full h-full min-h-[400px] border-none"
+              srcDoc={
+                email.body.bodyHtml.includes('<head>')
+                  ? email.body.bodyHtml.replace(
+                      '<head>',
+                      `<head><style>
+                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; }
+                        h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
+                        h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
+                        h3 { font-size: 1.125rem !important; font-weight: 600 !important; margin: 0.75rem 0 0.375rem 0 !important; }
+                        ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
+                        ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
+                        li { margin: 0.25rem 0 !important; display: list-item !important; }
+                        blockquote { border-left: 3px solid #cbd5e1 !important; padding-left: 1rem !important; margin: 0.75rem 0 !important; color: #4b5563 !important; font-style: italic !important; }
+                        code { background: #f3f4f6 !important; color: #111827 !important; padding: 2px 5px !important; border-radius: 4px !important; font-family: monospace !important; }
+                        pre { background: #1f2937 !important; color: #f9fafb !important; padding: 10px 14px !important; border-radius: 6px !important; overflow-x: auto !important; }
+                        a { color: #2563eb !important; text-decoration: underline !important; }
+                        s, del, strike { text-decoration: line-through !important; color: #6b7280 !important; }
+                        strong, b { font-weight: 700 !important; }
+                        em, i { font-style: italic !important; }
+                        img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
+                        hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
+                      </style>`
+                    )
+                  : `<!DOCTYPE html><html><head><style>
                       body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; }
                       h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
                       h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
@@ -470,35 +520,24 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
                       em, i { font-style: italic !important; }
                       img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
                       hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
-                    </style>`
-                  )
-                : `<!DOCTYPE html><html><head><style>
-                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; }
-                    h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
-                    h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
-                    h3 { font-size: 1.125rem !important; font-weight: 600 !important; margin: 0.75rem 0 0.375rem 0 !important; }
-                    ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                    ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                    li { margin: 0.25rem 0 !important; display: list-item !important; }
-                    blockquote { border-left: 3px solid #cbd5e1 !important; padding-left: 1rem !important; margin: 0.75rem 0 !important; color: #4b5563 !important; font-style: italic !important; }
-                    code { background: #f3f4f6 !important; color: #111827 !important; padding: 2px 5px !important; border-radius: 4px !important; font-family: monospace !important; }
-                    pre { background: #1f2937 !important; color: #f9fafb !important; padding: 10px 14px !important; border-radius: 6px !important; overflow-x: auto !important; }
-                    a { color: #2563eb !important; text-decoration: underline !important; }
-                    s, del, strike { text-decoration: line-through !important; color: #6b7280 !important; }
-                    strong, b { font-weight: 700 !important; }
-                    em, i { font-style: italic !important; }
-                    img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
-                    hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
-                  </style></head><body>${email.body.bodyHtml}</body></html>`
-            }
-            sandbox="allow-popups allow-same-origin"
-            translate="yes"
-          />
-        ) : (
-          <div className="whitespace-pre-wrap font-sans text-gray-800">
-            {email.body?.bodyText || 'Empty message.'}
-          </div>
-        )}
+                    </style></head><body>${email.body.bodyHtml}</body></html>`
+              }
+              sandbox="allow-popups allow-same-origin"
+              translate="yes"
+            />
+          ) : (
+            <div className="whitespace-pre-wrap font-sans text-gray-800">
+              {email.body?.bodyText || 'Empty message.'}
+            </div>
+          )}
+        </div>
+
+        <EmailExplainPanel
+          subject={email.subject}
+          bodyText={email.body?.bodyText || email.snippet}
+          isOpen={isExplainOpen}
+          onClose={() => setIsExplainOpen(false)}
+        />
       </div>
 
       {/* Playful Spam Warning Modal */}

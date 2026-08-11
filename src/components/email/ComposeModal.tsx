@@ -39,6 +39,8 @@ import { useDraftAutosave } from '@/hooks/useDraftAutosave';
 import { useSignatures, Signature } from '@/hooks/useSignatures';
 import { SignatureModal } from '@/components/signatures/SignatureModal';
 import { SignatureSelect } from './SignatureSelect';
+import { ComposeAiWriter } from './ComposeAiWriter';
+import { extractCleanEmailText } from '@/lib/email/clean-text';
 
 interface ComposerAttachment {
   id: string;
@@ -1039,6 +1041,26 @@ export function ComposeModal() {
             onOpenManageModal={() => {
               setEditingSignatureInModal(null);
               setIsSignatureModalOpen(true);
+            }}
+          />
+
+          {/* AI Writer Assistant */}
+          <ComposeAiWriter
+            currentContent={editor ? editor.getText() : ''}
+            replySubject={composeDraft?.replyToSubject || composeDraft?.subject}
+            replyBody={composeDraft?.replyToBody || extractCleanEmailText(composeDraft?.bodyHtml)}
+            onApplyDraft={(text) => {
+              if (editor) {
+                // If subject is included in AI output, extract subject line
+                const subjectMatch = text.match(/^Subject:\s*(.*)$/m);
+                let bodyContent = text;
+                if (subjectMatch) {
+                  if (!subject) setSubject(subjectMatch[1].trim());
+                  bodyContent = text.replace(/^Subject:\s*.*$/m, '').trim();
+                }
+                const formattedHtml = bodyContent.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>');
+                editor.chain().focus().setContent(`<p>${formattedHtml}</p>`).run();
+              }
             }}
           />
 
