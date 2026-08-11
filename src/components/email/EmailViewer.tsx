@@ -11,7 +11,7 @@ import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { EmailExplainPanel } from './EmailExplainPanel';
@@ -39,6 +39,46 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       return res.json();
     },
     enabled: !!emailId && !!selectedAccountId,
+  });
+
+  const labelSpamMutation = useMutation({
+    mutationFn: async (label: 'spam' | 'ham') => {
+      if (!email) return;
+      const res = await fetch('/api/ai/spam/label', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emailId: email.id,
+          subject: email.subject,
+          snippet: email.snippet,
+          fromAddress: email.fromAddress,
+          label,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to submit spam feedback');
+      return data;
+    },
+    onSuccess: (data, label) => {
+      queryClient.setQueryData(['email', emailId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          isHighRisk: label === 'spam',
+          riskReason: label === 'spam' ? 'Flagged as definite spam by user feedback' : null,
+        };
+      });
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      queryClient.invalidateQueries({ queryKey: ['spam-stats'] });
+      toast.success(
+        label === 'spam'
+          ? '🎯 Marked as Definite Spam. Model trained!'
+          : '🛡️ Marked as Safe. Model updated!'
+      );
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to update spam label');
+    },
   });
 
   const updateEmailMutation = useMutation({
@@ -312,6 +352,19 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <Forward className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
+          <button
+            onClick={() => labelSpamMutation.mutate(email.isHighRisk ? 'ham' : 'spam')}
+            disabled={labelSpamMutation.isPending}
+            className={`p-2 rounded-md transition-colors ${
+              email.isHighRisk
+                ? 'text-green-600 hover:bg-green-50'
+                : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+            }`}
+            title={email.isHighRisk ? "Mark & Train as Safe (Not Spam)" : "Report & Train as Definite Spam"}
+          >
+            {email.isHighRisk ? <ShieldCheck className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+          </button>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
           {email.folder === 'INBOX' && (
             <>
               <button
@@ -460,15 +513,37 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
 
       {/* Security Warning Banner if High Risk */}
       {email.isHighRisk && (
-        <div className="mx-6 mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start space-x-3 text-amber-900 shadow-sm">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <span className="font-semibold">Security Warning:</span> This message was flagged as high risk by automated spam check.
-            {email.riskReason && (
-              <p className="mt-1 text-xs text-amber-800 bg-amber-100/60 p-2 rounded border border-amber-200 font-mono">
-                <span className="font-semibold font-sans">Reason:</span> {email.riskReason}
-              </p>
-            )}
+        <div className="mx-6 mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start justify-between gap-4 text-amber-900 shadow-sm">
+          <div className="flex items-start space-x-3 flex-1 min-w-0">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <span className="font-semibold">Security Warning:</span> This message was flagged as high risk by automated spam check.
+              {email.riskReason && (
+                <p className="mt-1 text-xs text-amber-800 bg-amber-100/60 p-2 rounded border border-amber-200 font-mono">
+                  <span className="font-semibold font-sans">Reason:</span> {email.riskReason}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => labelSpamMutation.mutate('spam')}
+              disabled={labelSpamMutation.isPending}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
+              title="Confirm this is definite spam and train detection model"
+            >
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Definite Spam</span>
+            </button>
+            <button
+              onClick={() => labelSpamMutation.mutate('ham')}
+              disabled={labelSpamMutation.isPending}
+              className="px-3 py-1.5 bg-white border border-green-600 text-green-700 hover:bg-green-50 rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
+              title="Mark as safe (false positive) and train model"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>It&apos;s Safe</span>
+            </button>
           </div>
         </div>
       )}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { SpamSettingsTab } from '@/components/settings/SpamSettingsTab';
 import {
   FlaskConical,
   Bot,
@@ -446,6 +447,9 @@ export default function ExperimentsSettingsPage() {
           )}
         </div>
       </div>
+
+      {/* Card 3: Spam Filter & Continuous Learning */}
+      <SpamSettingsTab />
 
       {/* Add Webhook Modal */}
       {isAddModalOpen && (

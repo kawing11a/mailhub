@@ -32,3 +32,10 @@
 | task-28 | Task 1: Create Clean Text Extractor Utility with Unit Tests | done |
 | task-29 | Task 2: Backend AI API Route Sanitization & Tests | done |
 | task-30 | Task 3: Frontend Reply Context Sanitization & Full Verification | done |
+| task-31 | Explore spam detection context & data architecture | done |
+| task-32 | Propose approaches & clarify design | done |
+| task-33 | Write design document | done |
+| task-34 | Create implementation plan | done |
+| task-35 | Task 1: Spam Classifier & Trainer with Portable Generic Dataset (TDD) | done |
+| task-36 | Task 2: Backend AI Spam API Endpoints & Spam Checker Integration | done |
+| task-37 | Task 3: Frontend Interactive Labeling & Settings Management | done |
