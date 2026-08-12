@@ -9,6 +9,7 @@ import { resolveThreadId } from './threading';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
+import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 
 interface ConnectionEntry {
@@ -802,6 +803,13 @@ export class IMAPConnectionManager {
 
       // Add to search indexing queue
       await searchQueue.add('index-email', { emailId: email.id });
+
+      // Run automated email rules (skip on historical syncs)
+      if (!skipNotifications && folder === 'INBOX') {
+        processRulesForNewEmail(email.id, accountId, organizationId).catch((ruleErr) => {
+          console.error(`[IMAP] Failed to process email rules for email ${email.id}:`, ruleErr);
+        });
+      }
 
       // Publish new email event via Redis for SSE only if not skipping
       if (!skipNotifications) {

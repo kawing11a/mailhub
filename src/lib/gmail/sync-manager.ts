@@ -8,6 +8,7 @@ import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
 import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from './api';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
+import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 
 export class GmailSyncManager {
@@ -266,6 +267,13 @@ export class GmailSyncManager {
 
       if (isNew) {
         await searchQueue.add('index-email', { emailId: email.id });
+
+        // Run automated email rules (skip on historical syncs)
+        if (!skipNotifications && folder === 'INBOX') {
+          processRulesForNewEmail(email.id, accountId, organizationId).catch((ruleErr) => {
+            console.error(`[Gmail] Failed to process email rules for email ${email.id}:`, ruleErr);
+          });
+        }
 
         // Trigger SSE & Push notifications only if not skipping
         if (!skipNotifications) {
