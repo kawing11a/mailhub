@@ -13,6 +13,7 @@ import {
   MailCheck,
   ShieldAlert,
   HelpCircle,
+  Forward,
 } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -85,6 +86,7 @@ export function RuleModal({
   const [markAsRead, setMarkAsRead] = useState(false);
   const [markAsStarred, setMarkAsStarred] = useState(false);
   const [markAsHighRisk, setMarkAsHighRisk] = useState(false);
+  const [forwardToInput, setForwardToInput] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -112,6 +114,11 @@ export function RuleModal({
         setMarkAsRead(Boolean(initialRule.actions.markAsRead));
         setMarkAsStarred(Boolean(initialRule.actions.markAsStarred));
         setMarkAsHighRisk(Boolean(initialRule.actions.markAsHighRisk));
+        setForwardToInput(
+          Array.isArray(initialRule.actions.forwardTo)
+            ? initialRule.actions.forwardTo.join(', ')
+            : ''
+        );
       }
     } else {
       // Reset form
@@ -128,6 +135,7 @@ export function RuleModal({
       setMarkAsRead(false);
       setMarkAsStarred(false);
       setMarkAsHighRisk(false);
+      setForwardToInput('');
     }
   }, [initialRule, isOpen]);
 
@@ -203,6 +211,14 @@ export function RuleModal({
     if (markAsRead) actionsPayload.markAsRead = true;
     if (markAsStarred) actionsPayload.markAsStarred = true;
     if (markAsHighRisk) actionsPayload.markAsHighRisk = true;
+
+    const parsedForwardTo = forwardToInput
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    if (parsedForwardTo.length > 0) {
+      actionsPayload.forwardTo = parsedForwardTo;
+    }
 
     if (Object.keys(actionsPayload).length === 0) {
       toast.error('Please select at least one action to apply');
@@ -528,6 +544,21 @@ export function RuleModal({
                   <ShieldAlert className="w-3.5 h-3.5 text-red-500" /> Flag High Risk
                 </span>
               </label>
+            </div>
+
+            {/* Forwarding Section */}
+            <div className="pt-2 border-t border-gray-200">
+              <label className="block text-xs font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <Forward className="w-3.5 h-3.5 text-accent-600" />
+                <span>Forward to Email Addresses (Optional, comma-separated)</span>
+              </label>
+              <input
+                type="text"
+                value={forwardToInput}
+                onChange={(e) => setForwardToInput(e.target.value)}
+                placeholder="e.g. accounting@company.com, alert@ops.io"
+                className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-accent-500 focus:border-accent-500 bg-white"
+              />
             </div>
 
             {/* Stop processing subsequent rules */}

@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   Sliders,
   Sparkles,
+  Forward,
 } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
@@ -281,6 +282,12 @@ export default function RulesSettingsPage() {
                     {actions?.markAsHighRisk && (
                       <span className="inline-flex items-center gap-1 bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded text-[11px]">
                         <ShieldAlert className="w-3 h-3 text-red-600" /> Flag High Risk
+                      </span>
+                    )}
+
+                    {actions?.forwardTo && actions.forwardTo.length > 0 && (
+                      <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded text-[11px]">
+                        <Forward className="w-3 h-3 text-purple-600" /> Forward to {actions.forwardTo.join(', ')}
                       </span>
                     )}
                   </div>
