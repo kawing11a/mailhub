@@ -42,5 +42,5 @@
 | task-38 | Explore context & requirements for Email Rules engine (email & label based) | done |
 | task-39 | Clarify requirements & propose approaches | done |
 | task-40 | Present design sections and gather feedback | done |
-| task-41 | Write design document | in_progress |
-| task-42 | Create implementation plan | pending |
+| task-41 | Write design document | done |
+| task-42 | Create implementation plan | in_progress |
