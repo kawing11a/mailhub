@@ -11,11 +11,12 @@ import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2, ShieldAlert, ShieldCheck, ListFilter } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { EmailExplainPanel } from './EmailExplainPanel';
 import { EmailToolbox } from './EmailToolbox';
+import { RuleModal } from '@/components/rules/RuleModal';
 
 interface EmailViewerProps {
   emailId: string;
@@ -29,6 +30,8 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const [downloadConfirmStep, setDownloadConfirmStep] = useState(0);
   const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [initialRuleData, setInitialRuleData] = useState<any | null>(null);
 
   const queryClient = useQueryClient();
   const { data: email, isLoading } = useQuery({
@@ -40,6 +43,45 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     },
     enabled: !!emailId && !!selectedAccountId,
   });
+
+  const { data: labelsData } = useQuery({
+    queryKey: ['labels'],
+    queryFn: async () => {
+      const res = await fetch('/api/labels');
+      return res.json();
+    },
+  });
+
+  const { data: accountsData } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      const res = await fetch('/api/accounts');
+      return res.json();
+    },
+  });
+
+  const labels = labelsData?.labels || [];
+  const accounts = Array.isArray(accountsData) ? accountsData : [];
+
+  const handleCreateRuleFromEmail = () => {
+    if (!email) return;
+    setInitialRuleData({
+      name: `Filter: ${email.fromName || email.fromAddress}`,
+      accountId: email.accountId,
+      conditions: {
+        matchType: 'ALL',
+        criteria: [
+          { field: 'from', operator: 'contains', value: email.fromAddress || '' },
+        ],
+      },
+      actions: {
+        addLabelIds: [],
+        markAsRead: false,
+        markAsStarred: false,
+      },
+    });
+    setIsRuleModalOpen(true);
+  };
 
   const labelSpamMutation = useMutation({
     mutationFn: async (label: 'spam' | 'ham') => {
@@ -350,6 +392,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           </button>
           <button onClick={handleForward} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Forward">
             <Forward className="w-5 h-5" />
+          </button>
+          <div className="w-px h-6 bg-gray-200 mx-1" />
+          <button
+            onClick={handleCreateRuleFromEmail}
+            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+            title="Create rule from this email"
+          >
+            <ListFilter className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
           <button
@@ -684,6 +734,19 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           </div>
         </div>
       )}
+      {/* Email Rule Modal */}
+      <RuleModal
+        isOpen={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['rules'] });
+          queryClient.invalidateQueries({ queryKey: ['email', emailId] });
+          queryClient.invalidateQueries({ queryKey: ['emails'] });
+        }}
+        initialRule={initialRuleData}
+        accounts={accounts}
+        labels={labels}
+      />
     </div>
   );
 }

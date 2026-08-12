@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus, Pencil, Trash2, ListFilter } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import { RuleModal } from '@/components/rules/RuleModal';
 
 // Palette offered when creating a label inline.
 const LABEL_COLORS = [
@@ -52,6 +53,9 @@ export default function LabelAssignmentPage() {
   const [editLabelName, setEditLabelName] = useState('');
   const [editLabelColor, setEditLabelColor] = useState(LABEL_COLORS[0]);
   const editInputRef = useRef<HTMLInputElement>(null);
+
+  const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
+  const [initialRuleData, setInitialRuleData] = useState<any | null>(null);
 
   useEffect(() => {
     if (editingLabelId) editInputRef.current?.focus();
@@ -647,11 +651,35 @@ export default function LabelAssignmentPage() {
                             )}
                             
                             <div className={clsx(
-                               "flex items-center px-2 border-l",
+                               "flex items-center px-2 border-l gap-1",
                                (assignmentMode === 'label' ? isSelected : isAssigned)
                                   ? (assignmentMode === 'label' ? 'border-accent-200' : 'border-accent-200')
                                   : 'border-gray-100'
                             )}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                  setInitialRuleData({
+                                    name: `Auto-apply "${label.name}"`,
+                                    conditions: {
+                                      matchType: 'ALL',
+                                      criteria: [{ field: 'from', operator: 'contains', value: '' }],
+                                    },
+                                    actions: {
+                                      addLabelIds: [label.id],
+                                    },
+                                  });
+                                  setIsRuleModalOpen(true);
+                                }}
+                                disabled={mutation.isPending}
+                                className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors disabled:opacity-50"
+                                aria-label="Create rule for label"
+                                title="Automate this label with a rule"
+                              >
+                                <ListFilter className="w-3.5 h-3.5" />
+                              </button>
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -864,6 +892,19 @@ export default function LabelAssignmentPage() {
           </div>
         </div>
       )}
+
+      {/* Rule Modal */}
+      <RuleModal
+        isOpen={isRuleModalOpen}
+        onClose={() => setIsRuleModalOpen(false)}
+        onSaved={() => {
+          queryClient.invalidateQueries({ queryKey: ['rules'] });
+          queryClient.invalidateQueries({ queryKey: ['labels'] });
+        }}
+        initialRule={initialRuleData}
+        accounts={accounts}
+        labels={labels}
+      />
     </div>
   );
 }
