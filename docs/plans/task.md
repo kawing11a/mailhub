@@ -49,3 +49,7 @@
 | task-45 | Task 3: Backend API Endpoints for Rules CRUD & Batch Execution | done |
 | task-46 | Task 4: Frontend Rule Builder Modal & Settings Management Page | done |
 | task-47 | Task 5: Quick Rule Creation Shortcuts & Full Verification | done |
+| task-48 | Task 6: Add Forwarding Action to Rule Types, Engine & API Schemas (TDD) | done |
+| task-49 | Task 7: Integrate Automatic Ingestion Trigger Point into IMAP & Gmail Sync | done |
+| task-50 | Task 8: Update RuleModal & Settings UI for Forwarding Action | done |
+| task-51 | Task 9: Full Test Suite & Verification | done |
