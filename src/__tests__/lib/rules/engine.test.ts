@@ -344,4 +344,63 @@ describe('Email Rules Engine', () => {
       });
     });
   });
+
+  describe('processRulesForNewEmail', () => {
+    it('evaluates rules and applies actions for newly ingested emails', async () => {
+      const mockPrisma = {
+        emailRule: {
+          findMany: jest.fn().mockResolvedValue([
+            {
+              id: 'rule-auto-1',
+              name: 'Forward Alerts',
+              isActive: true,
+              priority: 1,
+              conditions: {
+                matchType: 'ALL',
+                criteria: [{ field: 'subject', operator: 'contains', value: 'Invoice' }],
+              },
+              actions: {
+                addLabelIds: ['label-invoices'],
+                markAsStarred: true,
+                forwardTo: ['ops@company.com'],
+              },
+            },
+          ]),
+        },
+        email: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'email-new-1',
+            accountId: 'acc-1',
+            fromAddress: 'billing@stripe.com',
+            fromName: 'Stripe',
+            subject: 'Invoice #1024',
+            body: { bodyText: 'Here is your monthly invoice.' },
+            emailLabels: [],
+          }),
+          update: jest.fn().mockResolvedValue({ id: 'email-new-1' }),
+        },
+        emailLabel: {
+          createMany: jest.fn().mockResolvedValue({ count: 1 }),
+          deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        },
+      };
+
+      const { processRulesForNewEmail } = await import('@/lib/rules/engine');
+      await processRulesForNewEmail('email-new-1', 'acc-1', 'org-1', mockPrisma as any);
+
+      expect(mockPrisma.emailRule.findMany).toHaveBeenCalled();
+      expect(mockPrisma.email.findUnique).toHaveBeenCalledWith({
+        where: { id: 'email-new-1' },
+        include: { body: true, emailLabels: true },
+      });
+      expect(mockPrisma.email.update).toHaveBeenCalledWith({
+        where: { id: 'email-new-1' },
+        data: { isStarred: true },
+      });
+      expect(mockPrisma.emailLabel.createMany).toHaveBeenCalledWith({
+        data: [{ emailId: 'email-new-1', labelId: 'label-invoices' }],
+        skipDuplicates: true,
+      });
+    });
+  });
 });

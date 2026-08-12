@@ -36,6 +36,7 @@ export interface RuleActions {
   markAsStarred?: boolean;
   markAsHighRisk?: boolean;
   triggerWebhookId?: string;
+  forwardTo?: string[];
 }
 
 export interface EmailEvaluationInput {

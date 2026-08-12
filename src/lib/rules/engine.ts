@@ -187,6 +187,10 @@ export function evaluateRulesAgainstEmail(
         if (actions.triggerWebhookId) {
           combinedActions.triggerWebhookId = actions.triggerWebhookId;
         }
+        if (actions.forwardTo && actions.forwardTo.length > 0) {
+          const currentFwd = combinedActions.forwardTo || [];
+          combinedActions.forwardTo = Array.from(new Set([...currentFwd, ...actions.forwardTo]));
+        }
       }
 
       if (rule.stopProcessing) {
@@ -253,3 +257,109 @@ export async function applyRuleActions(
     });
   }
 }
+
+/**
+ * Processes all active rules for an organization against a freshly ingested email.
+ */
+export async function processRulesForNewEmail(
+  emailId: string,
+  accountId: string,
+  organizationId: string,
+  prismaClient?: any
+): Promise<void> {
+  const db = prismaClient || (await import('@/lib/db/prisma')).prisma;
+
+  try {
+    const rulesRecords = await db.emailRule.findMany({
+      where: {
+        organizationId,
+        isActive: true,
+        OR: [{ accountId: null }, { accountId }],
+      },
+      orderBy: { priority: 'asc' },
+    });
+
+    if (!rulesRecords || rulesRecords.length === 0) return;
+
+    const email = await db.email.findUnique({
+      where: { id: emailId },
+      include: {
+        body: true,
+        emailLabels: true,
+      },
+    });
+
+    if (!email) return;
+
+    const emailInput: EmailEvaluationInput = {
+      id: email.id,
+      accountId: email.accountId,
+      fromAddress: email.fromAddress,
+      fromName: email.fromName,
+      toAddresses: email.toAddresses as any,
+      ccAddresses: email.ccAddresses as any,
+      subject: email.subject,
+      bodyText: email.body?.bodyText,
+      hasAttachments: email.hasAttachments,
+      isRead: email.isRead,
+      isStarred: email.isStarred,
+      isHighRisk: email.isHighRisk,
+      labelIds: email.emailLabels.map((el: any) => el.labelId),
+    };
+
+    const rulesDefs: EmailRuleDefinition[] = rulesRecords.map((r: any) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      isActive: r.isActive,
+      priority: r.priority,
+      stopProcessing: r.stopProcessing,
+      accountId: r.accountId,
+      conditions: r.conditions as any,
+      actions: r.actions as any,
+    }));
+
+    const { matchedRules, combinedActions } = evaluateRulesAgainstEmail(emailInput, rulesDefs);
+
+    if (matchedRules.length === 0) return;
+
+    await applyRuleActions(emailId, combinedActions, db);
+
+    // Handle Forwarding Action
+    if (combinedActions.forwardTo && combinedActions.forwardTo.length > 0) {
+      try {
+        const { sendEmail } = await import('@/lib/smtp/sender');
+        const fromDisplay = email.fromName
+          ? `"${email.fromName}" <${email.fromAddress}>`
+          : email.fromAddress || 'Unknown';
+
+        const fwdSubject = email.subject?.startsWith('Fwd:')
+          ? email.subject
+          : `Fwd: ${email.subject || '(No Subject)'}`;
+
+        const quoteHtml = `
+          <p>---------- Forwarded message ---------<br/>
+          <b>From:</b> ${fromDisplay}<br/>
+          <b>Subject:</b> ${email.subject || '(No Subject)'}<br/>
+          <b>Date:</b> ${new Date().toLocaleString()}<br/>
+          </p>
+          ${email.body?.bodyHtml || email.body?.bodyText || ''}
+        `;
+
+        await sendEmail(accountId, {
+          to: combinedActions.forwardTo,
+          subject: fwdSubject,
+          bodyHtml: quoteHtml,
+          bodyText: `---------- Forwarded message ---------\nFrom: ${fromDisplay}\nSubject: ${email.subject || ''}\n\n${email.body?.bodyText || ''}`,
+        });
+
+        console.log(`[EmailRule] Forwarded email ${emailId} to ${combinedActions.forwardTo.join(', ')}`);
+      } catch (fwdErr) {
+        console.error(`[EmailRule] Error forwarding email ${emailId}:`, fwdErr);
+      }
+    }
+  } catch (err) {
+    console.error(`[EmailRule] Error processing rules for email ${emailId}:`, err);
+  }
+}
+

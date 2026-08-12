@@ -29,6 +29,7 @@ const ruleActionsSchema = z.object({
   markAsStarred: z.boolean().optional(),
   markAsHighRisk: z.boolean().optional(),
   triggerWebhookId: z.string().uuid().optional(),
+  forwardTo: z.array(z.string().email()).optional(),
 });
 
 const updateRuleSchema = z.object({
