@@ -35,6 +35,7 @@ model Organization {
   pushSubscriptions  PushSubscription[]
   experimentSetting  ExperimentSetting?
   webhooks           NotificationWebhook[]
+  rules              EmailRule[]
 
   @@map("organizations")
 }
@@ -93,6 +94,7 @@ model EmailAccount {
   memberAccess   MemberEmailAccountAccess[]
   favouritedBy   FavouriteAccount[]
   signatures     Signature[]
+  rules          EmailRule[]
 
   @@unique([organizationId, emailAddress])
   @@map("email_accounts")
@@ -335,4 +337,28 @@ model EmailSummaryRun {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("email_summary_runs")
+}
+
+model EmailRule {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @map("organization_id") @db.Uuid
+  name           String    @db.VarChar(150)
+  description    String?   @db.Text
+  isActive       Boolean   @default(true) @map("is_active")
+  priority       Int       @default(0)
+  stopProcessing Boolean   @default(false) @map("stop_processing")
+
+  accountId      String?   @map("account_id") @db.Uuid
+
+  conditions     Json
+  actions        Json
+
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account        EmailAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, isActive, priority])
+  @@map("email_rules")
 }
