@@ -39,3 +39,8 @@
 | task-35 | Task 1: Spam Classifier & Trainer with Portable Generic Dataset (TDD) | done |
 | task-36 | Task 2: Backend AI Spam API Endpoints & Spam Checker Integration | done |
 | task-37 | Task 3: Frontend Interactive Labeling & Settings Management | done |
+| task-38 | Explore context & requirements for Email Rules engine (email & label based) | done |
+| task-39 | Clarify requirements & propose approaches | done |
+| task-40 | Present design sections and gather feedback | done |
+| task-41 | Write design document | in_progress |
+| task-42 | Create implementation plan | pending |
