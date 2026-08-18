@@ -59,20 +59,39 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   });
 
   const validAccountIds = validAccounts.map(a => a.id);
+  const ownedAccounts = await prisma.emailAccount.findMany({
+    where: {
+      organizationId: auth.organizationId,
+      ownerUserId: resolvedParams.userId,
+    },
+    select: { id: true },
+  });
+  const ownedAccountIds = ownedAccounts.map(a => a.id);
+  const ownedAccountIdSet = new Set(ownedAccountIds);
+  const requestedNonOwnerAccountIds = validAccountIds.filter(
+    (accountId) => !ownedAccountIdSet.has(accountId)
+  );
+  const finalAccountIds = [...validAccountIds];
+  for (const ownedAccountId of ownedAccountIds) {
+    if (!finalAccountIds.includes(ownedAccountId)) {
+      finalAccountIds.push(ownedAccountId);
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
-    // Remove all current access for this user
+    // Remove mutable non-owner grants while preserving mandatory owner access rows.
     await tx.memberEmailAccountAccess.deleteMany({
       where: {
         organizationId: auth.organizationId,
         userId: resolvedParams.userId,
+        accountId: { notIn: ownedAccountIds },
       },
     });
 
-    // Insert new access records
-    if (validAccountIds.length > 0) {
+    // Recreate the requested non-owner grants only.
+    if (requestedNonOwnerAccountIds.length > 0) {
       await tx.memberEmailAccountAccess.createMany({
-        data: validAccountIds.map(accountId => ({
+        data: requestedNonOwnerAccountIds.map(accountId => ({
           organizationId: auth.organizationId,
           userId: resolvedParams.userId,
           accountId,
@@ -81,5 +100,5 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
   });
 
-  return apiResponse({ success: true, accountIds: validAccountIds });
+  return apiResponse({ success: true, accountIds: finalAccountIds });
 }

@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { encrypt } from '@/lib/crypto';
 import { verifyToken } from '@/lib/auth/jwt';
+import { createOwnedAccount } from '@/lib/accounts/service';
+
+const ACCOUNT_COLORS = [
+  '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B',
+  '#EF4444', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
+];
+
+function getInitials(label: string): string {
+  return label
+    .split(/[\s-]+/)
+    .map((word) => word[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 3);
+}
+
+function canReauthorizeExistingAccount(
+  auth: Awaited<ReturnType<typeof verifyToken>>,
+  ownerUserId: string
+): boolean {
+  return auth.role === 'admin' || auth.userId === ownerUserId;
+}
+
+type ExistingOwnedAccount = {
+  id: string;
+  emailAddress: string;
+  ownerUserId: string;
+  oauthRefreshToken: string | null;
+};
 
 export async function GET(req: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.url;
@@ -43,6 +72,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/settings/accounts?error=invalid_organization', baseUrl));
     }
 
+    const initialExistingAccount = await prisma.emailAccount.findUnique({
+      where: {
+        organizationId_emailAddress: {
+          organizationId: auth.organizationId,
+          emailAddress: state.emailAddress,
+        },
+      },
+    }) as ExistingOwnedAccount | null;
+
+    if (initialExistingAccount && !canReauthorizeExistingAccount(auth, initialExistingAccount.ownerUserId)) {
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=unauthorized_reauthorization', baseUrl)
+      );
+    }
+
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
@@ -73,37 +117,80 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/settings/accounts?error=token_exchange_failed', baseUrl));
     }
 
-    // Optionally fetch actual user info from Google to verify email, 
-    // but we'll trust the email they provided in the state for now.
-    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-      headers: { Authorization: `Bearer ${tokens.access_token}` },
-    });
-
-    if (userInfoResponse.ok) {
-      const userInfo = await userInfoResponse.json();
-      // If the email differs, you could update it, or enforce a match. 
-      // For now, we just prefer the one from Google if available.
-      if (userInfo.email) {
-        state.emailAddress = userInfo.email;
-      }
+    if (typeof tokens.access_token !== 'string' || !tokens.access_token) {
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=provider_identity_unconfirmed', baseUrl)
+      );
     }
 
-    // Encrypt the tokens before storing
+    let userInfoResponse: Response;
+    try {
+      userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+      });
+    } catch (error) {
+      console.error('Google identity lookup failed:', error);
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=provider_identity_unconfirmed', baseUrl)
+      );
+    }
+
+    if (!userInfoResponse.ok) {
+      console.error('Google identity lookup failed:', userInfoResponse.status);
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=provider_identity_unconfirmed', baseUrl)
+      );
+    }
+
+    let userInfo: unknown;
+    try {
+      userInfo = await userInfoResponse.json();
+    } catch (error) {
+      console.error('Google identity response was invalid:', error);
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=provider_identity_unconfirmed', baseUrl)
+      );
+    }
+
+    const providerEmail =
+      userInfo && typeof userInfo === 'object'
+        ? (userInfo as { email?: unknown }).email
+        : null;
+    const emailAddress =
+      typeof providerEmail === 'string' && providerEmail.trim().length > 0
+        ? providerEmail.trim().toLowerCase()
+        : null;
+    if (!emailAddress) {
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=provider_identity_unconfirmed', baseUrl)
+      );
+    }
+
+    const existingAccount =
+      initialExistingAccount && initialExistingAccount.emailAddress === emailAddress
+        ? initialExistingAccount
+        : await prisma.emailAccount.findUnique({
+            where: {
+              organizationId_emailAddress: {
+                organizationId: auth.organizationId,
+                emailAddress,
+              },
+            },
+          }) as ExistingOwnedAccount | null;
+
+    if (existingAccount && !canReauthorizeExistingAccount(auth, existingAccount.ownerUserId)) {
+      return NextResponse.redirect(
+        new URL('/settings/accounts?error=unauthorized_reauthorization', baseUrl)
+      );
+    }
+
+    // Security boundary: do not encrypt/store credentials, mutate accounts,
+    // or queue sync until the provider-confirmed email ownership check passes.
     const encryptedAccessToken = encrypt(tokens.access_token);
     const encryptedRefreshToken = tokens.refresh_token ? encrypt(tokens.refresh_token) : undefined;
 
     // Expires_in is in seconds
     const expiry = new Date(Date.now() + (tokens.expires_in * 1000));
-
-    // Check if account already exists
-    const existingAccount = await prisma.emailAccount.findUnique({
-      where: {
-        organizationId_emailAddress: {
-          organizationId: state.organizationId,
-          emailAddress: state.emailAddress,
-        }
-      }
-    });
 
     let account;
     if (existingAccount) {
@@ -118,23 +205,26 @@ export async function GET(req: NextRequest) {
         }
       });
     } else {
-      // Create new account
-      account = await prisma.emailAccount.create({
-        data: {
-          organizationId: state.organizationId,
-          label: state.label,
-          emailAddress: state.emailAddress,
-          provider: 'gmail',
-          imapHost: 'imap.gmail.com',
-          imapPort: 993,
-          smtpHost: 'smtp.gmail.com',
-          smtpPort: 465,
-          oauthProvider: 'google',
-          oauthAccessToken: encryptedAccessToken,
-          oauthRefreshToken: encryptedRefreshToken,
-          oauthTokenExpiry: expiry,
-          workerPartition: Math.random() < 0.5 ? 'worker-1' : 'worker-2',
-        },
+      const accountCount = await prisma.emailAccount.count({
+        where: { organizationId: auth.organizationId },
+      });
+
+      account = await createOwnedAccount(auth.organizationId, auth.userId, {
+        label: state.label,
+        emailAddress,
+        provider: 'gmail',
+        color: ACCOUNT_COLORS[accountCount % ACCOUNT_COLORS.length],
+        avatarInitials: getInitials(state.label),
+        imapHost: 'imap.gmail.com',
+        imapPort: 993,
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 465,
+        passwordEncrypted: null,
+        oauthProvider: 'google',
+        oauthAccessToken: encryptedAccessToken,
+        oauthRefreshToken: encryptedRefreshToken,
+        oauthTokenExpiry: expiry,
+        workerPartition: accountCount % 2 === 0 ? 'worker-1' : 'worker-2',
       });
     }
 
@@ -143,8 +233,15 @@ export async function GET(req: NextRequest) {
     const { syncQueue } = await import('@/lib/queue/client');
     await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
 
-    // Redirect to dashboard on success
-    return NextResponse.redirect(new URL('/settings/accounts?success=true', baseUrl));
+    if (existingAccount) {
+      return NextResponse.redirect(
+        new URL(`/settings/accounts?success=true&accountId=${account.id}`, baseUrl)
+      );
+    }
+
+    return NextResponse.redirect(
+      new URL(`/settings/accounts?success=true&accountId=${account.id}&share=1`, baseUrl)
+    );
   } catch (error: any) {
     console.error('Google OAuth error:', error);
     return NextResponse.redirect(new URL('/settings/accounts?error=internal_error', baseUrl));

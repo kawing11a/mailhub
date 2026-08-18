@@ -35,6 +35,7 @@ async function main() {
     accounts.push({
       id: uuidv4(),
       organizationId: org.id,
+      ownerUserId: user.id,
       label: faker.company.name(),
       emailAddress: faker.internet.email(),
       provider: 'imap',

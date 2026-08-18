@@ -54,6 +54,50 @@ describe('POST /api/accounts/test-credentials', () => {
     expect(res.status).toBe(401);
   });
 
+  it('allows members to test credentials', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockRequireAdmin.mockReturnValue(
+      Response.json({ error: 'Admin access required' }, { status: 403 })
+    );
+
+    const mockConnect = jest.fn().mockResolvedValue(undefined);
+    const mockLogout = jest.fn().mockResolvedValue(undefined);
+    mockImapFlow.mockImplementation(() => ({
+      connect: mockConnect,
+      logout: mockLogout,
+    }) as any);
+
+    const mockVerify = jest.fn().mockResolvedValue(true);
+    mockCreateTransport.mockReturnValue({
+      verify: mockVerify,
+    });
+
+    const res = await POST(
+      createRequest({
+        label: 'Member Test',
+        provider: 'imap',
+        color: '#3B82F6',
+        emailAddress: 'member@example.com',
+        username: 'member@example.com',
+        password: 'password123',
+        imapHost: 'imap.example.com',
+        imapPort: 993,
+        imapSecure: true,
+        smtpHost: 'smtp.example.com',
+        smtpPort: 465,
+        smtpSecure: true,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+  });
+
   it('returns test results with ok: true when both IMAP and SMTP pass', async () => {
     const mockConnect = jest.fn().mockResolvedValue(undefined);
     const mockLogout = jest.fn().mockResolvedValue(undefined);

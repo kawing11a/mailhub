@@ -3,7 +3,6 @@ import { ImapFlow } from 'imapflow';
 import { createTransport } from 'nodemailer';
 import {
   authenticate,
-  requireAdmin,
   apiResponse,
   apiError,
 } from '@/lib/auth/middleware';
@@ -12,9 +11,6 @@ import { createAccountSchema } from '@/lib/validation/schemas';
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
-
-  const adminCheck = requireAdmin(auth);
-  if (adminCheck) return adminCheck;
 
   try {
     const body = await req.json();

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate, apiResponse, apiError, requireAdmin } from '@/lib/auth/middleware';
+import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { createAccountSchema } from '@/lib/validation';
 import { createAccount, sanitizeAccount } from '@/lib/accounts/service';
 
@@ -9,18 +10,7 @@ export async function GET(req: NextRequest) {
   if (auth instanceof Response) return auth;
 
   const accounts = await prisma.emailAccount.findMany({
-    where: {
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? {
-            memberAccess: {
-              some: {
-                userId: auth.userId,
-              },
-            },
-          }
-        : {}),
-    },
+    where: accountAccessWhere(auth),
     orderBy: { createdAt: 'asc' },
     select: {
       id: true,
@@ -33,6 +23,7 @@ export async function GET(req: NextRequest) {
       authError: true,
       lastSyncedAt: true,
       createdAt: true,
+      owner: { select: { userId: true } },
       // The current user's favourite row for this account (active rows only),
       // carrying the ordering so one query can drive both the sidebar and modal.
       favouritedBy: {
@@ -44,8 +35,9 @@ export async function GET(req: NextRequest) {
 
   // Flatten the favourite relation into a boolean flag plus its ordering
   // (sortOrder is null for accounts the user has not favourited).
-  const result = accounts.map(({ favouritedBy, ...account }) => ({
+  const result = accounts.map(({ favouritedBy, owner, ...account }) => ({
     ...account,
+    canManageAccess: auth.role === 'admin' || owner.userId === auth.userId,
     isFavourite: favouritedBy.length > 0,
     sortOrder: favouritedBy[0]?.sortOrder ?? null,
   }));
@@ -57,15 +49,12 @@ export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
 
-  const adminCheck = requireAdmin(auth);
-  if (adminCheck) return adminCheck;
-
   const body = await req.json();
   const parsed = createAccountSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   try {
-    const account = await createAccount(auth.organizationId, parsed.data);
+    const account = await createAccount(auth.organizationId, auth.userId, parsed.data);
     // After creating the account, queue initial sync
     // Connection initialization happens asynchronously inside the worker process
     const { syncQueue } = await import('@/lib/queue/client');

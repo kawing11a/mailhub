@@ -13,6 +13,7 @@ export interface SidebarAccount {
   avatarInitials?: string | null;
   isActive?: boolean;
   authError?: string | null;
+  canManageAccess: boolean;
   isFavourite: boolean;
   /** Position among the user's favourites; null when not favourited. */
   sortOrder: number | null;
