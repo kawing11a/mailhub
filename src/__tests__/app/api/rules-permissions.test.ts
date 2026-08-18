@@ -43,18 +43,18 @@ import { applyRuleActions, evaluateRule } from '@/lib/rules/engine';
 
 const mockAuthenticate = authenticate as jest.Mock;
 const mockRequireAdmin = requireAdmin as jest.Mock;
-const mockRule = prisma.emailRule as {
+const mockRule = prisma.emailRule as unknown as {
   findMany: jest.Mock;
   findFirst: jest.Mock;
   create: jest.Mock;
   update: jest.Mock;
   delete: jest.Mock;
 };
-const mockAccount = prisma.emailAccount as {
+const mockAccount = prisma.emailAccount as unknown as {
   findFirst: jest.Mock;
   findMany: jest.Mock;
 };
-const mockEmail = prisma.email as {
+const mockEmail = prisma.email as unknown as {
   findMany: jest.Mock;
   update: jest.Mock;
 };

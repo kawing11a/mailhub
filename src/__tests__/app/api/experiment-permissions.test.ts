@@ -65,19 +65,19 @@ import { executeSummaryRun } from '@/lib/queue/workers/summary';
 
 const mockAuthenticate = authenticate as jest.Mock;
 const mockRequireAdmin = requireAdmin as jest.Mock;
-const mockExperimentSetting = prisma.experimentSetting as {
+const mockExperimentSetting = prisma.experimentSetting as unknown as {
   findUnique: jest.Mock;
   create: jest.Mock;
   upsert: jest.Mock;
 };
-const mockWebhook = prisma.notificationWebhook as {
+const mockWebhook = prisma.notificationWebhook as unknown as {
   findMany: jest.Mock;
   create: jest.Mock;
   findUnique: jest.Mock;
   delete: jest.Mock;
 };
 const mockLabel = prisma.label.findUnique as jest.Mock;
-const mockSummaryRun = prisma.emailSummaryRun as {
+const mockSummaryRun = prisma.emailSummaryRun as unknown as {
   create: jest.Mock;
   findUnique: jest.Mock;
 };
