@@ -104,10 +104,17 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       organizationId: auth.organizationId,
       ownerUserId: resolvedParams.userId,
     },
-    select: { id: true },
+    select: {
+      id: true,
+      organizationId: true,
+      ownerUserId: true,
+    },
   });
   const ownedAccountIds = ownedAccounts.map((account) => account.id);
   const ownedAccountIdSet = new Set(ownedAccountIds);
+  const hasInaccessibleOwnedAccount = ownedAccounts.some(
+    (account) => !canManageAccountAccess(auth, account)
+  );
 
   const managedCurrentNonOwnerAccountIds = currentAccessAccounts
     .filter(
@@ -123,8 +130,9 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   if (
     requestedAccountIds.length === 0 &&
-    managedCurrentNonOwnerAccountIds.length === 0 &&
-    hasInaccessibleCurrentNonOwnerGrant
+    (hasInaccessibleOwnedAccount ||
+      (managedCurrentNonOwnerAccountIds.length === 0 &&
+        hasInaccessibleCurrentNonOwnerGrant))
   ) {
     return apiError('Forbidden', 403);
   }

@@ -218,6 +218,32 @@ describe('PUT /api/org/members/[userId]/accounts', () => {
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects an empty access update when the target only owns an inaccessible account', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-3',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+
+    mockFindAccounts
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: '22222222-2222-4222-8222-222222222222',
+          organizationId: 'org-1',
+          ownerUserId: 'member-2',
+        },
+      ]);
+
+    const response = await PUT(
+      createRequest({ accountIds: [] }),
+      { params: Promise.resolve({ userId: 'member-2' }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
   it('rejects access management for a target outside the actor organization', async () => {
     mockFindMember.mockResolvedValueOnce(null);
 
