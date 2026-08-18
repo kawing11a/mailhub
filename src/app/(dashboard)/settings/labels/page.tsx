@@ -35,6 +35,8 @@ interface LabelsResponse {
 
 type AssignmentMode = 'account' | 'label';
 
+const MANAGEMENT_LABELS_QUERY_KEY = ['labels', 'management'] as const;
+
 export default function LabelAssignmentPage() {
   const queryClient = useQueryClient();
   // Assign-by-account was removed from the UI; the mode is pinned to 'label'.
@@ -75,9 +77,9 @@ export default function LabelAssignmentPage() {
     isLoading: isLoadingLabels,
     isError: isLabelsError,
   } = useQuery({
-    queryKey: ['labels'],
+    queryKey: MANAGEMENT_LABELS_QUERY_KEY,
     queryFn: async () => {
-      const res = await fetch('/api/labels');
+      const res = await fetch('/api/labels?scope=management');
       if (!res.ok) throw new Error('Failed to fetch labels');
       return res.json();
     },
@@ -120,9 +122,11 @@ export default function LabelAssignmentPage() {
       return json;
     },
     onMutate: async ({ labelId, accountIds }) => {
-      await queryClient.cancelQueries({ queryKey: ['labels'] });
-      const previous = queryClient.getQueryData<LabelsResponse>(['labels']);
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) =>
+      await queryClient.cancelQueries({ queryKey: MANAGEMENT_LABELS_QUERY_KEY });
+      const previous = queryClient.getQueryData<LabelsResponse>(
+        MANAGEMENT_LABELS_QUERY_KEY
+      );
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) =>
         data
           ? {
               ...data,
@@ -135,7 +139,9 @@ export default function LabelAssignmentPage() {
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['labels'], context.previous);
+      if (context?.previous) {
+        queryClient.setQueryData(MANAGEMENT_LABELS_QUERY_KEY, context.previous);
+      }
       toast.error('Failed to save assignment');
     },
     onSuccess: () => {
@@ -161,7 +167,7 @@ export default function LabelAssignmentPage() {
     },
     onSuccess: (label) => {
       const created: LabelWithAccounts = { ...label, accountIds: label.accountIds || [] };
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: [...(data?.labels || []), created].sort((a, b) =>
           a.name.localeCompare(b.name)
@@ -189,7 +195,7 @@ export default function LabelAssignmentPage() {
       return json.label as LabelWithAccounts;
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: (data?.labels || []).map(l => l.id === updated.id ? { ...updated, accountIds: l.accountIds || [] } : l).sort((a, b) =>
           a.name.localeCompare(b.name)
@@ -212,7 +218,7 @@ export default function LabelAssignmentPage() {
       return id;
     },
     onSuccess: (id) => {
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: (data?.labels || []).filter(l => l.id !== id),
       }));

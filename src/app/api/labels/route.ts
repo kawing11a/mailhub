@@ -17,14 +17,20 @@ export async function GET(req: NextRequest) {
     if (session instanceof Response) return session;
 
     const accessibleAccountsWhere = accountAccessWhere(session);
+    const isManagementScope =
+      new URL(req.url).searchParams.get('scope') === 'management';
     const labels = await prisma.label.findMany({
       where: {
         organizationId: session.organizationId,
-        accountLabels: {
-          some: {
-            account: accessibleAccountsWhere,
-          },
-        },
+        ...(isManagementScope
+          ? {}
+          : {
+              accountLabels: {
+                some: {
+                  account: accessibleAccountsWhere,
+                },
+              },
+            }),
       },
       orderBy: { name: 'asc' },
       include: {

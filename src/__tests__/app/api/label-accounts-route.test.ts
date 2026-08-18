@@ -47,11 +47,31 @@ function createRequest(accountIds: string[]): NextRequest {
   }) as NextRequest;
 }
 
-function createTransactionClient() {
+function createTransactionClient(
+  initialAccountIds: string[] = [],
+  accessibleAccountIds: string[] = initialAccountIds
+) {
+  const assignments = new Set(initialAccountIds);
+
   return {
+    assignments,
     accountLabel: {
-      deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-      createMany: jest.fn().mockResolvedValue({ count: 1 }),
+      deleteMany: jest.fn().mockImplementation(
+        async ({ where }: { where: { account?: unknown } }) => {
+          const accountIdsToDelete = where.account
+            ? accessibleAccountIds
+            : [...assignments];
+
+          accountIdsToDelete.forEach((accountId) => assignments.delete(accountId));
+          return { count: accountIdsToDelete.length };
+        }
+      ),
+      createMany: jest.fn().mockImplementation(
+        async ({ data }: { data: Array<{ accountId: string }> }) => {
+          data.forEach(({ accountId }) => assignments.add(accountId));
+          return { count: data.length };
+        }
+      ),
     },
   };
 }
@@ -101,7 +121,16 @@ describe('PUT /api/labels/[id]/accounts', () => {
       select: { id: true },
     });
     expect(tx.accountLabel.deleteMany).toHaveBeenCalledWith({
-      where: { labelId: 'label-1' },
+      where: {
+        labelId: 'label-1',
+        account: {
+          organizationId: 'org-1',
+          OR: [
+            { ownerUserId: 'member-1' },
+            { memberAccess: { some: { userId: 'member-1' } } },
+          ],
+        },
+      },
     });
     expect(tx.accountLabel.createMany).toHaveBeenCalledWith({
       data: [
@@ -147,6 +176,36 @@ describe('PUT /api/labels/[id]/accounts', () => {
 
     expect(response.status).toBe(403);
     expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it('preserves hidden label assignments when a member replaces visible assignments', async () => {
+    const previousVisibleAccountId = '11111111-1111-4111-8111-111111111111';
+    const nextVisibleAccountId = '22222222-2222-4222-8222-222222222222';
+    const hiddenAccountId = '33333333-3333-4333-8333-333333333333';
+
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockFindAccounts.mockResolvedValue([{ id: nextVisibleAccountId }]);
+
+    const tx = createTransactionClient(
+      [previousVisibleAccountId, hiddenAccountId],
+      [previousVisibleAccountId, nextVisibleAccountId]
+    );
+    mockTransaction.mockImplementation(async (callback: (client: typeof tx) => unknown) =>
+      callback(tx)
+    );
+
+    const response = await PUT(createRequest([nextVisibleAccountId]), {
+      params: Promise.resolve({ id: 'label-1' }),
+    });
+
+    expect(response.status).toBe(200);
+    expect([...tx.assignments].sort()).toEqual(
+      [nextVisibleAccountId, hiddenAccountId].sort()
+    );
   });
 
   it('rejects a cross-organization account id even for an admin', async () => {
@@ -201,6 +260,9 @@ describe('PUT /api/labels/[id]/accounts', () => {
         },
       },
       select: { id: true },
+    });
+    expect(tx.accountLabel.deleteMany).toHaveBeenCalledWith({
+      where: { labelId: 'label-1' },
     });
   });
 });

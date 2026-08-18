@@ -44,7 +44,13 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   await prisma.$transaction(async (tx) => {
     await tx.accountLabel.deleteMany({
-      where: { labelId },
+      where:
+        auth.role === 'admin'
+          ? { labelId }
+          : {
+              labelId,
+              account: accountAccessWhere(auth),
+            },
     });
 
     if (requestedAccountIds.length > 0) {

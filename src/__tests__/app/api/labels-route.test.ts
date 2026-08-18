@@ -92,6 +92,65 @@ describe('GET /api/labels', () => {
     });
   });
 
+  it('returns unassigned organization labels for management without exposing hidden account ids', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockFindMany.mockImplementation(async ({ where }) =>
+      where.accountLabels
+        ? []
+        : [
+            {
+              id: 'label-new',
+              organizationId: 'org-1',
+              name: 'New label',
+              color: '#3B82F6',
+              description: null,
+              icon: null,
+              createdAt: new Date('2026-08-18T12:00:00.000Z'),
+              accountLabels: [],
+            },
+          ]
+    );
+
+    const response = await GET(
+      new Request('http://localhost/api/labels?scope=management') as NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+      },
+      orderBy: { name: 'asc' },
+      include: {
+        accountLabels: {
+          where: {
+            account: {
+              organizationId: 'org-1',
+              OR: [
+                { ownerUserId: 'member-1' },
+                { memberAccess: { some: { userId: 'member-1' } } },
+              ],
+            },
+          },
+          select: { accountId: true },
+        },
+      },
+    });
+    expect(await response.json()).toEqual({
+      labels: [
+        expect.objectContaining({
+          id: 'label-new',
+          name: 'New label',
+          accountIds: [],
+        }),
+      ],
+    });
+  });
+
   it('keeps admin label visibility organization-wide while still excluding unassigned labels', async () => {
     mockAuthenticate.mockResolvedValue({
       userId: 'admin-1',
