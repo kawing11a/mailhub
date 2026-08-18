@@ -132,6 +132,25 @@ describe('Settings navigation and member guards', () => {
     });
   }
 
+  function configureAuthLoadingQueries() {
+    mockUseQuery.mockImplementation((options: QueryOptions) => {
+      queryOptions.push(options);
+
+      if (options.queryKey[0] === 'auth-me') {
+        return {
+          data: undefined,
+          isLoading: true,
+        };
+      }
+
+      if (options.queryKey[0] === 'members') {
+        return { data: [], isLoading: false };
+      }
+
+      return { data: undefined, isLoading: false };
+    });
+  }
+
   it('shows admin-only links to admins', () => {
     configureQueries('admin');
 
@@ -182,6 +201,19 @@ describe('Settings navigation and member guards', () => {
       ({ queryKey }) => queryKey[0] === 'members'
     );
     expect(membersQuery?.enabled).toBe(false);
+  });
+
+  it('keeps the members admin shell hidden while auth is still loading', () => {
+    configureAuthLoadingQueries();
+
+    const html = renderToStaticMarkup(<MembersPage />);
+
+    expect(html).toContain('Loading settings...');
+    expect(html).not.toContain('Create User');
+    expect(html).not.toContain("Manage who has access to your organization's inbox.");
+    expect(
+      queryOptions.find(({ queryKey }) => queryKey[0] === 'members')?.enabled
+    ).toBe(false);
   });
 
   it('renders a member fallback for the rules page and disables protected queries', () => {

@@ -13,7 +13,7 @@ export default function MembersPage() {
   const [accessModalMember, setAccessModalMember] = useState<any | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: authData } = useQuery({
+  const { data: authData, isLoading: isLoadingAuth } = useQuery({
     queryKey: ['auth-me'],
     queryFn: async () => {
       const res = await fetch('/api/auth/me');
@@ -57,6 +57,15 @@ export default function MembersPage() {
 
   const members = Array.isArray(data) ? data : [];
   const currentUserId = authData?.user?.id;
+
+  if (isLoadingAuth) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center text-gray-400 gap-2">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
+        <span className="text-sm">Loading settings...</span>
+      </div>
+    );
+  }
 
   if (authData && !isAdmin) {
     return <RestrictedSettingsNotice sectionName="member management" />;
