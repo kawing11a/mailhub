@@ -132,4 +132,49 @@ describe('accounts routes', () => {
     });
     expect(response.status).toBe(404);
   });
+
+  it('sanitizes the account detail response and does not expose ownerUserId', async () => {
+    mockFindFirst.mockResolvedValue({
+      id: 'account-1',
+      organizationId: 'org-1',
+      ownerUserId: 'member-1',
+      label: 'Owned',
+      emailAddress: 'owned@example.com',
+      provider: 'imap',
+      color: '#10B981',
+      avatarInitials: 'OW',
+      isActive: true,
+      authError: null,
+      lastSyncedAt: null,
+      initialSyncCompletedAt: null,
+      workerPartition: 'worker-1',
+      imapHost: 'imap.example.com',
+      imapPort: 993,
+      imapSecure: true,
+      smtpHost: 'smtp.example.com',
+      smtpPort: 465,
+      smtpSecure: true,
+      username: 'owned@example.com',
+      passwordEncrypted: 'encrypted:secret',
+      oauthProvider: 'google',
+      oauthAccessToken: 'encrypted:access-token',
+      oauthRefreshToken: 'encrypted:refresh-token',
+      oauthTokenExpiry: new Date('2026-08-18T10:00:00.000Z'),
+      createdAt: new Date('2026-08-18T10:00:00.000Z'),
+      updatedAt: new Date('2026-08-18T10:00:00.000Z'),
+    });
+
+    const response = await getAccountById(
+      new Request('http://localhost/api/accounts/account-1') as NextRequest,
+      { params: Promise.resolve({ id: 'account-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+
+    const body = await response.json();
+    expect(body).not.toHaveProperty('ownerUserId');
+    expect(body).not.toHaveProperty('passwordEncrypted');
+    expect(body).not.toHaveProperty('oauthAccessToken');
+    expect(body).not.toHaveProperty('oauthRefreshToken');
+  });
 });

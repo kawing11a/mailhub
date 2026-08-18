@@ -137,6 +137,7 @@ export async function getDecryptedAccount(accountId: string): Promise<
 export function sanitizeAccount(account: EmailAccount) {
   // Strip sensitive fields before returning to client
   const {
+    ownerUserId,
     passwordEncrypted,
     oauthAccessToken,
     oauthRefreshToken,

@@ -1,4 +1,5 @@
 import { prisma } from '../src/lib/db/prisma';
+import { seedAccountsWithOwnerAccess } from '../src/lib/accounts/seed';
 import { v4 as uuidv4 } from 'uuid';
 import { faker } from '@faker-js/faker';
 
@@ -49,8 +50,8 @@ async function main() {
       workerPartition: i % 2 === 0 ? 'worker-1' : 'worker-2',
     });
   }
-  
-  await prisma.emailAccount.createMany({ data: accounts });
+
+  await seedAccountsWithOwnerAccess(prisma, accounts);
 
   console.log('Seeding 10,000 emails (100 per account)...');
   const CHUNK_SIZE = 1000;

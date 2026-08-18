@@ -7,10 +7,13 @@ jest.mock('@/lib/auth/middleware', () => ({
     Response.json({ error: message }, { status }),
 }));
 
-jest.mock('@/lib/accounts/service', () => ({
-  createAccount: jest.fn(),
-  sanitizeAccount: jest.fn((account: unknown) => account),
-}));
+jest.mock('@/lib/accounts/service', () => {
+  const actual = jest.requireActual('@/lib/accounts/service');
+  return {
+    ...actual,
+    createAccount: jest.fn(),
+  };
+});
 
 jest.mock('@/lib/queue/client', () => ({
   syncQueue: {
@@ -99,5 +102,8 @@ describe('POST /api/accounts', () => {
       accountId: 'account-1',
       folder: 'ALL',
     });
+
+    const responseBody = await response.json();
+    expect(responseBody).not.toHaveProperty('ownerUserId');
   });
 });

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate, requireAdmin, apiResponse, apiError } from '@/lib/auth/middleware';
+import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { canManageAccountAccess } from '@/lib/accounts/access';
 import { z } from 'zod';
 
 const updateAccessSchema = z.object({
@@ -35,10 +36,21 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
 
-  const adminCheck = requireAdmin(auth);
-  if (adminCheck) return adminCheck;
-
   const resolvedParams = await params;
+
+  const targetMember = await prisma.organizationMember.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: auth.organizationId,
+        userId: resolvedParams.userId,
+      },
+    },
+    select: { userId: true },
+  });
+
+  if (!targetMember) {
+    return apiError('Forbidden', 403);
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = updateAccessSchema.safeParse(body);
@@ -47,18 +59,46 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     return apiError('Invalid request body', 400);
   }
 
-  const { accountIds } = parsed.data;
+  const requestedAccountIds = [...new Set(parsed.data.accountIds)];
 
-  // Verify that all provided accounts belong to the organization
-  const validAccounts = await prisma.emailAccount.findMany({
+  const requestedAccounts =
+    requestedAccountIds.length > 0
+      ? await prisma.emailAccount.findMany({
+          where: {
+            id: { in: requestedAccountIds },
+          },
+          select: {
+            id: true,
+            organizationId: true,
+            ownerUserId: true,
+          },
+        })
+      : [];
+
+  if (requestedAccounts.length !== requestedAccountIds.length) {
+    return apiError('Forbidden', 403);
+  }
+
+  if (requestedAccounts.some((account) => !canManageAccountAccess(auth, account))) {
+    return apiError('Forbidden', 403);
+  }
+
+  const currentAccessAccounts = await prisma.emailAccount.findMany({
     where: {
       organizationId: auth.organizationId,
-      id: { in: accountIds },
+      memberAccess: {
+        some: {
+          userId: resolvedParams.userId,
+        },
+      },
     },
-    select: { id: true },
+    select: {
+      id: true,
+      organizationId: true,
+      ownerUserId: true,
+    },
   });
 
-  const validAccountIds = validAccounts.map(a => a.id);
   const ownedAccounts = await prisma.emailAccount.findMany({
     where: {
       organizationId: auth.organizationId,
@@ -66,32 +106,34 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     },
     select: { id: true },
   });
-  const ownedAccountIds = ownedAccounts.map(a => a.id);
+  const ownedAccountIds = ownedAccounts.map((account) => account.id);
   const ownedAccountIdSet = new Set(ownedAccountIds);
-  const requestedNonOwnerAccountIds = validAccountIds.filter(
-    (accountId) => !ownedAccountIdSet.has(accountId)
-  );
-  const finalAccountIds = [...validAccountIds];
-  for (const ownedAccountId of ownedAccountIds) {
-    if (!finalAccountIds.includes(ownedAccountId)) {
-      finalAccountIds.push(ownedAccountId);
-    }
-  }
+
+  const managedCurrentNonOwnerAccountIds = currentAccessAccounts
+    .filter(
+      (account) =>
+        !ownedAccountIdSet.has(account.id) && canManageAccountAccess(auth, account)
+    )
+    .map((account) => account.id);
+
+  const requestedManagedNonOwnerAccountIds = requestedAccounts
+    .filter((account) => !ownedAccountIdSet.has(account.id))
+    .map((account) => account.id);
 
   await prisma.$transaction(async (tx) => {
-    // Remove mutable non-owner grants while preserving mandatory owner access rows.
-    await tx.memberEmailAccountAccess.deleteMany({
-      where: {
-        organizationId: auth.organizationId,
-        userId: resolvedParams.userId,
-        accountId: { notIn: ownedAccountIds },
-      },
-    });
+    if (managedCurrentNonOwnerAccountIds.length > 0) {
+      await tx.memberEmailAccountAccess.deleteMany({
+        where: {
+          organizationId: auth.organizationId,
+          userId: resolvedParams.userId,
+          accountId: { in: managedCurrentNonOwnerAccountIds },
+        },
+      });
+    }
 
-    // Recreate the requested non-owner grants only.
-    if (requestedNonOwnerAccountIds.length > 0) {
+    if (requestedManagedNonOwnerAccountIds.length > 0) {
       await tx.memberEmailAccountAccess.createMany({
-        data: requestedNonOwnerAccountIds.map(accountId => ({
+        data: requestedManagedNonOwnerAccountIds.map((accountId) => ({
           organizationId: auth.organizationId,
           userId: resolvedParams.userId,
           accountId,
@@ -99,6 +141,21 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
       });
     }
   });
+
+  const finalAccountIds = [...requestedManagedNonOwnerAccountIds];
+  for (const ownedAccountId of ownedAccountIds) {
+    if (!finalAccountIds.includes(ownedAccountId)) {
+      finalAccountIds.push(ownedAccountId);
+    }
+  }
+  for (const currentAccessAccount of currentAccessAccounts) {
+    if (
+      !canManageAccountAccess(auth, currentAccessAccount) &&
+      !finalAccountIds.includes(currentAccessAccount.id)
+    ) {
+      finalAccountIds.push(currentAccessAccount.id);
+    }
+  }
 
   return apiResponse({ success: true, accountIds: finalAccountIds });
 }

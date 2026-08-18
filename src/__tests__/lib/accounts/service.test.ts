@@ -13,7 +13,7 @@ jest.mock('@/lib/crypto', () => ({
 }));
 
 import { prisma } from '@/lib/db/prisma';
-import { createAccount, createOwnedAccount } from '@/lib/accounts/service';
+import { createAccount, createOwnedAccount, sanitizeAccount } from '@/lib/accounts/service';
 
 const mockCount = prisma.emailAccount.count as jest.Mock;
 const mockTransaction = prisma.$transaction as jest.Mock;
@@ -203,5 +203,42 @@ describe('account service ownership creation', () => {
     });
 
     expect(result).toBe(createdAccount);
+  });
+
+  it('removes ownerUserId and encrypted credentials from sanitized account responses', () => {
+    const sanitized = sanitizeAccount({
+      id: 'account-1',
+      organizationId: 'org-1',
+      ownerUserId: 'user-1',
+      label: 'Support Team',
+      emailAddress: 'support@example.com',
+      provider: 'imap',
+      color: '#10B981',
+      avatarInitials: 'ST',
+      isActive: true,
+      lastSyncedAt: null,
+      initialSyncCompletedAt: null,
+      workerPartition: 'worker-1',
+      imapHost: 'imap.example.com',
+      imapPort: 993,
+      imapSecure: true,
+      smtpHost: 'smtp.example.com',
+      smtpPort: 465,
+      smtpSecure: true,
+      username: 'support@example.com',
+      passwordEncrypted: 'encrypted:secret',
+      oauthProvider: 'google',
+      oauthAccessToken: 'encrypted:access-token',
+      oauthRefreshToken: 'encrypted:refresh-token',
+      oauthTokenExpiry: new Date('2026-08-18T09:00:00.000Z'),
+      createdAt: new Date('2026-08-18T09:00:00.000Z'),
+      updatedAt: new Date('2026-08-18T09:00:00.000Z'),
+      authError: null,
+    });
+
+    expect(sanitized).not.toHaveProperty('ownerUserId');
+    expect(sanitized).not.toHaveProperty('passwordEncrypted');
+    expect(sanitized).not.toHaveProperty('oauthAccessToken');
+    expect(sanitized).not.toHaveProperty('oauthRefreshToken');
   });
 });
