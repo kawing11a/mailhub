@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate, requireAdmin, apiResponse, apiError } from '@/lib/auth/middleware';
+import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { updateLabelAccountsSchema } from '@/lib/validation';
 import { logActivity } from '@/lib/activity/log';
 
@@ -9,9 +10,6 @@ type RouteParams = { params: Promise<{ id: string }> };
 export async function PUT(req: NextRequest, { params }: RouteParams) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
-
-  const adminCheck = requireAdmin(auth);
-  if (adminCheck) return adminCheck;
 
   const { id: labelId } = await params;
 
@@ -27,27 +25,31 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     return apiError('Invalid request body', 400);
   }
 
-  const { accountIds } = parsed.data;
+  const requestedAccountIds = [...new Set(parsed.data.accountIds)];
 
-  // Verify that all provided accounts belong to the organization
-  const validAccounts = await prisma.emailAccount.findMany({
-    where: {
-      organizationId: auth.organizationId,
-      id: { in: accountIds },
-    },
-    select: { id: true },
-  });
+  const validAccounts =
+    requestedAccountIds.length > 0
+      ? await prisma.emailAccount.findMany({
+          where: {
+            ...accountAccessWhere(auth),
+            id: { in: requestedAccountIds },
+          },
+          select: { id: true },
+        })
+      : [];
 
-  const validAccountIds = validAccounts.map((a) => a.id);
+  if (validAccounts.length !== requestedAccountIds.length) {
+    return apiError('Forbidden', 403);
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.accountLabel.deleteMany({
       where: { labelId },
     });
 
-    if (validAccountIds.length > 0) {
+    if (requestedAccountIds.length > 0) {
       await tx.accountLabel.createMany({
-        data: validAccountIds.map((accountId) => ({ accountId, labelId })),
+        data: requestedAccountIds.map((accountId) => ({ accountId, labelId })),
       });
     }
   });
@@ -56,8 +58,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     organizationId: auth.organizationId,
     userId: auth.userId,
     action: 'label_accounts_updated',
-    metadata: { labelId, labelName: label.name, accountIds: validAccountIds },
+    metadata: { labelId, labelName: label.name, accountIds: requestedAccountIds },
   });
 
-  return apiResponse({ success: true, accountIds: validAccountIds });
+  return apiResponse({ success: true, accountIds: requestedAccountIds });
 }

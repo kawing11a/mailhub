@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus, Pencil, Trash2, ListFilter } from 'lucide-react';
+import { Tag, Mail, Search, Check, Loader2, Plus, Pencil, Trash2, ListFilter } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { RuleModal } from '@/components/rules/RuleModal';
@@ -271,18 +271,6 @@ export default function LabelAssignmentPage() {
     mutation.mutate({ labelId: selectedLabel.id, accountIds: next });
   };
 
-  if (authData && authData.role !== 'admin') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <ShieldAlert className="w-10 h-10 text-gray-400 mb-3" />
-        <h1 className="text-lg font-semibold text-gray-900">Admin access required</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Only organization admins can manage label assignments.
-        </p>
-      </div>
-    );
-  }
-
   const filteredLabels = labels.filter((l) =>
     l.name.toLowerCase().includes(labelSearch.toLowerCase())
   );
@@ -309,6 +297,12 @@ export default function LabelAssignmentPage() {
           tagged emails plus all emails from assigned accounts — existing emails are never
           modified. Changes are saved automatically.
         </p>
+        {authData?.role === 'member' ? (
+          <p className="text-sm text-gray-500 mt-2">
+            You can manage labels for the email accounts you can access. Label deletion remains
+            admin-only.
+          </p>
+        ) : null}
       </div>
 
       {isLoading ? (
@@ -519,19 +513,25 @@ export default function LabelAssignmentPage() {
                                 ))}
                               </div>
                               <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (confirm('Are you sure you want to delete this label?')) {
-                                      deleteLabel.mutate(label.id);
-                                    }
-                                  }}
-                                  className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                                  disabled={deleteLabel.isPending}
-                                >
-                                  {deleteLabel.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                  <span>Delete</span>
-                                </button>
+                                {authData?.role === 'admin' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      if (confirm('Are you sure you want to delete this label?')) {
+                                        deleteLabel.mutate(label.id);
+                                      }
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                                    disabled={deleteLabel.isPending}
+                                  >
+                                    {deleteLabel.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                    <span>Delete</span>
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">
+                                    Delete requires admin access
+                                  </span>
+                                )}
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"
