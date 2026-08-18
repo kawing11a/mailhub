@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { prisma } from '@/lib/db/prisma';
 import { signatureSchema } from '@/lib/validation/schemas';
 
@@ -13,15 +14,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId } = await params;
 
-  // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: {
-      id: accountId,
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? { memberAccess: { some: { userId: auth.userId } } }
-        : {}),
-    },
+    where: accountAccessWhere(auth, accountId),
     select: { id: true },
   });
 
@@ -45,13 +39,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id: accountId } = await params;
 
   const account = await prisma.emailAccount.findFirst({
-    where: {
-      id: accountId,
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? { memberAccess: { some: { userId: auth.userId } } }
-        : {}),
-    },
+    where: accountAccessWhere(auth, accountId),
     select: { id: true },
   });
 
