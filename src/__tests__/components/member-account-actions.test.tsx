@@ -278,6 +278,60 @@ describe('member account actions', () => {
     expect(stateSetters[3]).toHaveBeenCalledWith('account-manageable');
   });
 
+  it('keeps inactive owner accounts manageable for members without exposing the admin reauthorize path', () => {
+    configureUseState();
+    mockUseQuery.mockImplementation((config: Record<string, any>) => {
+      switch (config.queryKey[0]) {
+        case 'accounts':
+          return {
+            data: [
+              {
+                id: 'owner-account',
+                label: 'Owner Inbox',
+                emailAddress: 'owner@example.com',
+                provider: 'google',
+                color: '#8B5CF6',
+                avatarInitials: 'OI',
+                isActive: false,
+                authError: 'Credentials expired',
+                lastSyncedAt: null,
+                canManageAccess: true,
+                owner: { userId: OWNER_ID },
+              },
+            ],
+            isLoading: false,
+          };
+        case 'auth-me':
+          return { data: { role: 'member' }, isLoading: false };
+        default:
+          return { data: null, isLoading: false };
+      }
+    });
+
+    const tree = renderAccountsPageContent();
+    const manageButtons = findAll(
+      tree,
+      (element) => element.type === 'button' && textContent(element).includes('Manage Access')
+    );
+
+    expect(manageButtons).toHaveLength(1);
+    expect(findAll(
+      tree,
+      (element) => element.type === 'button' && element.props.title === 'Edit Account Settings'
+    )).toHaveLength(0);
+    expect(findAll(
+      tree,
+      (element) => element.type === 'button' && element.props.title === 'Disconnect'
+    )).toHaveLength(0);
+    expect(textContent(tree)).not.toContain('Reauthorize');
+    expect(textContent(tree)).toContain('Inactive');
+    expect(textContent(tree)).toContain('Auth Error');
+
+    getClickHandler(manageButtons[0])({ stopPropagation: jest.fn() });
+    expect(stateSetters[3]).toBeDefined();
+    expect(stateSetters[3]).toHaveBeenCalledWith('owner-account');
+  });
+
   it('retains access management, edit, disconnect, and health controls for admins', () => {
     configureUseState();
     mockUseQuery.mockImplementation((config: Record<string, any>) => {

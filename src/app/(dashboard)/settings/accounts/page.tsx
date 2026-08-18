@@ -239,7 +239,7 @@ function EmailAccountsContent() {
                     <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                       {account.isActive ? 'Active' : 'Inactive'}
                     </span>
-                    {account.canManageAccess && !account.isActive && (
+                    {authData?.role === 'admin' && account.canManageAccess && !account.isActive && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
