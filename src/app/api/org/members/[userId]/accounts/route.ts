@@ -112,9 +112,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   });
   const ownedAccountIds = ownedAccounts.map((account) => account.id);
   const ownedAccountIdSet = new Set(ownedAccountIds);
-  const hasInaccessibleOwnedAccount = ownedAccounts.some(
-    (account) => !canManageAccountAccess(auth, account)
-  );
 
   const managedCurrentNonOwnerAccountIds = currentAccessAccounts
     .filter(
@@ -123,16 +120,17 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     )
     .map((account) => account.id);
 
-  const hasInaccessibleCurrentNonOwnerGrant = currentAccessAccounts.some(
-    (account) =>
-      !ownedAccountIdSet.has(account.id) && !canManageAccountAccess(auth, account)
+  const currentTargetAccessAccounts = new Map(
+    [...currentAccessAccounts, ...ownedAccounts].map((account) => [account.id, account])
   );
 
   if (
+    auth.role !== 'admin' &&
     requestedAccountIds.length === 0 &&
-    (hasInaccessibleOwnedAccount ||
-      (managedCurrentNonOwnerAccountIds.length === 0 &&
-        hasInaccessibleCurrentNonOwnerGrant))
+    currentTargetAccessAccounts.size > 0 &&
+    ![...currentTargetAccessAccounts.values()].some((account) =>
+      canManageAccountAccess(auth, account)
+    )
   ) {
     return apiError('Forbidden', 403);
   }
@@ -178,5 +176,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     }
   }
 
-  return apiResponse({ success: true, accountIds: finalAccountIds });
+  const accountById = new Map(
+    [...requestedAccounts, ...currentAccessAccounts, ...ownedAccounts].map((account) => [
+      account.id,
+      account,
+    ])
+  );
+  const responseAccountIds =
+    auth.role === 'admin'
+      ? finalAccountIds
+      : finalAccountIds.filter((accountId) => {
+          const account = accountById.get(accountId);
+          return account ? canManageAccountAccess(auth, account) : false;
+        });
+
+  return apiResponse({ success: true, accountIds: responseAccountIds });
 }

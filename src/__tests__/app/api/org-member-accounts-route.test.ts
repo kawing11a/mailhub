@@ -100,7 +100,7 @@ describe('PUT /api/org/members/[userId]/accounts', () => {
     });
   });
 
-  it('allows an account owner to revoke only the grants for accounts they own', async () => {
+  it('allows an account owner to revoke managed grants without disclosing preserved unmanaged grants', async () => {
     mockAuthenticate.mockResolvedValue({
       userId: 'owner-1',
       organizationId: 'org-1',
@@ -140,7 +140,102 @@ describe('PUT /api/org/members/[userId]/accounts', () => {
     const body = await response.json();
     expect(body).toEqual({
       success: true,
-      accountIds: [unmanagedAccountId],
+      accountIds: [],
+    });
+  });
+
+  it('filters unmanaged current and owned accounts from a non-admin update response', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'owner-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+
+    const managedAccountId = '11111111-1111-4111-8111-111111111111';
+    const unmanagedAccountId = '22222222-2222-4222-8222-222222222222';
+    const targetOwnedAccountId = '33333333-3333-4333-8333-333333333333';
+
+    mockFindAccounts
+      .mockResolvedValueOnce([
+        { id: managedAccountId, organizationId: 'org-1', ownerUserId: 'owner-1' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: unmanagedAccountId,
+          organizationId: 'org-1',
+          ownerUserId: 'someone-else',
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: targetOwnedAccountId,
+          organizationId: 'org-1',
+          ownerUserId: 'member-2',
+        },
+      ]);
+
+    const tx = createTransactionClient();
+    mockTransaction.mockImplementation(async (callback: (client: typeof tx) => unknown) =>
+      callback(tx)
+    );
+
+    const response = await PUT(
+      createRequest({ accountIds: [managedAccountId] }),
+      { params: Promise.resolve({ userId: 'member-2' }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      accountIds: [managedAccountId],
+    });
+  });
+
+  it('allows an owner revoke when the target owns an unrelated inaccessible account', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'owner-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+
+    const managedAccountId = '11111111-1111-4111-8111-111111111111';
+    const targetOwnedAccountId = '22222222-2222-4222-8222-222222222222';
+
+    mockFindAccounts
+      .mockResolvedValueOnce([
+        { id: managedAccountId, organizationId: 'org-1', ownerUserId: 'owner-1' },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: targetOwnedAccountId,
+          organizationId: 'org-1',
+          ownerUserId: 'member-2',
+        },
+      ]);
+
+    const tx = createTransactionClient();
+    mockTransaction.mockImplementation(async (callback: (client: typeof tx) => unknown) =>
+      callback(tx)
+    );
+
+    const response = await PUT(
+      createRequest({ accountIds: [] }),
+      { params: Promise.resolve({ userId: 'member-2' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(tx.memberEmailAccountAccess.deleteMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        userId: 'member-2',
+        accountId: { in: [managedAccountId] },
+      },
+    });
+    const body = await response.json();
+    expect(body).toEqual({
+      success: true,
+      accountIds: [],
     });
   });
 
