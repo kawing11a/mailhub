@@ -1045,25 +1045,27 @@ export function ComposeModal() {
           />
 
           {/* AI Writer Assistant */}
-          <ComposeAiWriter
-            accountId={fromAccount.id}
-            currentContent={editor ? editor.getText() : ''}
-            replySubject={composeDraft?.replyToSubject || composeDraft?.subject}
-            replyBody={composeDraft?.replyToBody || extractCleanEmailText(composeDraft?.bodyHtml)}
-            onApplyDraft={(text) => {
-              if (editor) {
-                // If subject is included in AI output, extract subject line
-                const subjectMatch = text.match(/^Subject:\s*(.*)$/m);
-                let bodyContent = text;
-                if (subjectMatch) {
-                  if (!subject) setSubject(subjectMatch[1].trim());
-                  bodyContent = text.replace(/^Subject:\s*.*$/m, '').trim();
+          {fromAccount && (
+            <ComposeAiWriter
+              accountId={fromAccount.id}
+              currentContent={editor ? editor.getText() : ''}
+              replySubject={composeDraft?.replyToSubject || composeDraft?.subject}
+              replyBody={composeDraft?.replyToBody || extractCleanEmailText(composeDraft?.bodyHtml)}
+              onApplyDraft={(text) => {
+                if (editor) {
+                  // If subject is included in AI output, extract subject line
+                  const subjectMatch = text.match(/^Subject:\s*(.*)$/m);
+                  let bodyContent = text;
+                  if (subjectMatch) {
+                    if (!subject) setSubject(subjectMatch[1].trim());
+                    bodyContent = text.replace(/^Subject:\s*.*$/m, '').trim();
+                  }
+                  const formattedHtml = bodyContent.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>');
+                  editor.chain().focus().setContent(`<p>${formattedHtml}</p>`).run();
                 }
-                const formattedHtml = bodyContent.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br/>');
-                editor.chain().focus().setContent(`<p>${formattedHtml}</p>`).run();
-              }
-            }}
-          />
+              }}
+            />
+          )}
 
           <span
             className={clsx(
