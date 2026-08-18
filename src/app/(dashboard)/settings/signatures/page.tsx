@@ -25,8 +25,9 @@ export default function SignaturesSettingsPage() {
   const [accountSearchQuery, setAccountSearchQuery] = useState('');
   const [signatureSearchQuery, setSignatureSearchQuery] = useState('');
 
-  // Default to first account if none selected
-  const activeAccountId = selectedAccountId || accounts[0]?.id || null;
+  const activeAccountId = accounts.some((account) => account.id === selectedAccountId)
+    ? selectedAccountId
+    : accounts[0]?.id || null;
 
   const {
     signatures = [],
