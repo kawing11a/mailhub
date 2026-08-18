@@ -116,6 +116,19 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     )
     .map((account) => account.id);
 
+  const hasInaccessibleCurrentNonOwnerGrant = currentAccessAccounts.some(
+    (account) =>
+      !ownedAccountIdSet.has(account.id) && !canManageAccountAccess(auth, account)
+  );
+
+  if (
+    requestedAccountIds.length === 0 &&
+    managedCurrentNonOwnerAccountIds.length === 0 &&
+    hasInaccessibleCurrentNonOwnerGrant
+  ) {
+    return apiError('Forbidden', 403);
+  }
+
   const requestedManagedNonOwnerAccountIds = requestedAccounts
     .filter((account) => !ownedAccountIdSet.has(account.id))
     .map((account) => account.id);

@@ -192,6 +192,32 @@ describe('PUT /api/org/members/[userId]/accounts', () => {
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects an empty access update when the target keeps inaccessible current grants', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-3',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+
+    mockFindAccounts
+      .mockResolvedValueOnce([
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          organizationId: 'org-1',
+          ownerUserId: 'owner-1',
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const response = await PUT(
+      createRequest({ accountIds: [] }),
+      { params: Promise.resolve({ userId: 'member-2' }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
   it('rejects access management for a target outside the actor organization', async () => {
     mockFindMember.mockResolvedValueOnce(null);
 

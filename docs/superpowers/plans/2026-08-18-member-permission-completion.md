@@ -62,6 +62,8 @@
   git commit -m "feat: integrate account ownership access"
   ```
 
+**Review follow-up (2026-08-18):** Fixed the empty-list member access mutation gap in `src/app/api/org/members/[userId]/accounts/route.ts` by rejecting an otherwise no-op update when the target still has inaccessible non-owner grants. Added a regression in `src/__tests__/app/api/org-member-accounts-route.test.ts` and verified it with `npm test -- --runInBand src/__tests__/app/api/org-member-accounts-route.test.ts`.
+
 ---
 
 ### Task 2: Enforce member dashboard and search scope
