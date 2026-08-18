@@ -12,13 +12,14 @@ export interface ExplanationData {
 }
 
 interface EmailExplainPanelProps {
+  emailId: string;
   subject?: string;
   bodyText?: string;
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function EmailExplainPanel({ subject, bodyText, isOpen, onClose }: EmailExplainPanelProps) {
+export function EmailExplainPanel({ emailId, subject, bodyText, isOpen, onClose }: EmailExplainPanelProps) {
   const [data, setData] = useState<ExplanationData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export function EmailExplainPanel({ subject, bodyText, isOpen, onClose }: EmailE
       const res = await fetch('/api/ai/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subject, bodyText }),
+        body: JSON.stringify({ emailId, subject, bodyText }),
       });
 
       const resData = await res.json();

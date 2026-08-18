@@ -1,22 +1,53 @@
+jest.mock('@/lib/auth/middleware', () => ({
+  authenticate: jest.fn(),
+  requireAdmin: jest.fn(),
+  apiError: (message: string, status = 400) =>
+    Response.json({ error: message }, { status }),
+}));
+
 import { POST as labelPost } from '@/app/api/ai/spam/label/route';
 import { GET as datasetGet, POST as datasetPost } from '@/app/api/ai/spam/dataset/route';
 import { GET as statsGet, POST as statsPost } from '@/app/api/ai/spam/stats/route';
 import { resetSpamModelToDefault } from '@/lib/ai/spam-classifier';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 
 // Mock prisma for email status update
 jest.mock('@/lib/db/prisma', () => ({
   prisma: {
+    emailAccount: {
+      findFirst: jest.fn(),
+    },
     email: {
+      findUnique: jest.fn(),
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
   },
 }));
 
+import { prisma } from '@/lib/db/prisma';
+
+const mockAuthenticate = authenticate as jest.Mock;
+const mockRequireAdmin = requireAdmin as jest.Mock;
+const mockFindAccount = prisma.emailAccount.findFirst as jest.Mock;
+const mockFindEmail = prisma.email.findUnique as jest.Mock;
+
 describe('AI Spam API Endpoints & Checker', () => {
   beforeEach(() => {
     resetSpamModelToDefault();
     jest.clearAllMocks();
+    mockAuthenticate.mockResolvedValue({
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'admin',
+    });
+    mockRequireAdmin.mockReturnValue(null);
+    mockFindAccount.mockResolvedValue({
+      id: 'account-1',
+      organizationId: 'org-1',
+      ownerUserId: 'admin-1',
+    });
+    mockFindEmail.mockResolvedValue({ accountId: 'account-1' });
   });
 
   describe('POST /api/ai/spam/label', () => {

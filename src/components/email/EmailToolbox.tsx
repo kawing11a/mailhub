@@ -14,12 +14,13 @@ import {
 } from 'lucide-react';
 
 interface EmailToolboxProps {
+  accountId?: string;
   emailText?: string;
   emailSubject?: string;
   selectedEmailCount?: number;
 }
 
-export function EmailToolbox({ emailText, emailSubject, selectedEmailCount = 0 }: EmailToolboxProps) {
+export function EmailToolbox({ accountId, emailText, emailSubject, selectedEmailCount = 0 }: EmailToolboxProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeModalTool, setActiveModalTool] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -28,7 +29,7 @@ export function EmailToolbox({ emailText, emailSubject, selectedEmailCount = 0 }
   const [targetLang, setTargetLang] = useState('English');
 
   const runTool = async (tool: string) => {
-    if (!emailText && !emailSubject) return;
+    if (!accountId || (!emailText && !emailSubject)) return;
     setActiveModalTool(tool);
     setIsLoading(true);
     setError(null);
@@ -39,6 +40,7 @@ export function EmailToolbox({ emailText, emailSubject, selectedEmailCount = 0 }
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          accountId,
           tool,
           text: `Subject: ${emailSubject || ''}\n\nContent:\n${emailText || ''}`,
           targetLanguage: targetLang,

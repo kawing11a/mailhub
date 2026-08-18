@@ -1046,6 +1046,7 @@ export function ComposeModal() {
 
           {/* AI Writer Assistant */}
           <ComposeAiWriter
+            accountId={fromAccount.id}
             currentContent={editor ? editor.getText() : ''}
             replySubject={composeDraft?.replyToSubject || composeDraft?.subject}
             replyBody={composeDraft?.replyToBody || extractCleanEmailText(composeDraft?.bodyHtml)}

@@ -8,6 +8,7 @@ import {
 } from '@/lib/auth/middleware';
 import { summaryQueue } from '@/lib/queue/client';
 import { executeSummaryRun } from '@/lib/queue/workers/summary';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
@@ -23,11 +24,19 @@ export async function POST(req: NextRequest) {
       return apiError('labelId is required', 400);
     }
 
-    const label = await prisma.label.findUnique({
-      where: { id: labelId },
+    const label = await prisma.label.findFirst({
+      where: {
+        id: labelId,
+        organizationId: auth.organizationId,
+        accountLabels: {
+          some: {
+            account: accountAccessWhere(auth),
+          },
+        },
+      },
     });
 
-    if (!label || label.organizationId !== auth.organizationId) {
+    if (!label) {
       return apiError('Label not found', 404);
     }
 

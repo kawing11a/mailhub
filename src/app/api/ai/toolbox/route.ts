@@ -1,15 +1,23 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { callLlmApi } from '@/lib/ai/llm-client';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
+import { authenticate } from '@/lib/auth/middleware';
+import { assertAccountContextAccess } from '@/lib/accounts/access';
 
 export async function POST(req: Request) {
+  const auth = await authenticate(req as NextRequest);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await req.json();
-    const { tool, text, targetLanguage = 'English' } = body;
+    const { accountId, emailId, tool, text, targetLanguage = 'English' } = body;
 
     if (!text || !tool) {
       return NextResponse.json({ error: 'Tool type and text are required' }, { status: 400 });
     }
+
+    const account = await assertAccountContextAccess(auth, { accountId, emailId });
+    if (account instanceof Response) return account;
 
     const cleanedText = extractCleanEmailText(text, { maxLength: 6000 });
 

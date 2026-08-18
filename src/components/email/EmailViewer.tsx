@@ -368,6 +368,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
 
         <div className="flex items-center space-x-2">
           <EmailToolbox
+            accountId={email.accountId || selectedAccountId || undefined}
             emailSubject={email.subject || ''}
             emailText={email.body?.bodyText || email.snippet || ''}
           />
@@ -658,6 +659,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         </div>
 
         <EmailExplainPanel
+          emailId={email.id}
           subject={email.subject}
           bodyText={email.body?.bodyText || email.snippet}
           isOpen={isExplainOpen}
