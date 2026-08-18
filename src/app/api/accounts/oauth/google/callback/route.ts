@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { encrypt } from '@/lib/crypto';
 import { verifyToken } from '@/lib/auth/jwt';
 import { createOwnedAccount } from '@/lib/accounts/service';
+import { normalizeEmailAddress } from '@/lib/email/addresses';
 
 const ACCOUNT_COLORS = [
   '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B',
@@ -31,6 +32,15 @@ type ExistingOwnedAccount = {
   ownerUserId: string;
   oauthRefreshToken: string | null;
 };
+
+function findExistingAccount(organizationId: string, emailAddress: string) {
+  return prisma.emailAccount.findFirst({
+    where: {
+      organizationId,
+      emailAddress: { equals: emailAddress, mode: 'insensitive' },
+    },
+  }) as Promise<ExistingOwnedAccount | null>;
+}
 
 export async function GET(req: NextRequest) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || req.url;
@@ -72,14 +82,11 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/settings/accounts?error=invalid_organization', baseUrl));
     }
 
-    const initialExistingAccount = await prisma.emailAccount.findUnique({
-      where: {
-        organizationId_emailAddress: {
-          organizationId: auth.organizationId,
-          emailAddress: state.emailAddress,
-        },
-      },
-    }) as ExistingOwnedAccount | null;
+    const requestedEmailAddress = normalizeEmailAddress(state.emailAddress);
+    const initialExistingAccount = await findExistingAccount(
+      auth.organizationId,
+      requestedEmailAddress
+    );
 
     if (initialExistingAccount && !canReauthorizeExistingAccount(auth, initialExistingAccount.ownerUserId)) {
       return NextResponse.redirect(
@@ -158,7 +165,7 @@ export async function GET(req: NextRequest) {
         : null;
     const emailAddress =
       typeof providerEmail === 'string' && providerEmail.trim().length > 0
-        ? providerEmail.trim().toLowerCase()
+        ? normalizeEmailAddress(providerEmail)
         : null;
     if (!emailAddress) {
       return NextResponse.redirect(
@@ -167,16 +174,10 @@ export async function GET(req: NextRequest) {
     }
 
     const existingAccount =
-      initialExistingAccount && initialExistingAccount.emailAddress === emailAddress
+      initialExistingAccount
+      && normalizeEmailAddress(initialExistingAccount.emailAddress) === emailAddress
         ? initialExistingAccount
-        : await prisma.emailAccount.findUnique({
-            where: {
-              organizationId_emailAddress: {
-                organizationId: auth.organizationId,
-                emailAddress,
-              },
-            },
-          }) as ExistingOwnedAccount | null;
+        : await findExistingAccount(auth.organizationId, emailAddress);
 
     if (existingAccount && !canReauthorizeExistingAccount(auth, existingAccount.ownerUserId)) {
       return NextResponse.redirect(

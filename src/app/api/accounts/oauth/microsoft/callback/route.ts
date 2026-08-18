@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { encrypt } from '@/lib/crypto';
 import { verifyToken } from '@/lib/auth/jwt';
 import { createOwnedAccount } from '@/lib/accounts/service';
+import { normalizeEmailAddress } from '@/lib/email/addresses';
 
 const ACCOUNT_COLORS = [
   '#10B981', '#3B82F6', '#8B5CF6', '#EC4899', '#F59E0B',
@@ -29,7 +30,7 @@ function normalizeMicrosoftEmail(profile: unknown): string | null {
     (value): value is string => typeof value === 'string' && value.trim().length > 0
   );
 
-  return providerEmail ? providerEmail.trim().toLowerCase() : null;
+  return providerEmail ? normalizeEmailAddress(providerEmail) : null;
 }
 
 function canReauthorizeExistingAccount(

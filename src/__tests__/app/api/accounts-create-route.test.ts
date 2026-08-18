@@ -76,7 +76,7 @@ describe('POST /api/accounts', () => {
 
     const body = {
       label: 'Support',
-      emailAddress: 'support@example.com',
+      emailAddress: 'Support@Example.com',
       provider: 'imap',
       imapHost: 'imap.example.com',
       imapPort: 993,
@@ -84,14 +84,17 @@ describe('POST /api/accounts', () => {
       smtpHost: 'smtp.example.com',
       smtpPort: 465,
       smtpSecure: true,
-      username: 'support@example.com',
+      username: 'Support@Example.com',
       password: 'secret',
     };
 
     const responsePromise = POST(createRequest(body));
     await createCalled;
 
-    expect(mockCreateAccount).toHaveBeenCalledWith('org-1', 'member-1', body);
+    expect(mockCreateAccount).toHaveBeenCalledWith('org-1', 'member-1', {
+      ...body,
+      emailAddress: 'support@example.com',
+    });
     expect(mockQueueAdd).not.toHaveBeenCalled();
 
     resolveCreate?.(createdAccount);

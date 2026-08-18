@@ -38,7 +38,7 @@ function storedAddresses(value: unknown): string[] {
   });
 }
 
-function normalizedAddress(address: string): string {
+export function normalizeEmailAddress(address: string): string {
   return address.trim().toLowerCase();
 }
 
@@ -50,7 +50,7 @@ export function buildReplyAllRecipients({
   currentAccountAddress,
 }: ReplyAllInput): { to: string[]; cc: string[] } {
   const ownAddress = currentAccountAddress
-    ? normalizedAddress(currentAccountAddress)
+    ? normalizeEmailAddress(currentAccountAddress)
     : null;
   const to: string[] = [];
   const cc: string[] = [];
@@ -61,14 +61,14 @@ export function buildReplyAllRecipients({
     const address = candidate?.trim();
     if (!address || !isValidEmail(address)) return;
 
-    const normalized = normalizedAddress(address);
+    const normalized = normalizeEmailAddress(address);
     if (normalized === ownAddress || seenTo.has(normalized)) return;
     seenTo.add(normalized);
     to.push(address);
   };
 
   const addCc = (candidate: string) => {
-    const normalized = normalizedAddress(candidate);
+    const normalized = normalizeEmailAddress(candidate);
     if (
       normalized === ownAddress
       || seenTo.has(normalized)

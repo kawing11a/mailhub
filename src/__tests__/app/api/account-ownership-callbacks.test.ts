@@ -89,11 +89,13 @@ const providerCases: ProviderCase[] = [
 ];
 
 function accountLookupMock(provider: ProviderCase) {
-  return provider.name === 'microsoft' ? mockFindFirst : mockFindUnique;
+  return provider.name === 'microsoft' || provider.name === 'google'
+    ? mockFindFirst
+    : mockFindUnique;
 }
 
 function accountLookupArgs(provider: ProviderCase, emailAddress: string) {
-  return provider.name === 'microsoft'
+  return provider.name === 'microsoft' || provider.name === 'google'
     ? {
         where: {
           organizationId: 'org-1',
@@ -185,6 +187,15 @@ function mockSuccessfulFetches(
 describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockFindUnique.mockReset();
+    mockFindFirst.mockReset();
+    mockUpdate.mockReset();
+    mockCount.mockReset();
+    mockVerifyToken.mockReset();
+    mockQueueAdd.mockReset();
+    mockCreateOwnedAccount.mockReset();
+    fetchMock.mockReset();
+    mockEncrypt.mockImplementation((value: string) => `encrypted:${value}`);
 
     process.env.NEXT_PUBLIC_APP_URL = 'http://localhost';
     process.env.GOOGLE_CLIENT_ID = 'google-client-id';
@@ -265,6 +276,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     accountLookupMock(provider).mockResolvedValue({
       id: 'account-existing',
       organizationId: 'org-1',
+      emailAddress: 'shared@example.com',
       ownerUserId: 'member-1',
       oauthRefreshToken: 'encrypted:old-refresh-token',
     });
@@ -312,6 +324,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     accountLookupMock(provider).mockResolvedValue({
       id: 'account-existing',
       organizationId: 'org-1',
+      emailAddress: 'shared@example.com',
       ownerUserId: 'member-2',
       oauthRefreshToken: 'encrypted:old-refresh-token',
     });
@@ -346,9 +359,11 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     accountLookupMock(provider).mockResolvedValue({
       id: 'account-existing',
       organizationId: 'org-1',
+      emailAddress: 'shared@example.com',
       ownerUserId: 'member-1',
       oauthRefreshToken: 'encrypted:old-refresh-token',
     });
+    mockSuccessfulFetches(provider);
 
     const response = await provider.callback(createRequest());
 
@@ -366,8 +381,43 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
   });
 
   if (provider.name === 'google') {
+    it('normalizes the requested mailbox before the pre-token reauthorization guard', async () => {
+      mockVerifyToken.mockResolvedValue({
+        userId: 'member-2',
+        organizationId: 'org-1',
+        role: 'member',
+      });
+      mockFindFirst.mockResolvedValue({
+        id: 'account-existing',
+        organizationId: 'org-1',
+        ownerUserId: 'member-1',
+        emailAddress: 'Owner@Example.com',
+        oauthRefreshToken: 'encrypted:old-refresh-token',
+      });
+
+      const response = await provider.callback(
+        createRequest({
+          stateOverrides: {
+            emailAddress: 'Owner@Example.com',
+          },
+        })
+      );
+
+      expect(mockFindFirst).toHaveBeenCalledWith(
+        accountLookupArgs(provider, 'owner@example.com')
+      );
+      expect(response.headers.get('location')).toBe(
+        'http://localhost/settings/accounts?error=unauthorized_reauthorization'
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(mockEncrypt).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+    });
+
     it('rejects callbacks without a provider-confirmed Google mailbox before credential storage', async () => {
-      mockFindUnique.mockResolvedValue(null);
+      mockFindFirst.mockResolvedValue(null);
       mockSuccessfulFetches(provider, 'unused@example.com', {});
 
       const response = await provider.callback(createRequest());
@@ -388,7 +438,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
         organizationId: 'org-1',
         role: 'member',
       });
-      mockFindUnique
+      mockFindFirst
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({
           id: 'account-provider-email',
@@ -407,23 +457,68 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
         })
       );
 
-      expect(mockFindUnique).toHaveBeenNthCalledWith(1, {
+      expect(mockFindFirst).toHaveBeenNthCalledWith(1, {
         where: {
-          organizationId_emailAddress: {
-            organizationId: 'org-1',
-            emailAddress: 'state-email@example.com',
-          },
+          organizationId: 'org-1',
+          emailAddress: { equals: 'state-email@example.com', mode: 'insensitive' },
         },
       });
-      expect(mockFindUnique).toHaveBeenNthCalledWith(2, {
+      expect(mockFindFirst).toHaveBeenNthCalledWith(2, {
         where: {
-          organizationId_emailAddress: {
-            organizationId: 'org-1',
-            emailAddress: 'provider-owned@example.com',
-          },
+          organizationId: 'org-1',
+          emailAddress: { equals: 'provider-owned@example.com', mode: 'insensitive' },
         },
       });
       expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(response.headers.get('location')).toBe(
+        'http://localhost/settings/accounts?error=unauthorized_reauthorization'
+      );
+      expect(mockEncrypt).not.toHaveBeenCalled();
+      expect(mockUpdate).not.toHaveBeenCalled();
+      expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
+      expect(mockCount).not.toHaveBeenCalled();
+      expect(mockQueueAdd).not.toHaveBeenCalled();
+    });
+
+    it('rejects mixed-case provider-confirmed mailbox reauthorization before credential storage', async () => {
+      mockVerifyToken.mockResolvedValue({
+        userId: 'member-2',
+        organizationId: 'org-1',
+        role: 'member',
+      });
+      mockFindFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({
+          id: 'account-provider-email',
+          organizationId: 'org-1',
+          ownerUserId: 'member-1',
+          emailAddress: 'Provider-Owned@Example.COM',
+          oauthRefreshToken: 'encrypted:old-refresh-token',
+        });
+      mockSuccessfulFetches(provider, 'unused@example.com', {
+        email: 'Provider-Owned@Example.COM',
+      });
+
+      const response = await provider.callback(
+        createRequest({
+          stateOverrides: {
+            emailAddress: 'state-email@example.com',
+          },
+        })
+      );
+
+      expect(mockFindFirst).toHaveBeenNthCalledWith(1, {
+        where: {
+          organizationId: 'org-1',
+          emailAddress: { equals: 'state-email@example.com', mode: 'insensitive' },
+        },
+      });
+      expect(mockFindFirst).toHaveBeenNthCalledWith(2, {
+        where: {
+          organizationId: 'org-1',
+          emailAddress: { equals: 'provider-owned@example.com', mode: 'insensitive' },
+        },
+      });
       expect(response.headers.get('location')).toBe(
         'http://localhost/settings/accounts?error=unauthorized_reauthorization'
       );
