@@ -57,5 +57,17 @@ describe('PUT /api/accounts/all/emails/:emailId', () => {
       where: { id: 'email-1' },
       data: { isRead: true },
     });
+    expect(prisma.email.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'email-1',
+        account: {
+          organizationId: 'org-456',
+          OR: [
+            { ownerUserId: 'user-123' },
+            { memberAccess: { some: { userId: 'user-123' } } },
+          ],
+        },
+      },
+    });
   });
 });

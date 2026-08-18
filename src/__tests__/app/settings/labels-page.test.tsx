@@ -113,6 +113,8 @@ describe('Labels settings page', () => {
     expect(html).toContain(
       'aria-label="Assign account Inbox to label New label"'
     );
+    expect(html).not.toContain('Delete requires admin access');
+    expect(html).not.toContain('Label deletion remains admin-only');
 
     const managementQuery = queryOptions.find(
       ({ queryKey }) =>

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { searchQueue } from '@/lib/queue/client';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   const account = await prisma.emailAccount.findFirst({
-    where: { id, organizationId: auth.organizationId },
+    where: accountAccessWhere(auth, id),
   });
 
   if (!account) return apiError('Account not found', 404);

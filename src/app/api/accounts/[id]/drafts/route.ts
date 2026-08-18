@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db/prisma';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { parseAddresses } from '@/lib/email/addresses';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -42,13 +43,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
 
   // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: {
-      id: accountId,
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? { memberAccess: { some: { userId: auth.userId } } }
-        : {}),
-    },
+    where: accountAccessWhere(auth, accountId),
     select: { id: true, emailAddress: true },
   });
 
@@ -72,12 +67,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         where: {
           id: emailId,
           isDraft: true,
-          account: {
-            organizationId: auth.organizationId,
-            ...(auth.role !== 'admin'
-              ? { memberAccess: { some: { userId: auth.userId } } }
-              : {}),
-          },
+          account: accountAccessWhere(auth),
         },
         select: { id: true },
       });

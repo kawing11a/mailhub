@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate } from '@/lib/auth/middleware';
 import { z } from 'zod';
+import { editableLabelWhere } from '@/lib/labels/access';
 
 const updateLabelSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -24,11 +25,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // Verify label belongs to org
-    const existing = await prisma.label.findUnique({
-      where: { id },
+    const existing = await prisma.label.findFirst({
+      where: editableLabelWhere(session, id),
     });
 
-    if (!existing || existing.organizationId !== session.organizationId) {
+    if (!existing) {
       return NextResponse.json({ error: 'Label not found' }, { status: 404 });
     }
 
@@ -58,15 +59,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const { id } = await params;
     const session = await authenticate(req);
     if (session instanceof Response) return session;
-    if (session.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
-    const existing = await prisma.label.findUnique({
-      where: { id },
+    const existing = await prisma.label.findFirst({
+      where: editableLabelWhere(session, id),
     });
 
-    if (!existing || existing.organizationId !== session.organizationId) {
+    if (!existing) {
       return NextResponse.json({ error: 'Label not found' }, { status: 404 });
     }
 

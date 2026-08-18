@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -8,18 +9,7 @@ export async function GET(req: NextRequest) {
 
   // 1. Fetch accessible accounts
   const accounts = await prisma.emailAccount.findMany({
-    where: {
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? {
-            memberAccess: {
-              some: {
-                userId: auth.userId,
-              },
-            },
-          }
-        : {}),
-    },
+    where: accountAccessWhere(auth),
     select: { id: true, initialSyncCompletedAt: true },
   });
 

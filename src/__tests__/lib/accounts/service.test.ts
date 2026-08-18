@@ -2,6 +2,10 @@ jest.mock('@/lib/db/prisma', () => ({
   prisma: {
     emailAccount: {
       count: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    email: {
+      count: jest.fn(),
     },
     $transaction: jest.fn(),
   },
@@ -12,15 +16,31 @@ jest.mock('@/lib/crypto', () => ({
   decrypt: jest.fn(),
 }));
 
+jest.mock('@/lib/network/outbound-host', () => ({
+  resolveSafeOutboundHost: jest.fn(),
+}));
+
 import { prisma } from '@/lib/db/prisma';
-import { createAccount, createOwnedAccount, sanitizeAccount } from '@/lib/accounts/service';
+import {
+  createAccount,
+  createOwnedAccount,
+  getAccountStats,
+  sanitizeAccount,
+} from '@/lib/accounts/service';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 const mockCount = prisma.emailAccount.count as jest.Mock;
 const mockTransaction = prisma.$transaction as jest.Mock;
+const mockResolveHost = resolveSafeOutboundHost as jest.Mock;
 
 describe('account service ownership creation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockResolveHost.mockResolvedValue({
+      address: '93.184.216.34',
+      family: 4,
+      servername: 'mail.example.com',
+    });
   });
 
   it('persists declared OAuth fields when creating an owned OAuth account', async () => {
@@ -205,6 +225,29 @@ describe('account service ownership creation', () => {
     expect(result).toBe(createdAccount);
   });
 
+  it('rejects an unsafe custom account before database reads or persistence', async () => {
+    mockResolveHost.mockRejectedValue(
+      new Error('imap.internal resolves to a non-public address')
+    );
+
+    await expect(
+      createAccount('org-1', 'user-1', {
+        label: 'Unsafe',
+        emailAddress: 'unsafe@example.com',
+        provider: 'imap',
+        imapHost: 'imap.internal',
+        imapPort: 993,
+        smtpHost: 'smtp.internal',
+        smtpPort: 465,
+        username: 'unsafe@example.com',
+        password: 'secret',
+      })
+    ).rejects.toThrow('resolves to a non-public address');
+
+    expect(mockCount).not.toHaveBeenCalled();
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
   it('removes ownerUserId and encrypted credentials from sanitized account responses', () => {
     const sanitized = sanitizeAccount({
       id: 'account-1',
@@ -240,5 +283,44 @@ describe('account service ownership creation', () => {
     expect(sanitized).not.toHaveProperty('passwordEncrypted');
     expect(sanitized).not.toHaveProperty('oauthAccessToken');
     expect(sanitized).not.toHaveProperty('oauthRefreshToken');
+  });
+
+  it('scopes unified account statistics to the member accessible accounts', async () => {
+    (prisma.email.count as jest.Mock)
+      .mockResolvedValueOnce(2)
+      .mockResolvedValueOnce(5);
+    (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValue({
+      lastSyncedAt: new Date('2026-08-18T12:00:00.000Z'),
+    });
+
+    const stats = await getAccountStats('all', {
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+
+    const accessibleAccount = {
+      organizationId: 'org-1',
+      OR: [
+        { ownerUserId: 'member-1' },
+        { memberAccess: { some: { userId: 'member-1' } } },
+      ],
+    };
+    expect(prisma.email.count).toHaveBeenNthCalledWith(1, {
+      where: { account: accessibleAccount, folder: 'INBOX', isRead: false },
+    });
+    expect(prisma.email.count).toHaveBeenNthCalledWith(2, {
+      where: { account: accessibleAccount },
+    });
+    expect(prisma.emailAccount.findFirst).toHaveBeenCalledWith({
+      where: accessibleAccount,
+      orderBy: { lastSyncedAt: 'desc' },
+      select: { lastSyncedAt: true },
+    });
+    expect(stats).toEqual({
+      unreadCount: 2,
+      totalCount: 5,
+      lastSyncedAt: new Date('2026-08-18T12:00:00.000Z'),
+    });
   });
 });

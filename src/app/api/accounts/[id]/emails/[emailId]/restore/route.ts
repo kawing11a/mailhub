@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { logActivity } from '@/lib/activity/log';
 import { restoreOnServer } from '@/lib/email/server-sync';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ id: string; emailId: string }>;
@@ -25,15 +26,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
-      where: { id: accountId, organizationId: auth.organizationId },
+      where: accountAccessWhere(auth, accountId),
       select: { id: true },
     });
     if (!account) return apiError('Account not found', 404);
     where.accountId = accountId;
   } else {
-    where.account = {
-      organizationId: auth.organizationId,
-    };
+    where.account = accountAccessWhere(auth);
   }
 
   const email = await prisma.email.findFirst({ where });

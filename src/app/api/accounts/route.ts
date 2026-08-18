@@ -4,6 +4,10 @@ import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { accountAccessWhere } from '@/lib/accounts/access';
 import { createAccountSchema } from '@/lib/validation';
 import { createAccount, sanitizeAccount } from '@/lib/accounts/service';
+import {
+  resolveSafeOutboundHost,
+  UnsafeOutboundHostError,
+} from '@/lib/network/outbound-host';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -54,6 +58,11 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
   try {
+    await Promise.all(
+      [parsed.data.imapHost, parsed.data.smtpHost]
+        .filter((host): host is string => !!host)
+        .map((host) => resolveSafeOutboundHost(host))
+    );
     const account = await createAccount(auth.organizationId, auth.userId, parsed.data);
     // After creating the account, queue initial sync
     // Connection initialization happens asynchronously inside the worker process
@@ -61,6 +70,9 @@ export async function POST(req: NextRequest) {
     await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
     return apiResponse(sanitizeAccount(account), 201);
   } catch (error: unknown) {
+    if (error instanceof UnsafeOutboundHostError) {
+      return apiError(error.message, 422);
+    }
     if (
       error instanceof Error &&
       error.message.includes('Unique constraint')

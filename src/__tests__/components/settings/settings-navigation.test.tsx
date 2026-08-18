@@ -232,6 +232,19 @@ describe('Settings navigation and member guards', () => {
     expect(
       queryOptions.find(({ queryKey }) => queryKey[0] === 'accounts')?.enabled
     ).toBe(false);
+    expect(mockUseMutation).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs every rules-page hook while auth is loading without enabling protected queries', () => {
+    configureAuthLoadingQueries();
+
+    const html = renderToStaticMarkup(<RulesSettingsPage />);
+
+    expect(html).toContain('Loading settings...');
+    expect(queryOptions.find(({ queryKey }) => queryKey[0] === 'rules')?.enabled).toBe(false);
+    expect(queryOptions.find(({ queryKey }) => queryKey[0] === 'labels')?.enabled).toBe(false);
+    expect(queryOptions.find(({ queryKey }) => queryKey[0] === 'accounts')?.enabled).toBe(false);
+    expect(mockUseMutation).toHaveBeenCalledTimes(2);
   });
 
   it('renders a member fallback for the experiments page and disables protected queries', () => {

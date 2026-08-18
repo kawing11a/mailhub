@@ -15,16 +15,22 @@ jest.mock('nodemailer', () => ({
   createTransport: jest.fn(),
 }));
 
+jest.mock('@/lib/network/outbound-host', () => ({
+  resolveSafeOutboundHost: jest.fn(),
+}));
+
 import type { NextRequest } from 'next/server';
 import { POST } from '@/app/api/accounts/test-credentials/route';
 import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { ImapFlow } from 'imapflow';
 import { createTransport } from 'nodemailer';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 const mockAuthenticate = authenticate as jest.Mock;
 const mockRequireAdmin = requireAdmin as jest.Mock;
 const mockImapFlow = ImapFlow as jest.MockedClass<typeof ImapFlow>;
 const mockCreateTransport = createTransport as jest.Mock;
+const mockResolveHost = resolveSafeOutboundHost as jest.Mock;
 
 function createRequest(body: Record<string, unknown>): NextRequest {
   return new Request('http://localhost/api/accounts/test-credentials', {
@@ -43,6 +49,11 @@ describe('POST /api/accounts/test-credentials', () => {
       role: 'admin',
     });
     mockRequireAdmin.mockReturnValue(null);
+    mockResolveHost.mockImplementation(async (host: string) => ({
+      address: host.startsWith('imap') ? '93.184.216.34' : '93.184.216.35',
+      family: 4,
+      servername: host,
+    }));
   });
 
   it('returns 401 if unauthenticated', async () => {
@@ -170,5 +181,40 @@ describe('POST /api/accounts/test-credentials', () => {
     expect(body.imap).toBe(false);
     expect(body.smtp).toBe(true);
     expect(body.imapError).toBe('Invalid IMAP credentials');
+  });
+
+  it('reports an unsafe resolved host without constructing a mail client', async () => {
+    mockResolveHost.mockRejectedValue(
+      new Error('imap.internal resolves to a non-public address')
+    );
+
+    const res = await POST(
+      createRequest({
+        label: 'Unsafe',
+        provider: 'imap',
+        emailAddress: 'unsafe@example.com',
+        username: 'unsafe@example.com',
+        password: 'password123',
+        imapHost: 'imap.internal',
+        imapPort: 993,
+        imapSecure: true,
+        smtpHost: 'smtp.internal',
+        smtpPort: 465,
+        smtpSecure: true,
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(
+      expect.objectContaining({
+        ok: false,
+        imap: false,
+        smtp: false,
+        imapError: 'imap.internal resolves to a non-public address',
+        smtpError: 'imap.internal resolves to a non-public address',
+      })
+    );
+    expect(mockImapFlow).not.toHaveBeenCalled();
+    expect(mockCreateTransport).not.toHaveBeenCalled();
   });
 });

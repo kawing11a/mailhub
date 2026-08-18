@@ -305,8 +305,8 @@ export default function LabelAssignmentPage() {
         </p>
         {authData?.role === 'member' ? (
           <p className="text-sm text-gray-500 mt-2">
-            You can manage labels for the email accounts you can access. Label deletion remains
-            admin-only.
+            You can manage labels for the email accounts you can access. You can also manage labels
+            that are not assigned to any account.
           </p>
         ) : null}
       </div>
@@ -519,25 +519,19 @@ export default function LabelAssignmentPage() {
                                 ))}
                               </div>
                               <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100">
-                                {authData?.role === 'admin' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (confirm('Are you sure you want to delete this label?')) {
-                                        deleteLabel.mutate(label.id);
-                                      }
-                                    }}
-                                    className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
-                                    disabled={deleteLabel.isPending}
-                                  >
-                                    {deleteLabel.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                    <span>Delete</span>
-                                  </button>
-                                ) : (
-                                  <span className="text-xs text-gray-400">
-                                    Delete requires admin access
-                                  </span>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (confirm('Are you sure you want to delete this label?')) {
+                                      deleteLabel.mutate(label.id);
+                                    }
+                                  }}
+                                  className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-50"
+                                  disabled={deleteLabel.isPending}
+                                >
+                                  {deleteLabel.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                  <span>Delete</span>
+                                </button>
                                 <div className="flex items-center gap-2">
                                   <button
                                     type="button"

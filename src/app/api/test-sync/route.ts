@@ -5,6 +5,8 @@ import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from '@/lib/g
 import { decrypt } from '@/lib/crypto';
 import { ImapFlow } from 'imapflow';
 import { parseEmail } from '@/lib/imap/email-parser';
+import { accountAccessWhere } from '@/lib/accounts/access';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
@@ -13,8 +15,8 @@ export async function POST(req: NextRequest) {
   const { accountId } = await req.json();
   if (!accountId) return apiError('Account ID is required');
 
-  const account = await prisma.emailAccount.findUnique({
-    where: { id: accountId, organizationId: auth.organizationId }
+  const account = await prisma.emailAccount.findFirst({
+    where: accountAccessWhere(auth, accountId),
   });
 
   if (!account) return apiError('Account not found', 404);
@@ -63,10 +65,15 @@ export async function POST(req: NextRequest) {
         authOptions.pass = password;
       }
 
+      if (!account.imapHost) {
+        return apiError('Connection failed: IMAP host is not configured', 500);
+      }
+      const destination = await resolveSafeOutboundHost(account.imapHost);
       const client = new ImapFlow({
-        host: account.imapHost!,
+        host: destination.address,
         port: account.imapPort || 993,
         secure: account.imapSecure ?? true,
+        ...(destination.servername ? { servername: destination.servername } : {}),
         auth: authOptions,
         logger: false,
       });

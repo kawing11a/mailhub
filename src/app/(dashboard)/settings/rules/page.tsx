@@ -78,19 +78,6 @@ export default function RulesSettingsPage() {
   const labels: any[] = labelsData?.labels || [];
   const accounts: any[] = Array.isArray(accountsData) ? accountsData : [];
 
-  if (isLoadingAuth) {
-    return (
-      <div className="py-24 flex flex-col items-center justify-center text-gray-400 gap-2">
-        <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
-        <span className="text-sm">Loading settings...</span>
-      </div>
-    );
-  }
-
-  if (authData && !isAdmin) {
-    return <RestrictedSettingsNotice sectionName="email rules and automation" />;
-  }
-
   // Toggle active mutation
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
@@ -126,6 +113,19 @@ export default function RulesSettingsPage() {
       toast.error(err.message || 'Error deleting rule');
     },
   });
+
+  if (isLoadingAuth) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center text-gray-400 gap-2">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
+        <span className="text-sm">Loading settings...</span>
+      </div>
+    );
+  }
+
+  if (authData && !isAdmin) {
+    return <RestrictedSettingsNotice sectionName="email rules and automation" />;
+  }
 
   const handleRunRule = async (ruleId: string, ruleName: string) => {
     setRunningRuleId(ruleId);

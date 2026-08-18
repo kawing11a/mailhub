@@ -2,6 +2,7 @@ import { createTransport, Transporter } from 'nodemailer';
 import { getDecryptedAccount } from '@/lib/accounts/service';
 import type { SendEmailInput } from '@/lib/validation';
 import { getValidAccessToken, sendMessageRaw } from '@/lib/gmail/api';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 export async function sendGraphEmail(
   accessToken: string,
@@ -109,10 +110,15 @@ export async function sendEmail(
       throw new Error('SMTP credentials not configured for this account');
     }
 
+    const smtpDestination = await resolveSafeOutboundHost(account.smtpHost);
+
     const transporter: Transporter = createTransport({
-      host: account.smtpHost,
+      host: smtpDestination.address,
       port: account.smtpPort || 587,
       secure: account.smtpSecure ?? false,
+      ...(smtpDestination.servername
+        ? { tls: { servername: smtpDestination.servername } }
+        : {}),
       auth: {
         user: account.username || account.emailAddress,
         pass: account.decryptedPassword,
@@ -133,10 +139,14 @@ export async function sendEmail(
 
         const { ImapFlow } = await import('imapflow');
         const { decrypt } = await import('@/lib/crypto');
+        const imapDestination = await resolveSafeOutboundHost(account.imapHost);
         const client = new ImapFlow({
-          host: account.imapHost,
+          host: imapDestination.address,
           port: account.imapPort || 993,
           secure: account.imapSecure ?? true,
+          ...(imapDestination.servername
+            ? { servername: imapDestination.servername }
+            : {}),
           auth: {
             user: account.username || account.emailAddress,
             pass: decrypt(account.passwordEncrypted),

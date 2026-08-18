@@ -21,15 +21,28 @@ jest.mock('@/lib/queue/client', () => ({
   },
 }));
 
+jest.mock('@/lib/network/outbound-host', () => {
+  class UnsafeOutboundHostError extends Error {}
+  return {
+    UnsafeOutboundHostError,
+    resolveSafeOutboundHost: jest.fn(),
+  };
+});
+
 import type { NextRequest } from 'next/server';
 import { POST } from '@/app/api/accounts/route';
 import { authenticate } from '@/lib/auth/middleware';
 import { createAccount } from '@/lib/accounts/service';
 import { syncQueue } from '@/lib/queue/client';
+import {
+  resolveSafeOutboundHost,
+  UnsafeOutboundHostError,
+} from '@/lib/network/outbound-host';
 
 const mockAuthenticate = authenticate as jest.Mock;
 const mockCreateAccount = createAccount as jest.Mock;
 const mockQueueAdd = syncQueue.add as jest.Mock;
+const mockResolveHost = resolveSafeOutboundHost as jest.Mock;
 
 function createRequest(body: Record<string, unknown>): NextRequest {
   return new Request('http://localhost/api/accounts', {
@@ -42,6 +55,11 @@ function createRequest(body: Record<string, unknown>): NextRequest {
 describe('POST /api/accounts', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockResolveHost.mockImplementation(async (host: string) => ({
+      address: host.startsWith('imap') ? '93.184.216.34' : '93.184.216.35',
+      family: 4,
+      servername: host,
+    }));
   });
 
   it('allows members to create accounts and queues sync after persistence resolves', async () => {
@@ -108,5 +126,37 @@ describe('POST /api/accounts', () => {
 
     const responseBody = await response.json();
     expect(responseBody).not.toHaveProperty('ownerUserId');
+  });
+
+  it('rejects an unsafe mail destination before account creation or sync queueing', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockResolveHost.mockRejectedValue(
+      new UnsafeOutboundHostError('imap.internal resolves to a non-public address')
+    );
+    mockCreateAccount.mockResolvedValue({ id: 'unsafe-account' });
+
+    const response = await POST(
+      createRequest({
+        label: 'Unsafe',
+        emailAddress: 'unsafe@example.com',
+        provider: 'imap',
+        imapHost: 'imap.internal',
+        imapPort: 993,
+        imapSecure: true,
+        smtpHost: 'smtp.example.com',
+        smtpPort: 465,
+        smtpSecure: true,
+        username: 'unsafe@example.com',
+        password: 'secret',
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockCreateAccount).not.toHaveBeenCalled();
+    expect(mockQueueAdd).not.toHaveBeenCalled();
   });
 });

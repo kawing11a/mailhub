@@ -5,6 +5,7 @@ import { sendEmail } from '@/lib/smtp/sender';
 import { logActivity } from '@/lib/activity/log';
 import { prisma } from '@/lib/db/prisma';
 import { createEmailSnippet } from '@/lib/email/snippet';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: { id: accountId, organizationId: auth.organizationId },
+    where: accountAccessWhere(auth, accountId),
     select: { id: true, emailAddress: true },
   });
 

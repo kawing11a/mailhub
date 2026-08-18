@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db/prisma';
 import { encrypt, decrypt } from '@/lib/crypto';
 import type { CreateAccountInput, UpdateAccountInput } from '@/lib/validation';
 import type { EmailAccount } from '@prisma/client';
+import { accountAccessWhere, type AccountAuth } from '@/lib/accounts/access';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 // Color palette for auto-assigning account colors
 const ACCOUNT_COLORS = [
@@ -87,6 +89,12 @@ export async function createAccount(
   ownerUserId: string,
   input: CreateAccountInput
 ): Promise<EmailAccount> {
+  await Promise.all(
+    [input.imapHost, input.smtpHost]
+      .filter((host): host is string => !!host)
+      .map((host) => resolveSafeOutboundHost(host))
+  );
+
   // Auto-assign color if not provided
   const accountCount = await prisma.emailAccount.count({
     where: { organizationId },
@@ -151,6 +159,12 @@ export async function updateAccount(
   organizationId: string,
   input: UpdateAccountInput
 ): Promise<EmailAccount> {
+  await Promise.all(
+    [input.imapHost, input.smtpHost]
+      .filter((host): host is string => !!host)
+      .map((host) => resolveSafeOutboundHost(host))
+  );
+
   const data: any = { ...input };
   if (input.password) {
     data.passwordEncrypted = encrypt(input.password);
@@ -186,26 +200,23 @@ export async function deleteAccount(
   });
 }
 
-export async function getAccountStats(accountId: string, organizationId?: string) {
-  const where = accountId === 'all' && organizationId
-    ? { account: { organizationId } }
-    : { accountId };
+export async function getAccountStats(accountId: string, auth: AccountAuth) {
+  const accountWhere = accountAccessWhere(
+    auth,
+    accountId === 'all' ? undefined : accountId
+  );
+  const where = { account: accountWhere };
 
   const [unreadCount, totalCount, lastSynced] = await Promise.all([
     prisma.email.count({
       where: { ...where, folder: 'INBOX', isRead: false },
     }),
     prisma.email.count({ where }),
-    accountId === 'all' && organizationId
-      ? prisma.emailAccount.findFirst({
-          where: { organizationId },
-          orderBy: { lastSyncedAt: 'desc' },
-          select: { lastSyncedAt: true },
-        })
-      : prisma.emailAccount.findUnique({
-          where: { id: accountId }, // Valid UUID when accountId is not 'all'
-          select: { lastSyncedAt: true },
-        }),
+    prisma.emailAccount.findFirst({
+      where: accountWhere,
+      ...(accountId === 'all' ? { orderBy: { lastSyncedAt: 'desc' as const } } : {}),
+      select: { lastSyncedAt: true },
+    }),
   ]);
 
   return {

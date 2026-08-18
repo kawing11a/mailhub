@@ -17,6 +17,7 @@ model User {
   memberships    OrganizationMember[]
   activityLogs   EmailActivityLog[]
   favouriteAccounts FavouriteAccount[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -234,6 +235,7 @@ model EmailActivityLog {
 model PushSubscription {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
   endpoint       String
   p256dh         String
   auth           String
@@ -241,9 +243,11 @@ model PushSubscription {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([endpoint])
   @@index([organizationId])
+  @@index([userId])
   @@map("push_subscriptions")
 }
 

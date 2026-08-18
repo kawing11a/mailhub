@@ -123,6 +123,22 @@ describe('GET /api/labels', () => {
     expect(mockFindMany).toHaveBeenCalledWith({
       where: {
         organizationId: 'org-1',
+        OR: [
+          { accountLabels: { none: {} } },
+          {
+            accountLabels: {
+              some: {
+                account: {
+                  organizationId: 'org-1',
+                  OR: [
+                    { ownerUserId: 'member-1' },
+                    { memberAccess: { some: { userId: 'member-1' } } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
       },
       orderBy: { name: 'asc' },
       include: {
@@ -149,6 +165,24 @@ describe('GET /api/labels', () => {
         }),
       ],
     });
+  });
+
+  it('keeps management scope organization-wide for admins', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'admin-1',
+      organizationId: 'org-1',
+      role: 'admin',
+    });
+    mockFindMany.mockResolvedValue([]);
+
+    const response = await GET(
+      new Request('http://localhost/api/labels?scope=management') as NextRequest
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { organizationId: 'org-1' } })
+    );
   });
 
   it('keeps admin label visibility organization-wide while still excluding unassigned labels', async () => {

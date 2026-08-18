@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate } from '@/lib/auth/middleware';
 import { accountAccessWhere } from '@/lib/accounts/access';
+import { editableLabelWhere } from '@/lib/labels/access';
 import { z } from 'zod';
 
 const createLabelSchema = z.object({
@@ -21,10 +22,10 @@ export async function GET(req: NextRequest) {
       new URL(req.url).searchParams.get('scope') === 'management';
     const labels = await prisma.label.findMany({
       where: {
-        organizationId: session.organizationId,
         ...(isManagementScope
-          ? {}
+          ? editableLabelWhere(session)
           : {
+              organizationId: session.organizationId,
               accountLabels: {
                 some: {
                   account: accessibleAccountsWhere,
