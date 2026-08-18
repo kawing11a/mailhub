@@ -37,14 +37,22 @@ export default function SettingsLayout({
     ...(authData?.role === 'admin'
       ? [
           { name: 'Members', href: '/settings/members', icon: Users },
-          { name: 'Label Assignment', href: '/settings/labels', icon: Tag },
         ]
       : []),
+    { name: 'Label Assignment', href: '/settings/labels', icon: Tag },
     { name: 'Email Accounts', href: '/settings/accounts', icon: Mail },
-    { name: 'Email Rules', href: '/settings/rules', icon: ListFilter },
+    ...(authData?.role === 'admin'
+      ? [
+          { name: 'Email Rules', href: '/settings/rules', icon: ListFilter },
+        ]
+      : []),
     { name: 'Signatures', href: '/settings/signatures', icon: CreditCard },
     { name: 'Preferences', href: '/settings/preferences', icon: Settings },
-    { name: 'Experimental', href: '/settings/experiments', icon: FlaskConical },
+    ...(authData?.role === 'admin'
+      ? [
+          { name: 'Experimental', href: '/settings/experiments', icon: FlaskConical },
+        ]
+      : []),
     { name: 'Security', href: '/settings/security', icon: Shield },
   ];
 

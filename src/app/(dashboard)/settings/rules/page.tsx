@@ -22,6 +22,7 @@ import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { RuleModal } from '@/components/rules/RuleModal';
 import { EmailRuleDefinition } from '@/lib/rules/types';
+import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
 export default function RulesSettingsPage() {
   const queryClient = useQueryClient();
@@ -29,9 +30,21 @@ export default function RulesSettingsPage() {
   const [editingRule, setEditingRule] = useState<any | null>(null);
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
 
+  const { data: authData, isLoading: isLoadingAuth } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
+
+  const isAdmin = authData?.role === 'admin';
+
   // Fetch Rules
   const { data: rulesData, isLoading: isLoadingRules } = useQuery({
     queryKey: ['rules'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/rules');
       if (!res.ok) throw new Error('Failed to fetch rules');
@@ -42,6 +55,7 @@ export default function RulesSettingsPage() {
   // Fetch Labels
   const { data: labelsData } = useQuery({
     queryKey: ['labels'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/labels');
       if (!res.ok) throw new Error('Failed to fetch labels');
@@ -52,6 +66,7 @@ export default function RulesSettingsPage() {
   // Fetch Accounts
   const { data: accountsData } = useQuery({
     queryKey: ['accounts'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/accounts');
       if (!res.ok) throw new Error('Failed to fetch accounts');
@@ -62,6 +77,19 @@ export default function RulesSettingsPage() {
   const rules: any[] = rulesData?.rules || [];
   const labels: any[] = labelsData?.labels || [];
   const accounts: any[] = Array.isArray(accountsData) ? accountsData : [];
+
+  if (isLoadingAuth) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center text-gray-400 gap-2">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
+        <span className="text-sm">Loading settings...</span>
+      </div>
+    );
+  }
+
+  if (authData && !isAdmin) {
+    return <RestrictedSettingsNotice sectionName="email rules and automation" />;
+  }
 
   // Toggle active mutation
   const toggleActiveMutation = useMutation({

@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate } from '@/lib/auth/middleware';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { z } from 'zod';
 
 const ruleCriterionSchema = z.object({
@@ -51,6 +51,8 @@ export async function GET(
     const { id } = await params;
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const rule = await prisma.emailRule.findFirst({
       where: { id, organizationId: session.organizationId },
@@ -85,6 +87,8 @@ export async function PUT(
     const { id } = await params;
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const json = await req.json();
     const result = updateRuleSchema.safeParse(json);
@@ -161,6 +165,8 @@ export async function DELETE(
     const { id } = await params;
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const existing = await prisma.emailRule.findFirst({
       where: { id, organizationId: session.organizationId },

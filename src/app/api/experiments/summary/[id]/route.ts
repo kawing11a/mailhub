@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import {
+  authenticate,
+  requireAdmin,
+  apiResponse,
+  apiError,
+} from '@/lib/auth/middleware';
 
 export async function GET(
   req: NextRequest,
@@ -8,6 +13,8 @@ export async function GET(
 ) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
+  const adminCheck = requireAdmin(auth);
+  if (adminCheck) return adminCheck;
 
   const { id } = await params;
 

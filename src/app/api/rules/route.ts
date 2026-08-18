@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate } from '@/lib/auth/middleware';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { z } from 'zod';
 
 const ruleCriterionSchema = z.object({
@@ -47,6 +47,8 @@ export async function GET(req: NextRequest) {
   try {
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const rules = await prisma.emailRule.findMany({
       where: { organizationId: session.organizationId },
@@ -74,6 +76,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const json = await req.json();
     const result = createRuleSchema.safeParse(json);

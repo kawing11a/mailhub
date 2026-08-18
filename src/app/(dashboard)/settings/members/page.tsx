@@ -6,6 +6,7 @@ import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { CreateUserModal } from '@/components/settings/CreateUserModal';
 import { ManageAccountAccessModal } from '@/components/settings/ManageAccountAccessModal';
+import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
 export default function MembersPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -21,8 +22,11 @@ export default function MembersPage() {
     },
   });
 
+  const isAdmin = authData?.role === 'admin';
+
   const { data, isLoading } = useQuery({
     queryKey: ['members'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/org/members');
       if (!res.ok) throw new Error('Failed to fetch members');
@@ -53,6 +57,10 @@ export default function MembersPage() {
 
   const members = Array.isArray(data) ? data : [];
   const currentUserId = authData?.user?.id;
+
+  if (authData && !isAdmin) {
+    return <RestrictedSettingsNotice sectionName="member management" />;
+  }
 
   return (
     <div>
