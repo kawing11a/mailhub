@@ -1,5 +1,10 @@
 jest.mock('@/lib/auth/middleware', () => ({
   authenticate: jest.fn(),
+  requireAdmin: jest.fn((auth: { role: string }) =>
+    auth.role !== 'admin'
+      ? Response.json({ error: 'Admin access required' }, { status: 403 })
+      : null
+  ),
   apiResponse: (data: unknown, status = 200) => Response.json(data, { status }),
   apiError: (message: string, status = 400) => Response.json({ error: message }, { status }),
 }));
@@ -51,7 +56,7 @@ describe('Email Rules API Routes', () => {
     mockAuthenticate.mockResolvedValue({
       userId: 'user-123',
       organizationId: 'org-456',
-      role: 'member',
+      role: 'admin',
     });
   });
 

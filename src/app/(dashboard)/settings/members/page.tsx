@@ -6,13 +6,14 @@ import { Loader2, Plus, MoreHorizontal } from 'lucide-react';
 import { format } from 'date-fns';
 import { CreateUserModal } from '@/components/settings/CreateUserModal';
 import { ManageAccountAccessModal } from '@/components/settings/ManageAccountAccessModal';
+import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
 export default function MembersPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [accessModalMember, setAccessModalMember] = useState<any | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: authData } = useQuery({
+  const { data: authData, isLoading: isLoadingAuth } = useQuery({
     queryKey: ['auth-me'],
     queryFn: async () => {
       const res = await fetch('/api/auth/me');
@@ -21,8 +22,11 @@ export default function MembersPage() {
     },
   });
 
+  const isAdmin = authData?.role === 'admin';
+
   const { data, isLoading } = useQuery({
     queryKey: ['members'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/org/members');
       if (!res.ok) throw new Error('Failed to fetch members');
@@ -53,6 +57,19 @@ export default function MembersPage() {
 
   const members = Array.isArray(data) ? data : [];
   const currentUserId = authData?.user?.id;
+
+  if (isLoadingAuth) {
+    return (
+      <div className="py-24 flex flex-col items-center justify-center text-gray-400 gap-2">
+        <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
+        <span className="text-sm">Loading settings...</span>
+      </div>
+    );
+  }
+
+  if (authData && !isAdmin) {
+    return <RestrictedSettingsNotice sectionName="member management" />;
+  }
 
   return (
     <div>

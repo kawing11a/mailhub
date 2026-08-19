@@ -152,4 +152,33 @@ describe('POST sent email', () => {
     expect(mockCreateEmail).not.toHaveBeenCalled();
     expect(mockLogActivity).not.toHaveBeenCalled();
   });
+
+  it('blocks a member without account access before sending or saving content', async () => {
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockFindAccount.mockResolvedValue(null);
+
+    const response = await POST(createRequest(), {
+      params: Promise.resolve({ id: 'hidden-account' }),
+    });
+
+    expect(response.status).toBe(404);
+    expect(mockFindAccount).toHaveBeenCalledWith({
+      where: {
+        id: 'hidden-account',
+        organizationId: 'org-1',
+        OR: [
+          { ownerUserId: 'member-1' },
+          { memberAccess: { some: { userId: 'member-1' } } },
+        ],
+      },
+      select: { id: true, emailAddress: true },
+    });
+    expect(mockSendEmail).not.toHaveBeenCalled();
+    expect(mockCreateEmail).not.toHaveBeenCalled();
+    expect(mockLogActivity).not.toHaveBeenCalled();
+  });
 });

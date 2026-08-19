@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { emailListQuerySchema } from '@/lib/validation';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -19,25 +20,14 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (accountId !== 'all' && accountId !== 'new-emails') {
     // Verify account belongs to user's org and member has access
     const account = await prisma.emailAccount.findFirst({
-      where: { 
-        id: accountId, 
-        organizationId: auth.organizationId,
-        ...(auth.role !== 'admin' ? {
-          memberAccess: { some: { userId: auth.userId } }
-        } : {})
-      },
+      where: accountAccessWhere(auth, accountId),
       select: { id: true },
     });
     if (!account) return apiError('Account not found', 404);
     where.accountId = accountId;
   } else {
     // Unified inbox logic: query emails from all accounts within the org
-    where.account = {
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin' ? {
-        memberAccess: { some: { userId: auth.userId } }
-      } : {})
-    };
+    where.account = accountAccessWhere(auth);
   }
 
   // Parse query params

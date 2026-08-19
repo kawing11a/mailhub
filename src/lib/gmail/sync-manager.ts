@@ -10,6 +10,7 @@ import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from './api';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
+import { sendAccountPushNotification } from '@/lib/notifications/account-push';
 
 export class GmailSyncManager {
   private pollingIntervals: Map<string, NodeJS.Timeout> = new Map();
@@ -290,40 +291,14 @@ export class GmailSyncManager {
           );
 
           if (folder === 'INBOX') {
-            // Send Web Push
             try {
-              const webpush = require('web-push');
-              webpush.setVapidDetails(
-                process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
-                process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
-                process.env.VAPID_PRIVATE_KEY as string
-              );
-
-              const subscriptions = await prisma.pushSubscription.findMany({
-                where: { organizationId },
-              });
-
-              const pushPayload = JSON.stringify({
+              await sendAccountPushNotification({
+                organizationId,
+                accountId,
                 title: `New email from ${parsed.fromAddress}`,
                 body: parsed.subject || 'No Subject',
                 url: '/inbox',
               });
-
-              const pushPromises = subscriptions.map((sub: any) =>
-                webpush.sendNotification({
-                  endpoint: sub.endpoint,
-                  keys: {
-                    p256dh: sub.p256dh,
-                    auth: sub.auth,
-                  }
-                }, pushPayload).catch(async (err: any) => {
-                  if (err.statusCode === 404 || err.statusCode === 410) {
-                    await prisma.pushSubscription.delete({ where: { id: sub.id } });
-                  }
-                })
-              );
-
-              await Promise.all(pushPromises);
             } catch (err) {
               console.error('Failed to send Web Push:', err);
             }

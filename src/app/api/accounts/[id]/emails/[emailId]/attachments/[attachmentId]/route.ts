@@ -4,6 +4,7 @@ import { authenticate, apiError } from '@/lib/auth/middleware';
 import * as fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import * as path from 'path';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ id: string; emailId: string; attachmentId: string }>;
@@ -20,15 +21,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   // Check account access
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
-      where: { id: accountId, organizationId: auth.organizationId },
+      where: accountAccessWhere(auth, accountId),
       select: { id: true },
     });
     if (!account) return apiError('Account not found', 404);
     where.accountId = accountId;
   } else {
-    where.account = {
-      organizationId: auth.organizationId,
-    };
+    where.account = accountAccessWhere(auth);
   }
 
   // Ensure email exists and user has access

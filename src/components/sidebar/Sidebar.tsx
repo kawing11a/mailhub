@@ -14,6 +14,14 @@ import { InstallPWAButton } from '@/components/pwa/InstallPWAButton';
 export function Sidebar() {
   const { setComposeModalOpen } = useAccountStore();
   const pathname = usePathname();
+  const { data: authData } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
 
   const { data: newEmails } = useQuery({
     queryKey: ['new-emails-count'],
@@ -26,6 +34,8 @@ export function Sidebar() {
   });
 
   const newEmailsCount = newEmails?.emails?.length || 0;
+  const settingsHref =
+    authData?.role === 'admin' ? '/settings/members' : '/settings/accounts';
 
   return (
     <div className="ledger-surface mail-rule w-64 border-r flex flex-col h-full overflow-hidden">
@@ -82,7 +92,7 @@ export function Sidebar() {
             <LayoutDashboard className="w-4 h-4" />
           </Link>
           <Link
-            href="/settings/members"
+            href={settingsHref}
             className="p-2 text-gray-500 hover:text-accent-600 hover:bg-gray-100 rounded-md transition-colors"
             title="Settings"
           >

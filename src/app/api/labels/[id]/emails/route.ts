@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { z } from 'zod';
 import { logActivity } from '@/lib/activity/log';
 
@@ -14,6 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const page = parseInt(url.searchParams.get('page') || '1', 10);
     const limit = parseInt(url.searchParams.get('limit') || '50', 10);
     const skip = (page - 1) * limit;
+    const accessibleAccountsWhere = accountAccessWhere(session);
 
     // Verify label access
     const label = await prisma.label.findUnique({
@@ -26,18 +28,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Accounts assigned this label contribute all their emails to the view
     const assignedAccounts = await prisma.accountLabel.findMany({
-      where: { labelId: id },
+      where: {
+        labelId: id,
+        account: accessibleAccountsWhere,
+      },
       select: { accountId: true },
     });
 
     const emails = await prisma.email.findMany({
       where: {
-        account: {
-          organizationId: session.organizationId,
-          ...(session.role !== 'admin'
-            ? { memberAccess: { some: { userId: session.userId } } }
-            : {}),
-        },
+        account: accessibleAccountsWhere,
         OR: [
           { emailLabels: { some: { labelId: id } } },
           { accountId: { in: assignedAccounts.map((a) => a.accountId) } },
@@ -100,13 +100,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Label not found' }, { status: 404 });
     }
 
-    // Verify email belongs to an account in this org
-    const email = await prisma.email.findUnique({
-      where: { id: emailId },
-      include: { account: true },
+    const email = await prisma.email.findFirst({
+      where: {
+        id: emailId,
+        account: accountAccessWhere(session),
+      },
+      select: {
+        id: true,
+        accountId: true,
+      },
     });
 
-    if (!email || email.account.organizationId !== session.organizationId) {
+    if (!email) {
       return NextResponse.json({ error: 'Email not found' }, { status: 404 });
     }
 
@@ -143,6 +148,26 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const url = new URL(req.url);
     const emailId = url.searchParams.get('emailId');
     if (!emailId) return NextResponse.json({ error: 'Missing emailId' }, { status: 400 });
+
+    const label = await prisma.label.findUnique({
+      where: { id },
+    });
+
+    if (!label || label.organizationId !== session.organizationId) {
+      return NextResponse.json({ error: 'Label not found' }, { status: 404 });
+    }
+
+    const email = await prisma.email.findFirst({
+      where: {
+        id: emailId,
+        account: accountAccessWhere(session),
+      },
+      select: { id: true },
+    });
+
+    if (!email) {
+      return NextResponse.json({ error: 'Email not found' }, { status: 404 });
+    }
 
     // Untag
     await prisma.emailLabel.deleteMany({

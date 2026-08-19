@@ -1,10 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getSpamModelStats, resetSpamModelToDefault } from '@/lib/ai/spam-classifier';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 
 /**
  * GET: Retrieve current spam learning statistics and top keywords
  */
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await authenticate(req as NextRequest);
+  if (auth instanceof Response) return auth;
+  const adminCheck = requireAdmin(auth);
+  if (adminCheck) return adminCheck;
+
   try {
     const stats = getSpamModelStats();
     return NextResponse.json({ success: true, stats });
@@ -18,6 +24,11 @@ export async function GET() {
  * POST: Reset model state to default seeds
  */
 export async function POST(req: Request) {
+  const auth = await authenticate(req as NextRequest);
+  if (auth instanceof Response) return auth;
+  const adminCheck = requireAdmin(auth);
+  if (adminCheck) return adminCheck;
+
   try {
     const body = await req.json();
     if (body.action === 'reset') {

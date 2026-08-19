@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ threadId: string }>;
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const emails = await prisma.email.findMany({
     where: {
       threadId,
-      account: { organizationId: auth.organizationId },
+      account: accountAccessWhere(auth),
     },
     orderBy: { receivedAt: 'asc' },
     include: {

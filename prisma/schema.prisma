@@ -17,6 +17,7 @@ model User {
   memberships    OrganizationMember[]
   activityLogs   EmailActivityLog[]
   favouriteAccounts FavouriteAccount[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -49,6 +50,7 @@ model OrganizationMember {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailAccountAccess MemberEmailAccountAccess[]
+  ownedEmailAccounts EmailAccount[] @relation("EmailAccountOwner")
 
   @@id([organizationId, userId])
   @@map("organization_members")
@@ -57,6 +59,7 @@ model OrganizationMember {
 model EmailAccount {
   id              String    @id @default(uuid()) @db.Uuid
   organizationId  String    @map("organization_id") @db.Uuid
+  ownerUserId     String    @map("owner_user_id") @db.Uuid
   label           String    @db.VarChar(100)
   emailAddress    String    @map("email_address") @db.VarChar(255)
   provider        String    @db.VarChar(50)
@@ -88,6 +91,7 @@ model EmailAccount {
   authError String?  @map("auth_error")
 
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner          OrganizationMember @relation("EmailAccountOwner", fields: [organizationId, ownerUserId], references: [organizationId, userId], onDelete: Restrict)
   emails         Email[]
   accountLabels  AccountLabel[]
   activityLogs   EmailActivityLog[]
@@ -97,6 +101,7 @@ model EmailAccount {
   rules          EmailRule[]
 
   @@unique([organizationId, emailAddress])
+  @@index([ownerUserId])
   @@map("email_accounts")
 }
 
@@ -230,6 +235,7 @@ model EmailActivityLog {
 model PushSubscription {
   id             String   @id @default(uuid()) @db.Uuid
   organizationId String   @map("organization_id") @db.Uuid
+  userId         String?  @map("user_id") @db.Uuid
   endpoint       String
   p256dh         String
   auth           String
@@ -237,9 +243,11 @@ model PushSubscription {
   updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([endpoint])
   @@index([organizationId])
+  @@index([userId])
   @@map("push_subscriptions")
 }
 

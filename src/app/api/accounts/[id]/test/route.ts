@@ -8,6 +8,9 @@ import {
   apiError,
 } from '@/lib/auth/middleware';
 import { getDecryptedAccount } from '@/lib/accounts/service';
+import { prisma } from '@/lib/db/prisma';
+import { accountAccessWhere } from '@/lib/accounts/access';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -22,6 +25,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id } = await params;
 
+  const accessibleAccount = await prisma.emailAccount.findFirst({
+    where: accountAccessWhere(auth, id),
+    select: { id: true },
+  });
+  if (!accessibleAccount) return apiError('Account not found', 404);
+
   const results = { imap: false, smtp: false, imapError: '', smtpError: '' };
 
   try {
@@ -30,10 +39,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // Test IMAP
     if (account.imapHost && account.decryptedPassword) {
       try {
+        const destination = await resolveSafeOutboundHost(account.imapHost);
         const client = new ImapFlow({
-          host: account.imapHost,
+          host: destination.address,
           port: account.imapPort || 993,
           secure: account.imapSecure ?? true,
+          ...(destination.servername ? { servername: destination.servername } : {}),
           auth: {
             user: account.username || account.emailAddress,
             pass: account.decryptedPassword,
@@ -51,10 +62,14 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // Test SMTP
     if (account.smtpHost && account.decryptedPassword) {
       try {
+        const destination = await resolveSafeOutboundHost(account.smtpHost);
         const transporter = createTransport({
-          host: account.smtpHost,
+          host: destination.address,
           port: account.smtpPort || 587,
           secure: account.smtpSecure ?? false,
+          ...(destination.servername
+            ? { tls: { servername: destination.servername } }
+            : {}),
           auth: {
             user: account.username || account.emailAddress,
             pass: account.decryptedPassword,

@@ -387,6 +387,9 @@ export function AccountsSection() {
           toast.success('Email address copied to clipboard');
         }
         break;
+      case 'manageAccess':
+        router.push(`/settings/accounts?accountId=${account.id}&share=1`);
+        break;
       case 'accountSettings':
         setSettingsAccount(account);
         break;
@@ -729,6 +732,16 @@ export function AccountsSection() {
               </button>
 
               <div className="border-t border-gray-100 my-1" />
+
+              {contextMenu.account.canManageAccess && (
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-gray-100 flex items-center space-x-2.5 transition-colors text-xs font-medium text-gray-700"
+                  onClick={() => handleContextAction('manageAccess')}
+                >
+                  <Settings2 className="w-4 h-4 text-gray-500" />
+                  <span>Manage Access</span>
+                </button>
+              )}
 
               {isAdmin && (
                 <button

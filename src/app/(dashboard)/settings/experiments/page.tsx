@@ -20,6 +20,7 @@ import {
   Eye,
   EyeOff,
 } from 'lucide-react';
+import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
 interface ExperimentSettings {
   isAiEnabled: boolean;
@@ -66,9 +67,21 @@ export default function ExperimentsSettingsPage() {
     genericSecret: '',
   });
 
+  const { data: authData, isLoading: isLoadingAuth } = useQuery({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      const res = await fetch('/api/auth/me');
+      if (!res.ok) throw new Error('Failed to fetch auth info');
+      return res.json();
+    },
+  });
+
+  const isAdmin = authData?.role === 'admin';
+
   // Fetch Settings
   const { data: settings, isLoading: isLoadingSettings } = useQuery<ExperimentSettings>({
     queryKey: ['experiment-settings'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/experiments/settings');
       if (!res.ok) throw new Error('Failed to load experiment settings');
@@ -79,6 +92,7 @@ export default function ExperimentsSettingsPage() {
   // Fetch Webhooks
   const { data: webhooks = [], isLoading: isLoadingWebhooks } = useQuery<WebhookChannel[]>({
     queryKey: ['notification-webhooks'],
+    enabled: isAdmin,
     queryFn: async () => {
       const res = await fetch('/api/experiments/webhooks');
       if (!res.ok) throw new Error('Failed to load webhooks');
@@ -212,12 +226,16 @@ export default function ExperimentsSettingsPage() {
     });
   };
 
-  if (isLoadingSettings || isLoadingWebhooks) {
+  if (isLoadingAuth || (isAdmin && (isLoadingSettings || isLoadingWebhooks))) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
       </div>
     );
+  }
+
+  if (authData && !isAdmin) {
+    return <RestrictedSettingsNotice sectionName="experimental settings" />;
   }
 
   return (

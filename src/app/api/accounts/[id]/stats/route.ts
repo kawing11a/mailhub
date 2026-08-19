@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { getAccountStats } from '@/lib/accounts/service';
 import { prisma } from '@/lib/db/prisma';
+import { accountAccessWhere } from '@/lib/accounts/access';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -16,13 +17,13 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (id !== 'all') {
     // Verify account belongs to user's org
     const account = await prisma.emailAccount.findFirst({
-      where: { id, organizationId: auth.organizationId },
+      where: accountAccessWhere(auth, id),
       select: { id: true },
     });
 
     if (!account) return apiError('Account not found', 404);
   }
 
-  const stats = await getAccountStats(id, auth.organizationId);
+  const stats = await getAccountStats(id, auth);
   return apiResponse(stats);
 }

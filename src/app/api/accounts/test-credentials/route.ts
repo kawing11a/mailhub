@@ -3,18 +3,15 @@ import { ImapFlow } from 'imapflow';
 import { createTransport } from 'nodemailer';
 import {
   authenticate,
-  requireAdmin,
   apiResponse,
   apiError,
 } from '@/lib/auth/middleware';
 import { createAccountSchema } from '@/lib/validation/schemas';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
-
-  const adminCheck = requireAdmin(auth);
-  if (adminCheck) return adminCheck;
 
   try {
     const body = await req.json();
@@ -40,10 +37,12 @@ export async function POST(req: NextRequest) {
     // Test IMAP connection
     if (imapHost && password) {
       try {
+        const destination = await resolveSafeOutboundHost(imapHost);
         const client = new ImapFlow({
-          host: imapHost,
+          host: destination.address,
           port: imapPort || 993,
           secure: imapSecure ?? true,
+          ...(destination.servername ? { servername: destination.servername } : {}),
           auth: {
             user: username || emailAddress,
             pass: password,
@@ -61,10 +60,14 @@ export async function POST(req: NextRequest) {
     // Test SMTP connection
     if (smtpHost && password) {
       try {
+        const destination = await resolveSafeOutboundHost(smtpHost);
         const transporter = createTransport({
-          host: smtpHost,
+          host: destination.address,
           port: smtpPort || 465,
           secure: smtpSecure ?? true,
+          ...(destination.servername
+            ? { tls: { servername: destination.servername } }
+            : {}),
           auth: {
             user: username || emailAddress,
             pass: password,

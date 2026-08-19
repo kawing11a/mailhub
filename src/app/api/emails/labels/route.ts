@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { bulkEmailLabelsSchema } from '@/lib/validation';
 
 export async function POST(req: NextRequest) {
@@ -30,17 +31,12 @@ export async function POST(req: NextRequest) {
   const emails = await prisma.email.findMany({
     where: {
       id: { in: emailIds },
-      account: {
-        organizationId: auth.organizationId,
-        ...(auth.role !== 'admin'
-          ? { memberAccess: { some: { userId: auth.userId } } }
-          : {}),
-      },
+      account: accountAccessWhere(auth),
     },
     select: { id: true, accountId: true },
   });
-  if (emails.length === 0) {
-    return apiError('No accessible emails found', 404);
+  if (emails.length !== emailIds.length) {
+    return apiError('Email not found', 404);
   }
   const verifiedEmailIds = emails.map((e) => e.id);
 

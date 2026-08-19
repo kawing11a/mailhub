@@ -694,6 +694,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
           </div>
 
           <EmailToolbox
+            accountId={selectedEmails[0]?.accountId || flatEmails[0]?.accountId || activeAccount?.id}
             emailSubject={selectedEmails[0]?.subject || flatEmails[0]?.subject || ''}
             emailText={selectedEmails[0]?.bodyText || flatEmails[0]?.snippet || ''}
             selectedEmailCount={selectedIds.size}

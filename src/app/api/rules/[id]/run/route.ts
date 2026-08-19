@@ -1,6 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
-import { authenticate } from '@/lib/auth/middleware';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { evaluateRule, applyRuleActions } from '@/lib/rules/engine';
 import { EmailRuleDefinition } from '@/lib/rules/types';
 
@@ -12,6 +12,8 @@ export async function POST(
     const { id } = await params;
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const ruleRecord = await prisma.emailRule.findFirst({
       where: { id, organizationId: session.organizationId },

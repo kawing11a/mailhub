@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { ImapFlow } from 'imapflow';
 import { decrypt } from '@/lib/crypto';
 import { getValidAccessToken, syncDraftRaw } from '@/lib/gmail/api';
+import { accountAccessWhere } from '@/lib/accounts/access';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 import * as fs from 'fs/promises';
 
@@ -24,13 +26,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   // Verify account access
   const account = await prisma.emailAccount.findFirst({
-    where: {
-      id: accountId,
-      organizationId: auth.organizationId,
-      ...(auth.role !== 'admin'
-        ? { memberAccess: { some: { userId: auth.userId } } }
-        : {}),
-    },
+    where: accountAccessWhere(auth, accountId),
   });
 
   if (!account) return apiError('Account not found', 404);
@@ -103,10 +99,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     } else {
       if (account.imapHost && account.passwordEncrypted) {
+        const destination = await resolveSafeOutboundHost(account.imapHost);
         const client = new ImapFlow({
-          host: account.imapHost,
+          host: destination.address,
           port: account.imapPort || 993,
           secure: account.imapSecure ?? true,
+          ...(destination.servername ? { servername: destination.servername } : {}),
           auth: {
             user: account.username || account.emailAddress,
             pass: decrypt(account.passwordEncrypted),

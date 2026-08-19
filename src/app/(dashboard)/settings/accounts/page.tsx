@@ -6,6 +6,7 @@ import { Loader2, Plus, Mail, RefreshCw, Trash2, Settings, AlertTriangle } from 
 import { format } from 'date-fns';
 import { AddAccountModal } from '@/components/settings/AddAccountModal';
 import { EditAccountModal } from '@/components/settings/EditAccountModal';
+import { ManageAccountAccessModal } from '@/components/settings/ManageAccountAccessModal';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAccountStore } from '@/stores/accountStore';
 import toast from 'react-hot-toast';
@@ -16,6 +17,7 @@ function EmailAccountsContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<any | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
+  const [sharingAccountId, setSharingAccountId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -29,12 +31,20 @@ function EmailAccountsContent() {
   useEffect(() => {
     const error = searchParams.get('error');
     const success = searchParams.get('success');
+    const accountId = searchParams.get('accountId');
+    const share = searchParams.get('share');
 
     if (error) {
       toast.error(`OAuth Error: ${error.replace(/_/g, ' ')}`);
       router.replace('/settings/accounts');
-    } else if (success) {
+    } else if (success === 'true') {
       toast.success('Account successfully connected!');
+      if (share === '1' && accountId) {
+        setSharingAccountId(accountId);
+      }
+      router.replace('/settings/accounts');
+    } else if (share === '1' && accountId) {
+      setSharingAccountId(accountId);
       router.replace('/settings/accounts');
     }
   }, [searchParams, router]);
@@ -98,7 +108,7 @@ function EmailAccountsContent() {
             Connect and manage email accounts for your organization.
           </p>
         </div>
-        {authData?.role === 'admin' && (
+        {(authData?.role === 'admin' || authData?.role === 'member') && (
           <button 
             onClick={() => setIsAddModalOpen(true)}
             className="flex items-center space-x-2 bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm text-sm"
@@ -122,9 +132,9 @@ function EmailAccountsContent() {
           <p className="mt-1 text-sm text-gray-500 max-w-sm mx-auto">
             {authData?.role === 'admin' 
               ? 'Get started by connecting an IMAP email account to start receiving and sending emails.'
-              : 'No email accounts have been assigned to you yet. Please contact your administrator.'}
+              : 'Connect an account to get started. You can share access with teammates after it connects.'}
           </p>
-          {authData?.role === 'admin' && (
+          {(authData?.role === 'admin' || authData?.role === 'member') && (
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="mt-6 inline-flex items-center space-x-2 bg-accent-600 hover:bg-accent-700 text-white px-4 py-2 rounded-md font-medium transition-colors shadow-sm text-sm"
@@ -178,6 +188,18 @@ function EmailAccountsContent() {
                   </div>
                   
                   <div className="flex items-center space-x-1 ml-2">
+                    {account.canManageAccess && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSharingAccountId(account.id);
+                        }}
+                        className="text-gray-400 hover:text-accent-600 p-1.5 rounded-md hover:bg-accent-50 transition-colors flex-shrink-0"
+                        title="Manage Access"
+                      >
+                        <span className="text-xs font-semibold">Manage Access</span>
+                      </button>
+                    )}
                     {authData?.role === 'admin' && (
                       <button 
                         onClick={(e) => {
@@ -217,7 +239,7 @@ function EmailAccountsContent() {
                     <span className={`px-2.5 py-0.5 inline-flex text-[10px] uppercase leading-5 font-bold rounded-full ${account.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                       {account.isActive ? 'Active' : 'Inactive'}
                     </span>
-                    {!account.isActive && (
+                    {authData?.role === 'admin' && account.canManageAccess && !account.isActive && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -263,13 +285,20 @@ function EmailAccountsContent() {
 
       <AddAccountModal 
         isOpen={isAddModalOpen} 
-        onClose={() => setIsAddModalOpen(false)} 
+        onClose={() => setIsAddModalOpen(false)}
+        onAccountCreated={(accountId) => setSharingAccountId(accountId)}
       />
 
       <EditAccountModal
         isOpen={!!editingAccount}
         account={editingAccount}
         onClose={() => setEditingAccount(null)}
+      />
+
+      <ManageAccountAccessModal
+        isOpen={!!sharingAccountId}
+        accountId={sharingAccountId}
+        onClose={() => setSharingAccountId(null)}
       />
     </div>
   );

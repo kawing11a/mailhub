@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
-import { authenticate } from '@/lib/auth/middleware';
+import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { evaluateRule } from '@/lib/rules/engine';
 import { EmailEvaluationInput, EmailRuleDefinition } from '@/lib/rules/types';
 import { z } from 'zod';
@@ -57,6 +57,8 @@ export async function POST(req: NextRequest) {
   try {
     const session = await authenticate(req);
     if (session instanceof Response) return session;
+    const adminCheck = requireAdmin(session);
+    if (adminCheck) return adminCheck;
 
     const json = await req.json();
     const result = testRuleSchema.safeParse(json);

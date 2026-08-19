@@ -8,6 +8,11 @@ jest.mock('@/lib/accounts/service');
 jest.mock('@/lib/accounts/tokens');
 jest.mock('@/lib/gmail/api');
 jest.mock('nodemailer');
+jest.mock('@/lib/network/outbound-host', () => ({
+  resolveSafeOutboundHost: jest.fn(),
+}));
+
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 describe('sendEmail sender', () => {
   const mockGetDecryptedAccount = getDecryptedAccount as jest.Mock;
@@ -15,9 +20,15 @@ describe('sendEmail sender', () => {
   const mockGetValidAccessToken = getValidAccessToken as jest.Mock;
   const mockSendMessageRaw = sendMessageRaw as jest.Mock;
   const mockCreateTransport = nodemailer.createTransport as jest.Mock;
+  const mockResolveHost = resolveSafeOutboundHost as jest.Mock;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockResolveHost.mockImplementation(async (host: string) => ({
+      address: '93.184.216.34',
+      family: 4,
+      servername: host,
+    }));
   });
 
   it('sends email using Microsoft Graph API for Outlook accounts', async () => {
@@ -116,9 +127,10 @@ describe('sendEmail sender', () => {
     });
 
     expect(mockCreateTransport).toHaveBeenCalledWith({
-      host: 'mail.custom.com',
+      host: '93.184.216.34',
       port: 465,
       secure: true,
+      tls: { servername: 'mail.custom.com' },
       auth: {
         user: 'user@custom.com',
         pass: 'secretpassword',
@@ -206,5 +218,30 @@ describe('sendEmail sender', () => {
         bodyText: 'Should fail',
       })
     ).rejects.toThrow('SMTP credentials not configured for this account');
+  });
+
+  it('rejects an unsafe SMTP destination before creating a transporter', async () => {
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-imap-1',
+      label: 'Unsafe Account',
+      emailAddress: 'user@example.com',
+      provider: 'imap',
+      smtpHost: 'smtp.internal',
+      smtpPort: 465,
+      smtpSecure: true,
+      decryptedPassword: 'secretpassword',
+    });
+    mockResolveHost.mockRejectedValue(
+      new Error('smtp.internal resolves to a non-public address')
+    );
+
+    await expect(
+      sendEmail('acc-imap-1', {
+        to: ['recipient@example.com'],
+        subject: 'Blocked',
+        bodyText: 'Never sent',
+      })
+    ).rejects.toThrow('resolves to a non-public address');
+    expect(mockCreateTransport).not.toHaveBeenCalled();
   });
 });

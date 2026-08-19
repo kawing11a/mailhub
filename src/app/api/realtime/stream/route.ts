@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticate } from '@/lib/auth/middleware';
 import Redis from 'ioredis';
+import {
+  formatAccessibleSseMessage,
+  loadAccessibleRealtimeAccountIds,
+} from '@/lib/realtime/access';
 
 // We must create a new Redis connection specifically for subscribing,
 // since a Redis connection in subscriber mode cannot run regular commands.
@@ -12,6 +16,7 @@ export async function GET(req: NextRequest) {
     const auth = await authenticate(req);
     if (auth instanceof NextResponse) return auth;
     const { organizationId } = auth;
+    const accessibleAccountIds = await loadAccessibleRealtimeAccountIds(auth);
 
     // Create a readable stream
     const stream = new ReadableStream({
@@ -33,23 +38,11 @@ export async function GET(req: NextRequest) {
         // Listen for messages on the channel
         subscriber.on('message', (chan, message) => {
           if (chan === channel) {
-            let eventName: string | null = null;
-            try {
-              const parsed = JSON.parse(message);
-              if (parsed.event) {
-                eventName = parsed.event;
-              }
-            } catch (e) {
-              // Ignore parse errors
-            }
-
-            // SSE spec: event: and data: must be part of the same block
-            // (separated by \n, terminated by \n\n) for named events to fire.
-            if (eventName) {
-              controller.enqueue(`event: ${eventName}\ndata: ${message}\n\n`);
-            } else {
-              controller.enqueue(`data: ${message}\n\n`);
-            }
+            const formatted = formatAccessibleSseMessage(
+              message,
+              accessibleAccountIds
+            );
+            if (formatted) controller.enqueue(formatted);
           }
         });
 

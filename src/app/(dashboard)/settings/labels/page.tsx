@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Tag, Mail, Search, Check, Loader2, ShieldAlert, Plus, Pencil, Trash2, ListFilter } from 'lucide-react';
+import { Tag, Mail, Search, Check, Loader2, Plus, Pencil, Trash2, ListFilter } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { RuleModal } from '@/components/rules/RuleModal';
@@ -34,6 +34,8 @@ interface LabelsResponse {
 }
 
 type AssignmentMode = 'account' | 'label';
+
+const MANAGEMENT_LABELS_QUERY_KEY = ['labels', 'management'] as const;
 
 export default function LabelAssignmentPage() {
   const queryClient = useQueryClient();
@@ -75,9 +77,9 @@ export default function LabelAssignmentPage() {
     isLoading: isLoadingLabels,
     isError: isLabelsError,
   } = useQuery({
-    queryKey: ['labels'],
+    queryKey: MANAGEMENT_LABELS_QUERY_KEY,
     queryFn: async () => {
-      const res = await fetch('/api/labels');
+      const res = await fetch('/api/labels?scope=management');
       if (!res.ok) throw new Error('Failed to fetch labels');
       return res.json();
     },
@@ -120,9 +122,11 @@ export default function LabelAssignmentPage() {
       return json;
     },
     onMutate: async ({ labelId, accountIds }) => {
-      await queryClient.cancelQueries({ queryKey: ['labels'] });
-      const previous = queryClient.getQueryData<LabelsResponse>(['labels']);
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) =>
+      await queryClient.cancelQueries({ queryKey: MANAGEMENT_LABELS_QUERY_KEY });
+      const previous = queryClient.getQueryData<LabelsResponse>(
+        MANAGEMENT_LABELS_QUERY_KEY
+      );
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) =>
         data
           ? {
               ...data,
@@ -135,7 +139,9 @@ export default function LabelAssignmentPage() {
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['labels'], context.previous);
+      if (context?.previous) {
+        queryClient.setQueryData(MANAGEMENT_LABELS_QUERY_KEY, context.previous);
+      }
       toast.error('Failed to save assignment');
     },
     onSuccess: () => {
@@ -161,7 +167,7 @@ export default function LabelAssignmentPage() {
     },
     onSuccess: (label) => {
       const created: LabelWithAccounts = { ...label, accountIds: label.accountIds || [] };
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: [...(data?.labels || []), created].sort((a, b) =>
           a.name.localeCompare(b.name)
@@ -189,7 +195,7 @@ export default function LabelAssignmentPage() {
       return json.label as LabelWithAccounts;
     },
     onSuccess: (updated) => {
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: (data?.labels || []).map(l => l.id === updated.id ? { ...updated, accountIds: l.accountIds || [] } : l).sort((a, b) =>
           a.name.localeCompare(b.name)
@@ -212,7 +218,7 @@ export default function LabelAssignmentPage() {
       return id;
     },
     onSuccess: (id) => {
-      queryClient.setQueryData<LabelsResponse>(['labels'], (data) => ({
+      queryClient.setQueryData<LabelsResponse>(MANAGEMENT_LABELS_QUERY_KEY, (data) => ({
         ...(data || {}),
         labels: (data?.labels || []).filter(l => l.id !== id),
       }));
@@ -271,18 +277,6 @@ export default function LabelAssignmentPage() {
     mutation.mutate({ labelId: selectedLabel.id, accountIds: next });
   };
 
-  if (authData && authData.role !== 'admin') {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <ShieldAlert className="w-10 h-10 text-gray-400 mb-3" />
-        <h1 className="text-lg font-semibold text-gray-900">Admin access required</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Only organization admins can manage label assignments.
-        </p>
-      </div>
-    );
-  }
-
   const filteredLabels = labels.filter((l) =>
     l.name.toLowerCase().includes(labelSearch.toLowerCase())
   );
@@ -309,6 +303,12 @@ export default function LabelAssignmentPage() {
           tagged emails plus all emails from assigned accounts — existing emails are never
           modified. Changes are saved automatically.
         </p>
+        {authData?.role === 'member' ? (
+          <p className="text-sm text-gray-500 mt-2">
+            You can manage labels for the email accounts you can access. You can also manage labels
+            that are not assigned to any account.
+          </p>
+        ) : null}
       </div>
 
       {isLoading ? (

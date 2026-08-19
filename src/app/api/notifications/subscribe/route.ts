@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await authenticate(req);
     if (auth instanceof NextResponse) return auth;
-    const { organizationId } = auth;
+    const { organizationId, userId } = auth;
 
     const body = await req.json();
     const parsed = subscribeSchema.parse(body);
@@ -30,12 +30,14 @@ export async function POST(req: NextRequest) {
         p256dh: keys.p256dh,
         auth: keys.auth,
         organizationId, // Re-link to organization if needed
+        userId,
       },
       create: {
         endpoint,
         p256dh: keys.p256dh,
         auth: keys.auth,
         organizationId,
+        userId,
       },
     });
 

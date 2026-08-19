@@ -1,11 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { recordSpamTrainingSample } from '@/lib/ai/spam-classifier';
 import { prisma } from '@/lib/db/prisma';
+import { authenticate } from '@/lib/auth/middleware';
+import { assertAccountContextAccess } from '@/lib/accounts/access';
 
 export async function POST(req: Request) {
+  const auth = await authenticate(req as NextRequest);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await req.json();
-    const { emailId, subject, snippet, fromAddress, label } = body;
+    const { accountId, emailId, subject, snippet, fromAddress, label } = body;
 
     if (!label || (label !== 'spam' && label !== 'ham')) {
       return NextResponse.json(
@@ -13,6 +18,9 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const account = await assertAccountContextAccess(auth, { accountId, emailId });
+    if (account instanceof Response) return account;
 
     // 1. Online continuous learning: update token and domain weights
     const { sample, updatedStats } = recordSpamTrainingSample({
@@ -27,7 +35,7 @@ export async function POST(req: Request) {
     if (emailId) {
       try {
         await prisma.email.updateMany({
-          where: { id: emailId },
+          where: { id: emailId, accountId: account.id },
           data: {
             isHighRisk: label === 'spam',
             riskReason: label === 'spam' ? 'Flagged as definite spam by user feedback' : null,

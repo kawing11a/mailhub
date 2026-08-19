@@ -10,12 +10,17 @@ import { createAccountSchema, type CreateAccountInput } from '@/lib/validation/s
 interface AddAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onAccountCreated?: (accountId: string) => void;
 }
 
 type ProviderType = 'google' | 'outlook' | 'imap' | null;
 type Step = 'provider-selection' | 'oauth-form' | 'imap-form';
 
-export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
+export function AddAccountModal({
+  isOpen,
+  onClose,
+  onAccountCreated,
+}: AddAccountModalProps) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>('provider-selection');
   const [provider, setProvider] = useState<ProviderType>(null);
@@ -111,8 +116,8 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
       if (!res.ok) throw new Error(json.error || 'Failed to connect account');
       return json;
     },
-    onSuccess: () => {
-      handleSuccess();
+    onSuccess: (account) => {
+      handleSuccess(account.id);
     },
     onError: (error: Error) => {
       setSubmitError(error.message);
@@ -148,8 +153,11 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
     }
   };
 
-  const handleSuccess = () => {
+  const handleSuccess = (accountId?: string) => {
     queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    if (accountId) {
+      onAccountCreated?.(accountId);
+    }
     handleClose();
   };
 

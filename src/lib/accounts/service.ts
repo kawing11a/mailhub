@@ -2,6 +2,8 @@ import { prisma } from '@/lib/db/prisma';
 import { encrypt, decrypt } from '@/lib/crypto';
 import type { CreateAccountInput, UpdateAccountInput } from '@/lib/validation';
 import type { EmailAccount } from '@prisma/client';
+import { accountAccessWhere, type AccountAuth } from '@/lib/accounts/access';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 // Color palette for auto-assigning account colors
 const ACCOUNT_COLORS = [
@@ -18,10 +20,81 @@ function getInitials(label: string): string {
     .slice(0, 3);
 }
 
+export type OwnedAccountCreateData = {
+  label: string;
+  emailAddress: string;
+  provider: CreateAccountInput['provider'];
+  color: string;
+  avatarInitials: string;
+  imapHost?: string;
+  imapPort?: number;
+  imapSecure?: boolean;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  username?: string;
+  passwordEncrypted: string | null;
+  workerPartition: string;
+  oauthProvider?: string | null;
+  oauthAccessToken?: string | null;
+  oauthRefreshToken?: string | null;
+  oauthTokenExpiry?: Date | null;
+};
+
+export async function createOwnedAccount(
+  organizationId: string,
+  ownerUserId: string,
+  data: OwnedAccountCreateData
+): Promise<EmailAccount> {
+  return prisma.$transaction(async (tx) => {
+    const account = await tx.emailAccount.create({
+      data: {
+        organizationId,
+        ownerUserId,
+        label: data.label,
+        emailAddress: data.emailAddress,
+        provider: data.provider,
+        color: data.color,
+        avatarInitials: data.avatarInitials,
+        imapHost: data.imapHost,
+        imapPort: data.imapPort,
+        imapSecure: data.imapSecure,
+        smtpHost: data.smtpHost,
+        smtpPort: data.smtpPort,
+        smtpSecure: data.smtpSecure,
+        username: data.username,
+        passwordEncrypted: data.passwordEncrypted,
+        workerPartition: data.workerPartition,
+        oauthProvider: data.oauthProvider ?? null,
+        oauthAccessToken: data.oauthAccessToken ?? null,
+        oauthRefreshToken: data.oauthRefreshToken ?? null,
+        oauthTokenExpiry: data.oauthTokenExpiry ?? null,
+      },
+    });
+
+    await tx.memberEmailAccountAccess.create({
+      data: {
+        organizationId,
+        userId: ownerUserId,
+        accountId: account.id,
+      },
+    });
+
+    return account;
+  });
+}
+
 export async function createAccount(
   organizationId: string,
+  ownerUserId: string,
   input: CreateAccountInput
 ): Promise<EmailAccount> {
+  await Promise.all(
+    [input.imapHost, input.smtpHost]
+      .filter((host): host is string => !!host)
+      .map((host) => resolveSafeOutboundHost(host))
+  );
+
   // Auto-assign color if not provided
   const accountCount = await prisma.emailAccount.count({
     where: { organizationId },
@@ -32,24 +105,21 @@ export async function createAccount(
   // Distribute accounts between worker-1 and worker-2
   const workerPartition = accountCount % 2 === 0 ? 'worker-1' : 'worker-2';
 
-  return prisma.emailAccount.create({
-    data: {
-      organizationId,
-      label: input.label,
-      emailAddress: input.emailAddress,
-      provider: input.provider,
-      color,
-      avatarInitials,
-      imapHost: input.imapHost,
-      imapPort: input.imapPort,
-      imapSecure: input.imapSecure,
-      smtpHost: input.smtpHost,
-      smtpPort: input.smtpPort,
-      smtpSecure: input.smtpSecure,
-      username: input.username,
-      passwordEncrypted: input.password ? encrypt(input.password) : null,
-      workerPartition,
-    },
+  return createOwnedAccount(organizationId, ownerUserId, {
+    label: input.label,
+    emailAddress: input.emailAddress,
+    provider: input.provider,
+    color,
+    avatarInitials,
+    imapHost: input.imapHost,
+    imapPort: input.imapPort,
+    imapSecure: input.imapSecure,
+    smtpHost: input.smtpHost,
+    smtpPort: input.smtpPort,
+    smtpSecure: input.smtpSecure,
+    username: input.username,
+    passwordEncrypted: input.password ? encrypt(input.password) : null,
+    workerPartition,
   });
 }
 
@@ -75,6 +145,7 @@ export async function getDecryptedAccount(accountId: string): Promise<
 export function sanitizeAccount(account: EmailAccount) {
   // Strip sensitive fields before returning to client
   const {
+    ownerUserId,
     passwordEncrypted,
     oauthAccessToken,
     oauthRefreshToken,
@@ -88,6 +159,12 @@ export async function updateAccount(
   organizationId: string,
   input: UpdateAccountInput
 ): Promise<EmailAccount> {
+  await Promise.all(
+    [input.imapHost, input.smtpHost]
+      .filter((host): host is string => !!host)
+      .map((host) => resolveSafeOutboundHost(host))
+  );
+
   const data: any = { ...input };
   if (input.password) {
     data.passwordEncrypted = encrypt(input.password);
@@ -123,26 +200,23 @@ export async function deleteAccount(
   });
 }
 
-export async function getAccountStats(accountId: string, organizationId?: string) {
-  const where = accountId === 'all' && organizationId
-    ? { account: { organizationId } }
-    : { accountId };
+export async function getAccountStats(accountId: string, auth: AccountAuth) {
+  const accountWhere = accountAccessWhere(
+    auth,
+    accountId === 'all' ? undefined : accountId
+  );
+  const where = { account: accountWhere };
 
   const [unreadCount, totalCount, lastSynced] = await Promise.all([
     prisma.email.count({
       where: { ...where, folder: 'INBOX', isRead: false },
     }),
     prisma.email.count({ where }),
-    accountId === 'all' && organizationId
-      ? prisma.emailAccount.findFirst({
-          where: { organizationId },
-          orderBy: { lastSyncedAt: 'desc' },
-          select: { lastSyncedAt: true },
-        })
-      : prisma.emailAccount.findUnique({
-          where: { id: accountId }, // Valid UUID when accountId is not 'all'
-          select: { lastSyncedAt: true },
-        }),
+    prisma.emailAccount.findFirst({
+      where: accountWhere,
+      ...(accountId === 'all' ? { orderBy: { lastSyncedAt: 'desc' as const } } : {}),
+      select: { lastSyncedAt: true },
+    }),
   ]);
 
   return {

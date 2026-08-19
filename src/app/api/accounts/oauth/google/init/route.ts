@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticate } from '@/lib/auth/middleware';
+import { normalizeEmailAddress } from '@/lib/email/addresses';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -13,9 +14,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
   }
 
+  const normalizedEmailAddress = normalizeEmailAddress(emailAddress);
+
   // Encode the state to pass through the OAuth flow
   const stateData = {
-    emailAddress,
+    emailAddress: normalizedEmailAddress,
     label,
     organizationId: auth.organizationId,
   };
@@ -46,7 +49,7 @@ export async function GET(req: NextRequest) {
   oauthUrl.searchParams.set('state', state);
   
   // Optionally use login_hint if we know the user's email
-  oauthUrl.searchParams.set('login_hint', emailAddress);
+  oauthUrl.searchParams.set('login_hint', normalizedEmailAddress);
 
   return NextResponse.redirect(oauthUrl.toString());
 }

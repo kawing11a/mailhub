@@ -6,6 +6,7 @@ import {
   apiResponse,
   apiError,
 } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { updateAccountSchema } from '@/lib/validation';
 import { sanitizeAccount, updateAccount, deleteAccount } from '@/lib/accounts/service';
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
 
   const account = await prisma.emailAccount.findFirst({
-    where: { id, organizationId: auth.organizationId },
+    where: accountAccessWhere(auth, id),
   });
 
   if (!account) return apiError('Account not found', 404);

@@ -226,7 +226,9 @@ export function AccountLabelList({ accountId, readOnly = false }: AccountLabelLi
                 </div>
                 <div className="max-h-48 overflow-y-auto py-1">
                   {allLabels.length === 0 ? (
-                    <p className="px-3 py-2 text-xs text-gray-500">No labels created yet.</p>
+                    <p className="px-3 py-2 text-xs text-gray-500">
+                      No visible labels yet. Create or assign one from Settings → Labels.
+                    </p>
                   ) : filteredLabels.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-gray-500">No matching labels.</p>
                   ) : (

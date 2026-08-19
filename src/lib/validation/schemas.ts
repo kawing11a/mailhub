@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizeEmailAddress } from '@/lib/email/addresses';
 
 // --- Auth schemas ---
 
@@ -40,7 +41,7 @@ export const updateMemberRoleSchema = z.object({
 
 export const createAccountSchema = z.object({
   label: z.string().min(1).max(100),
-  emailAddress: z.string().email(),
+  emailAddress: z.string().email().transform(normalizeEmailAddress),
   provider: z.enum(['imap', 'gmail', 'outlook']),
   color: z
     .string()

@@ -59,6 +59,19 @@ describe('GET /api/accounts/all/emails', () => {
     const data = await response.json();
     expect(data.emails).toHaveLength(1);
     expect(data.emails[0].account.label).toBe('Work');
+    expect(mockFindEmails).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          account: {
+            organizationId: 'org-456',
+            OR: [
+              { ownerUserId: 'user-123' },
+              { memberAccess: { some: { userId: 'user-123' } } },
+            ],
+          },
+        }),
+      })
+    );
   });
 
   it('passes unread filter correctly', async () => {
@@ -108,5 +121,16 @@ describe('GET /api/accounts/all/emails', () => {
     const lastCallWhere = mockFindEmails.mock.calls[0][0].where;
     expect(lastCallWhere.isRead).toBeUndefined();
     expect(lastCallWhere.isStarred).toBeUndefined();
+    expect(prisma.emailAccount.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'specific-acc-1',
+        organizationId: 'org-456',
+        OR: [
+          { ownerUserId: 'user-123' },
+          { memberAccess: { some: { userId: 'user-123' } } },
+        ],
+      },
+      select: { id: true },
+    });
   });
 });

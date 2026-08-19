@@ -11,6 +11,8 @@ import { searchQueue } from '@/lib/queue/client';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
+import { sendAccountPushNotification } from '@/lib/notifications/account-push';
+import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
 interface ConnectionEntry {
   client: ImapFlow;
@@ -132,15 +134,17 @@ export async function withImapConnection<T>(
     auth.pass = password;
   }
 
-  const client = new ImapFlow({
-    host: account.imapHost,
-    port: account.imapPort || 993,
-    secure: account.imapSecure ?? true,
-    auth,
-    logger: false,
-  });
-
+  let client: ImapFlow;
   try {
+    const destination = await resolveSafeOutboundHost(account.imapHost);
+    client = new ImapFlow({
+      host: destination.address,
+      port: account.imapPort || 993,
+      secure: account.imapSecure ?? true,
+      ...(destination.servername ? { servername: destination.servername } : {}),
+      auth,
+      logger: false,
+    });
     await client.connect();
   } catch (error) {
     console.error(`Failed to open IMAP connection for account ${accountId}:`, error);
@@ -508,6 +512,8 @@ export class IMAPConnectionManager {
       return;
     }
 
+    const destination = await resolveSafeOutboundHost(account.imapHost);
+
     const auth: any = {
       user: account.username || account.emailAddress,
     };
@@ -518,9 +524,10 @@ export class IMAPConnectionManager {
     }
 
     const client = new ImapFlow({
-      host: account.imapHost,
+      host: destination.address,
       port: account.imapPort || 993,
       secure: account.imapSecure ?? true,
+      ...(destination.servername ? { servername: destination.servername } : {}),
       auth,
       logger: false,
     });
@@ -827,44 +834,14 @@ export class IMAPConnectionManager {
       }
 
       if (!skipNotifications) {
-        // Send Web Push to all devices subscribed to this organization
         try {
-          const webpush = require('web-push');
-
-          webpush.setVapidDetails(
-            process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
-            process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,
-            process.env.VAPID_PRIVATE_KEY as string
-          );
-
-          const subscriptions = await prisma.pushSubscription.findMany({
-            where: { organizationId },
-          });
-
-          const pushPayload = JSON.stringify({
+          await sendAccountPushNotification({
+            organizationId,
+            accountId,
             title: `New email from ${parsed.fromAddress}`,
             body: parsed.subject || 'No Subject',
             url: '/inbox',
           });
-
-          const pushPromises = subscriptions.map((sub: any) =>
-            webpush.sendNotification({
-              endpoint: sub.endpoint,
-              keys: {
-                p256dh: sub.p256dh,
-                auth: sub.auth,
-              }
-            }, pushPayload).catch(async (err: any) => {
-              if (err.statusCode === 404 || err.statusCode === 410) {
-                console.log('Push subscription expired or removed, deleting from DB');
-                await prisma.pushSubscription.delete({ where: { id: sub.id } });
-              } else {
-                console.error('Push notification failed:', err);
-              }
-            })
-          );
-
-          await Promise.all(pushPromises);
         } catch (err) {
           console.error('Failed to send Web Push:', err);
         }

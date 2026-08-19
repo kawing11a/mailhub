@@ -1,15 +1,32 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { callLlmApi } from '@/lib/ai/llm-client';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
+import { authenticate } from '@/lib/auth/middleware';
+import { assertAccountContextAccess } from '@/lib/accounts/access';
 
 export async function POST(req: Request) {
+  const auth = await authenticate(req as NextRequest);
+  if (auth instanceof Response) return auth;
+
   try {
     const body = await req.json();
-    const { prompt, tone = 'Professional', length = 'Medium', action = 'generate', existingText, replyContext } = body;
+    const {
+      accountId,
+      emailId,
+      prompt,
+      tone = 'Professional',
+      length = 'Medium',
+      action = 'generate',
+      existingText,
+      replyContext,
+    } = body;
 
     if (!prompt && !existingText) {
       return NextResponse.json({ error: 'Prompt or existing text is required' }, { status: 400 });
     }
+
+    const account = await assertAccountContextAccess(auth, { accountId, emailId });
+    if (account instanceof Response) return account;
 
     let systemInstruction = `You are an expert AI email assistant. Generate email draft content based on user requirements.
 Tone: ${tone}. Target Length: ${length}.

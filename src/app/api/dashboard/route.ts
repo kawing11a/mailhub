@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
-import { authenticate, apiResponse, requireAdmin } from '@/lib/auth/middleware';
+import { authenticate, apiResponse } from '@/lib/auth/middleware';
+import { accountAccessWhere } from '@/lib/accounts/access';
 import { prisma } from '@/lib/db/prisma';
 import { syncQueue, searchQueue } from '@/lib/queue/client';
 
@@ -7,23 +8,20 @@ export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
   if (auth instanceof Response) return auth;
 
-  const { organizationId, role, userId } = auth;
+  const { organizationId, role } = auth;
   const scope = req.nextUrl.searchParams.get('scope') === 'system' ? 'system' : 'user';
+
+  if (scope === 'system' && role !== 'admin') {
+    return apiResponse({ error: 'Forbidden' }, 403);
+  }
 
   const accountFilter = scope === 'system'
     ? { organizationId }
-    : role !== 'admin'
-      ? {
-          organizationId,
-          memberAccess: { some: { userId } },
-        }
-      : { organizationId };
+    : accountAccessWhere(auth);
 
   const activityFilter = scope === 'system'
     ? { organizationId }
-    : role !== 'admin'
-      ? { organizationId, account: accountFilter }
-      : { organizationId };
+    : { organizationId, account: accountFilter };
 
   try {
     const [

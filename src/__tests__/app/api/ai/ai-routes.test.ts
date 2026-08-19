@@ -1,13 +1,47 @@
+jest.mock('@/lib/auth/middleware', () => ({
+  authenticate: jest.fn(),
+  apiError: (message: string, status = 400) =>
+    Response.json({ error: message }, { status }),
+}));
+
+jest.mock('@/lib/db/prisma', () => ({
+  prisma: {
+    emailAccount: {
+      findFirst: jest.fn(),
+    },
+    email: {
+      findUnique: jest.fn(),
+    },
+  },
+}));
+
 import { POST as draftPost } from '@/app/api/ai/draft/route';
 import { POST as explainPost } from '@/app/api/ai/explain/route';
 import { POST as toolboxPost } from '@/app/api/ai/toolbox/route';
+import { authenticate } from '@/lib/auth/middleware';
+import { prisma } from '@/lib/db/prisma';
 
 // Mock fetch globally for LLM API calls
 global.fetch = jest.fn();
 
+const mockAuthenticate = authenticate as jest.Mock;
+const mockFindAccount = prisma.emailAccount.findFirst as jest.Mock;
+const mockFindEmail = prisma.email.findUnique as jest.Mock;
+
 describe('AI API Routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockAuthenticate.mockResolvedValue({
+      userId: 'member-1',
+      organizationId: 'org-1',
+      role: 'member',
+    });
+    mockFindAccount.mockResolvedValue({
+      id: 'account-1',
+      organizationId: 'org-1',
+      ownerUserId: 'member-1',
+    });
+    mockFindEmail.mockResolvedValue({ accountId: 'account-1' });
   });
 
   describe('POST /api/ai/draft', () => {
@@ -30,7 +64,11 @@ describe('AI API Routes', () => {
 
       const req = new Request('http://localhost/api/ai/draft', {
         method: 'POST',
-        body: JSON.stringify({ prompt: 'Write a thank you email', tone: 'Friendly' }),
+        body: JSON.stringify({
+          accountId: 'account-1',
+          prompt: 'Write a thank you email',
+          tone: 'Friendly',
+        }),
       });
       const res = await draftPost(req);
       const json = await res.json();
@@ -62,6 +100,7 @@ describe('AI API Routes', () => {
       const req = new Request('http://localhost/api/ai/draft', {
         method: 'POST',
         body: JSON.stringify({
+          accountId: 'account-1',
           prompt: 'Confirm I will review it',
           replyContext: {
             subject: 'Proposal',
@@ -116,6 +155,7 @@ describe('AI API Routes', () => {
       const req = new Request('http://localhost/api/ai/explain', {
         method: 'POST',
         body: JSON.stringify({
+          emailId: 'email-1',
           subject: 'Meeting',
           bodyText: '<div><style>p { font-size: 12px; }</style><p>Let us meet at 2pm.</p></div>',
         }),
@@ -156,6 +196,7 @@ describe('AI API Routes', () => {
       const req = new Request('http://localhost/api/ai/toolbox', {
         method: 'POST',
         body: JSON.stringify({
+          accountId: 'account-1',
           tool: 'extract_tasks',
           text: '<p>Please send report by <b>Friday</b>.<br><img src="data:image/png;base64,123"/></p>',
         }),

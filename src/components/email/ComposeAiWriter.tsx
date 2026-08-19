@@ -5,13 +5,14 @@ import { Sparkles, Loader2, Check, RefreshCw, Wand2, ArrowRight } from 'lucide-r
 import { extractCleanEmailText } from '@/lib/email/clean-text';
 
 interface ComposeAiWriterProps {
+  accountId: string;
   onApplyDraft: (text: string) => void;
   currentContent?: string;
   replySubject?: string;
   replyBody?: string;
 }
 
-export function ComposeAiWriter({ onApplyDraft, currentContent, replySubject, replyBody }: ComposeAiWriterProps) {
+export function ComposeAiWriter({ accountId, onApplyDraft, currentContent, replySubject, replyBody }: ComposeAiWriterProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [tone, setTone] = useState('Professional');
@@ -34,6 +35,7 @@ export function ComposeAiWriter({ onApplyDraft, currentContent, replySubject, re
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          accountId,
           prompt: prompt.trim(),
           tone,
           length,
