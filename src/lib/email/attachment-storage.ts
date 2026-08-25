@@ -44,6 +44,7 @@ export interface ExistingReceivedAttachmentMetadata {
   ordinal: number | null;
   imapPart: string | null;
   gmailAttachmentId: string | null;
+  createdAt?: Date | string | null;
 }
 
 export interface ReconciledReceivedAttachmentMetadata {
@@ -51,7 +52,7 @@ export interface ReconciledReceivedAttachmentMetadata {
   filename: string;
   contentType: string;
   sizeBytes: number;
-  storagePath: null;
+  storagePath: string | null;
   ordinal: number;
   imapPart: string | null;
   gmailAttachmentId: string | null;
@@ -117,23 +118,69 @@ export async function reconcileAttachmentFiles(
 export function buildReceivedAttachmentMetadata(
   incoming: IncomingAttachmentFile[],
   existing: ExistingReceivedAttachmentMetadata[],
-  references: ReceivedAttachmentReferenceInput[]
+  references: ReceivedAttachmentReferenceInput[],
+  options: { preserveStoragePath?: boolean } = {}
 ): ReconciledReceivedAttachmentMetadata[] {
+  const orderedExisting = orderAttachmentsByOrdinal(existing);
+  const existingByOrdinal = new Map<number, ExistingReceivedAttachmentMetadata>();
+  for (const attachment of orderedExisting) {
+    if (attachment.ordinal !== null && !existingByOrdinal.has(attachment.ordinal)) {
+      existingByOrdinal.set(attachment.ordinal, attachment);
+    }
+  }
+  const usedExistingIds = new Set<string>();
+  let legacyIndex = 0;
+
   return incoming.map((attachment, index) => {
-    const previous = existing[index];
     const reference = references[index];
+    const ordinal = reference?.ordinal ?? index;
+    let previous = existingByOrdinal.get(ordinal);
+
+    if (previous && usedExistingIds.has(previous.id)) previous = undefined;
+
+    if (!previous) {
+      while (legacyIndex < orderedExisting.length) {
+        const candidate = orderedExisting[legacyIndex++];
+        if (!usedExistingIds.has(candidate.id) && candidate.ordinal === null) {
+          previous = candidate;
+          break;
+        }
+      }
+    }
+
+    if (previous) usedExistingIds.add(previous.id);
 
     return {
       id: previous?.id || randomUUID(),
       filename: attachment.filename,
       contentType: attachment.contentType,
       sizeBytes: attachment.size,
-      storagePath: null,
-      ordinal: reference?.ordinal ?? index,
+      storagePath: options.preserveStoragePath ? previous?.storagePath ?? null : null,
+      ordinal,
       imapPart: reference?.imapPart ?? null,
       gmailAttachmentId: reference?.gmailAttachmentId ?? null,
       cid: attachment.cid,
       existing: !!previous,
     };
+  });
+}
+
+export interface AttachmentOrderFields {
+  id: string;
+  ordinal: number | null;
+  createdAt?: Date | string | null;
+}
+
+export function orderAttachmentsByOrdinal<T extends AttachmentOrderFields>(attachments: T[]): T[] {
+  return [...attachments].sort((left, right) => {
+    if (left.ordinal !== null && right.ordinal !== null) {
+      return left.ordinal - right.ordinal || left.id.localeCompare(right.id);
+    }
+    if (left.ordinal !== null) return -1;
+    if (right.ordinal !== null) return 1;
+
+    const leftCreatedAt = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightCreatedAt = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return leftCreatedAt - rightCreatedAt || left.id.localeCompare(right.id);
   });
 }

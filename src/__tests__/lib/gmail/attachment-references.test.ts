@@ -27,4 +27,20 @@ describe('extractGmailAttachmentReferences', () => {
       extractGmailAttachmentReferences(payload)
     ).toEqual([{ ordinal: 0, gmailAttachmentId: 'gmail-att-1' }]);
   });
+
+  it('persists an ordinal-only reference for inline content', () => {
+    expect(
+      extractGmailAttachmentReferences({
+        mimeType: 'multipart/related',
+        parts: [
+          {
+            filename: 'inline.png',
+            mimeType: 'image/png',
+            headers: [{ name: 'Content-ID', value: '<image-1>' }],
+            body: { data: 'aW5saW5l' },
+          },
+        ],
+      })
+    ).toEqual([{ ordinal: 0, gmailAttachmentId: null }]);
+  });
 });

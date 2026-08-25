@@ -14,6 +14,25 @@ jest.mock('@/lib/imap/connection-manager', () => ({
 jest.mock('@/lib/gmail/api', () => ({
   getValidAccessToken: jest.fn(),
   fetchGmailAttachment: jest.fn(),
+  fetchMessageFull: jest.fn(),
+  extractGmailAttachmentParts: (payload: any) => {
+    const parts: any[] = [];
+    const visit = (part: any) => {
+      if (
+        !part.mimeType?.toLowerCase().startsWith('text/') &&
+        ((part.filename && part.body?.attachmentId) ||
+          (part.body?.data && part.headers?.some((header: any) =>
+            header.name?.toLowerCase() === 'content-id' && header.value)))
+      ) {
+        parts.push(part);
+      }
+      for (const child of part.parts ?? []) visit(child);
+    };
+    if (payload) visit(payload);
+    return parts;
+  },
+  decodeGmailBase64: (data: string) =>
+    Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
   GmailApiError: class GmailApiError extends Error {
     status?: number;
 
@@ -39,6 +58,7 @@ import {
 } from '@/lib/imap/connection-manager';
 import {
   fetchGmailAttachment,
+  fetchMessageFull,
   getValidAccessToken,
 } from '@/lib/gmail/api';
 import {
@@ -52,6 +72,7 @@ const mockWithImapConnection = withImapConnection as jest.Mock;
 const mockResolveMailboxPathOn = resolveMailboxPathOn as jest.Mock;
 const mockGetValidAccessToken = getValidAccessToken as jest.Mock;
 const mockFetchGmailAttachment = fetchGmailAttachment as jest.Mock;
+const mockFetchMessageFull = fetchMessageFull as jest.Mock;
 const mockFsReadFile = fs.readFile as jest.Mock;
 
 function mockEmailWithImapReference() {
@@ -82,6 +103,7 @@ function mockEmailWithImapReference() {
         storagePath: null,
         imapPart: '2.1',
         gmailAttachmentId: null,
+        ordinal: 0,
       },
     ],
   });
@@ -113,6 +135,7 @@ function mockEmailWithGmailReference() {
         storagePath: null,
         imapPart: null,
         gmailAttachmentId: 'gmail-att-1',
+        ordinal: 0,
       },
     ],
   });
@@ -135,6 +158,7 @@ function mockLegacyAttachment() {
         storagePath: '.storage/attachments/att-1',
         imapPart: null,
         gmailAttachmentId: null,
+        ordinal: 0,
       },
     ],
   });
@@ -157,6 +181,7 @@ function mockEmailWithoutAttachmentReference() {
         storagePath: null,
         imapPart: null,
         gmailAttachmentId: null,
+        ordinal: 0,
       },
     ],
   });
@@ -187,6 +212,21 @@ describe('getReceivedAttachment', () => {
     );
   });
 
+  it('propagates IMAP mailbox-list failures as provider errors', async () => {
+    const { mockGetMailboxLock } = mockEmailWithImapReference();
+    const mailboxListError = new Error('mailbox list unavailable');
+    mockResolveMailboxPathOn.mockRejectedValue(mailboxListError);
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
+      AttachmentProviderError
+    );
+    expect(mockResolveMailboxPathOn).toHaveBeenCalledWith(
+      expect.objectContaining({ getMailboxLock: expect.any(Function) }),
+      'INBOX',
+      { propagateErrors: true }
+    );
+  });
+
   it('uses Gmail attachment data without writing a file', async () => {
     mockEmailWithGmailReference();
     mockGetValidAccessToken.mockResolvedValue('access-token');
@@ -211,6 +251,16 @@ describe('getReceivedAttachment', () => {
       content: Buffer.from('legacy'),
     });
     expect(mockFsReadFile).toHaveBeenCalledWith('.storage/attachments/att-1');
+  });
+
+  it('maps a missing legacy file to AttachmentNotFoundError', async () => {
+    mockLegacyAttachment();
+    const missingFile = Object.assign(new Error('missing'), { code: 'ENOENT' });
+    mockFsReadFile.mockRejectedValue(missingFile);
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
+      AttachmentNotFoundError
+    );
   });
 
   it('throws AttachmentNotFoundError when neither provider nor local content exists', async () => {
@@ -243,6 +293,51 @@ describe('getReceivedAttachment', () => {
 
     await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
       AttachmentProviderError
+    );
+  });
+
+  it('decodes Gmail inline attachment data by persisted ordinal', async () => {
+    mockFindEmail.mockResolvedValue({
+      id: 'email-1',
+      accountId: 'account-1',
+      uid: null,
+      folder: 'INBOX',
+      providerMessageId: 'gmail-message-1',
+      attachments: [
+        {
+          id: 'att-1',
+          emailId: 'email-1',
+          filename: 'inline.png',
+          contentType: 'image/png',
+          sizeBytes: 6,
+          storagePath: null,
+          imapPart: null,
+          gmailAttachmentId: null,
+          ordinal: 0,
+        },
+      ],
+    });
+    mockGetValidAccessToken.mockResolvedValue('access-token');
+    mockFetchMessageFull.mockResolvedValue({
+      payload: {
+        mimeType: 'multipart/related',
+        parts: [
+          {
+            filename: 'inline.png',
+            mimeType: 'image/png',
+            headers: [{ name: 'Content-ID', value: '<image-1>' }],
+            body: { data: Buffer.from('inline').toString('base64url') },
+          },
+        ],
+      },
+    });
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).resolves.toMatchObject({
+      content: Buffer.from('inline'),
+    });
+    expect(mockFetchMessageFull).toHaveBeenCalledWith(
+      'access-token',
+      'gmail-message-1'
     );
   });
 });

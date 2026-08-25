@@ -73,6 +73,41 @@ describe('sendEmail sender', () => {
     expect(result.messageId).toContain('graph-');
   });
 
+  it('sends Graph attachment content as base64 text', async () => {
+    mockGetValidOAuthAccessToken.mockResolvedValue('mock.outlook.jwt_access_token');
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-outlook-1',
+      label: 'Outlook Account',
+      emailAddress: 'user@outlook.com',
+      provider: 'outlook',
+      oauthProvider: 'microsoft',
+    });
+
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, json: jest.fn() });
+    global.fetch = fetchMock;
+
+    await sendEmail('acc-outlook-1', {
+      to: ['recipient@example.com'],
+      subject: 'Attachment test',
+      bodyText: 'See attached',
+      attachments: [
+        {
+          filename: 'report.txt',
+          contentType: 'text/plain',
+          content: Buffer.from('hello').toString('base64'),
+        },
+      ],
+    });
+
+    const request = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(request.message.attachments).toEqual([
+      expect.objectContaining({
+        name: 'report.txt',
+        contentBytes: Buffer.from('hello').toString('base64'),
+      }),
+    ]);
+  });
+
   it('throws an error if Microsoft Graph API fails for Outlook accounts', async () => {
     mockGetValidOAuthAccessToken.mockResolvedValue('mock.outlook.jwt_access_token');
 

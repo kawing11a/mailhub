@@ -6,6 +6,7 @@ import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
 import {
   type GmailMessagePart,
+  extractGmailAttachmentParts,
   getValidAccessToken,
   fetchMessageFull,
   fetchMessagesList,
@@ -16,48 +17,13 @@ import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 import { sendAccountPushNotification } from '@/lib/notifications/account-push';
 
-function isTextPart(part: GmailMessagePart): boolean {
-  return (part.mimeType ?? '').toLowerCase().startsWith('text/');
-}
-
-function hasContentIdHeader(part: GmailMessagePart): boolean {
-  return Boolean(
-    part.headers?.some((header) => header.name?.toLowerCase() === 'content-id' && header.value)
-  );
-}
-
-function isGmailAttachmentPart(part: GmailMessagePart): boolean {
-  if (isTextPart(part)) return false;
-
-  const hasAttachmentId = Boolean(part.filename && part.body?.attachmentId);
-  const hasInlineContent = Boolean(part.body?.data && hasContentIdHeader(part));
-
-  return hasAttachmentId || hasInlineContent;
-}
-
 export function extractGmailAttachmentReferences(
   payload: GmailMessagePart | null | undefined
 ): Array<{ ordinal: number; gmailAttachmentId: string | null }> {
-  if (!payload) return [];
-
-  const references: Array<{ ordinal: number; gmailAttachmentId: string | null }> = [];
-
-  const visit = (part: GmailMessagePart) => {
-    if (isGmailAttachmentPart(part)) {
-      references.push({
-        ordinal: references.length,
-        gmailAttachmentId: part.body?.attachmentId ?? null,
-      });
-    }
-
-    for (const childPart of part.parts ?? []) {
-      visit(childPart);
-    }
-  };
-
-  visit(payload);
-
-  return references;
+  return extractGmailAttachmentParts(payload).map((part, ordinal) => ({
+    ordinal,
+    gmailAttachmentId: part.body?.attachmentId ?? null,
+  }));
 }
 
 export class GmailSyncManager {
@@ -240,7 +206,7 @@ export class GmailSyncManager {
         },
         select: {
           attachments: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
             select: {
               id: true,
               filename: true,
@@ -251,6 +217,7 @@ export class GmailSyncManager {
               ordinal: true,
               imapPart: true,
               gmailAttachmentId: true,
+              createdAt: true,
             },
           },
         },
@@ -260,7 +227,8 @@ export class GmailSyncManager {
       const reconciledAttachments = buildReceivedAttachmentMetadata(
         parsed.attachments,
         existingAttachments,
-        extractGmailAttachmentReferences(fullMessage.payload)
+        extractGmailAttachmentReferences(fullMessage.payload),
+        { preserveStoragePath: folder === 'SENT' || folder === 'DRAFTS' }
       );
 
       const email = await prisma.$transaction(async (tx) => {

@@ -1,7 +1,10 @@
 import { readFile } from 'fs/promises';
 import { prisma } from '@/lib/db/prisma';
 import {
+  decodeGmailBase64,
+  extractGmailAttachmentParts,
   fetchGmailAttachment,
+  fetchMessageFull,
   getValidAccessToken,
   GmailApiError,
 } from '@/lib/gmail/api';
@@ -40,6 +43,8 @@ type LoadedAttachment = {
   storagePath: string | null;
   imapPart: string | null;
   gmailAttachmentId: string | null;
+  ordinal: number | null;
+  createdAt?: Date | string | null;
 };
 
 type LoadedEmail = {
@@ -83,6 +88,8 @@ export async function getReceivedAttachment(
           storagePath: true,
           imapPart: true,
           gmailAttachmentId: true,
+          ordinal: true,
+          createdAt: true,
         },
       },
     },
@@ -101,7 +108,7 @@ export async function getReceivedAttachment(
     return retrieveImapAttachment(email, attachment);
   }
 
-  if (attachment.gmailAttachmentId) {
+  if (attachment.gmailAttachmentId || (email.providerMessageId && attachment.ordinal !== null)) {
     return retrieveGmailAttachment(email, attachment);
   }
 
@@ -118,7 +125,15 @@ export async function readStoredAttachment(
     throw new AttachmentNotFoundError();
   }
 
-  const content = await readFile(attachment.storagePath);
+  let content: Buffer;
+  try {
+    content = await readFile(attachment.storagePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      throw new AttachmentNotFoundError();
+    }
+    throw error;
+  }
 
   return {
     filename: attachment.filename ?? DEFAULT_FILENAME,
@@ -142,7 +157,7 @@ async function retrieveImapAttachment(
       email.accountId,
       async (client) => {
         const mailboxPath = LOGICAL_FOLDERS.has(email.folder)
-          ? await resolveMailboxPathOn(client, email.folder)
+          ? await resolveMailboxPathOn(client, email.folder, { propagateErrors: true })
           : email.folder;
 
         if (!mailboxPath) {
@@ -197,17 +212,27 @@ async function retrieveGmailAttachment(
   email: LoadedEmail,
   attachment: LoadedAttachment
 ): Promise<RetrievedAttachment> {
-  if (!email.providerMessageId || !attachment.gmailAttachmentId) {
+  if (!email.providerMessageId) {
     throw new AttachmentNotFoundError();
   }
 
   try {
     const accessToken = await getValidAccessToken(email.accountId);
-    const content = await fetchGmailAttachment(
-      accessToken,
-      email.providerMessageId,
-      attachment.gmailAttachmentId
-    );
+    let content: Buffer;
+    if (attachment.gmailAttachmentId) {
+      content = await fetchGmailAttachment(
+        accessToken,
+        email.providerMessageId,
+        attachment.gmailAttachmentId
+      );
+    } else if (attachment.ordinal !== null) {
+      const fullMessage = await fetchMessageFull(accessToken, email.providerMessageId);
+      const part = extractGmailAttachmentParts(fullMessage.payload)[attachment.ordinal];
+      if (!part?.body?.data) throw new AttachmentNotFoundError();
+      content = decodeGmailBase64(part.body.data);
+    } else {
+      throw new AttachmentNotFoundError();
+    }
 
     return {
       filename: attachment.filename ?? DEFAULT_FILENAME,

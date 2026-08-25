@@ -138,6 +138,44 @@ export interface GmailFullMessage {
   payload?: GmailMessagePart;
 }
 
+function isTextPart(part: GmailMessagePart): boolean {
+  return (part.mimeType ?? '').toLowerCase().startsWith('text/');
+}
+
+function hasContentIdHeader(part: GmailMessagePart): boolean {
+  return Boolean(
+    part.headers?.some((header) => header.name?.toLowerCase() === 'content-id' && header.value)
+  );
+}
+
+export function isGmailAttachmentPart(part: GmailMessagePart): boolean {
+  if (isTextPart(part)) return false;
+
+  return Boolean(
+    (part.filename && part.body?.attachmentId) ||
+      (part.body?.data && hasContentIdHeader(part))
+  );
+}
+
+export function extractGmailAttachmentParts(
+  payload: GmailMessagePart | null | undefined
+): GmailMessagePart[] {
+  if (!payload) return [];
+
+  const parts: GmailMessagePart[] = [];
+  const visit = (part: GmailMessagePart) => {
+    if (isGmailAttachmentPart(part)) parts.push(part);
+    for (const childPart of part.parts ?? []) visit(childPart);
+  };
+
+  visit(payload);
+  return parts;
+}
+
+export function decodeGmailBase64(data: string): Buffer {
+  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
 /**
  * Fetch list of message IDs.
  */
@@ -192,8 +230,7 @@ export async function fetchMessageRaw(
   const data = await res.json();
 
   // Gmail returns raw as base64url encoded string
-  const base64Str = data.raw.replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(base64Str, 'base64');
+  return decodeGmailBase64(data.raw);
 }
 
 export async function fetchMessageFull(
@@ -234,8 +271,7 @@ export async function fetchGmailAttachment(
   }
 
   const data = await res.json();
-  const base64Str = (data.data || '').replace(/-/g, '+').replace(/_/g, '/');
-  return Buffer.from(base64Str, 'base64');
+  return decodeGmailBase64(data.data || '');
 }
 
 /**

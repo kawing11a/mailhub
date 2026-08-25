@@ -99,4 +99,86 @@ describe('reconcileAttachmentFiles', () => {
       },
     ]);
   });
+
+  it('preserves existing local files for sent and draft resyncs', () => {
+    const result = buildReceivedAttachmentMetadata(
+      [
+        {
+          filename: 'sent.pdf',
+          contentType: 'application/pdf',
+          size: 3,
+          content: Buffer.from('pdf'),
+          cid: null,
+        },
+      ],
+      [
+        {
+          id: 'sent-attachment',
+          filename: 'sent.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 3,
+          storagePath: 'storage/attachments/sent-attachment',
+          cid: null,
+          ordinal: 0,
+          imapPart: null,
+          gmailAttachmentId: null,
+        },
+      ],
+      [{ ordinal: 0, imapPart: null, gmailAttachmentId: null }],
+      { preserveStoragePath: true }
+    );
+
+    expect(result[0].storagePath).toBe('storage/attachments/sent-attachment');
+  });
+
+  it('matches and returns attachments by ordinal before legacy creation order', () => {
+    const result = buildReceivedAttachmentMetadata(
+      [
+        {
+          filename: 'first.pdf',
+          contentType: 'application/pdf',
+          size: 1,
+          content: Buffer.from('1'),
+          cid: null,
+        },
+        {
+          filename: 'second.pdf',
+          contentType: 'application/pdf',
+          size: 1,
+          content: Buffer.from('2'),
+          cid: null,
+        },
+      ],
+      [
+        {
+          id: 'second-id',
+          filename: 'old-second.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 1,
+          storagePath: null,
+          cid: null,
+          ordinal: 1,
+          imapPart: null,
+          gmailAttachmentId: null,
+        },
+        {
+          id: 'first-id',
+          filename: 'old-first.pdf',
+          contentType: 'application/pdf',
+          sizeBytes: 1,
+          storagePath: null,
+          cid: null,
+          ordinal: 0,
+          imapPart: null,
+          gmailAttachmentId: null,
+        },
+      ],
+      [
+        { ordinal: 0, imapPart: '1', gmailAttachmentId: null },
+        { ordinal: 1, imapPart: '2', gmailAttachmentId: null },
+      ]
+    );
+
+    expect(result.map((attachment) => attachment.id)).toEqual(['first-id', 'second-id']);
+  });
 });

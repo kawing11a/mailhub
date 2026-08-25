@@ -169,7 +169,8 @@ export async function withImapConnection<T>(
 /** Resolve a folder bucket to a real mailbox path on an arbitrary client. */
 export async function resolveMailboxPathOn(
   client: ImapFlow,
-  folder: string
+  folder: string,
+  options: { propagateErrors?: boolean } = {}
 ): Promise<string | null> {
   try {
     const mailboxes = await client.list();
@@ -178,6 +179,7 @@ export async function resolveMailboxPathOn(
     }
   } catch (error) {
     console.error('Failed to list mailboxes:', error);
+    if (options.propagateErrors) throw error;
   }
   return null;
 }
@@ -739,7 +741,7 @@ export class IMAPConnectionManager {
         },
         select: {
           attachments: {
-            orderBy: { createdAt: 'asc' },
+            orderBy: [{ ordinal: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
             select: {
               id: true,
               filename: true,
@@ -750,6 +752,7 @@ export class IMAPConnectionManager {
               ordinal: true,
               imapPart: true,
               gmailAttachmentId: true,
+              createdAt: true,
             },
           },
         },
@@ -759,7 +762,8 @@ export class IMAPConnectionManager {
       const reconciledAttachments = buildReceivedAttachmentMetadata(
         parsed.attachments,
         existingAttachments,
-        extractImapAttachmentReferences(message.bodyStructure)
+        extractImapAttachmentReferences(message.bodyStructure),
+        { preserveStoragePath: folder === 'SENT' || folder === 'DRAFTS' }
       );
 
       // Persist email envelope, body, and attachment metadata in a short transaction.

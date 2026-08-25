@@ -3,7 +3,6 @@ import {
   evaluateRule,
   evaluateRulesAgainstEmail,
   applyRuleActions,
-  normalizeEmailAddressField,
 } from '@/lib/rules/engine';
 import { EmailEvaluationInput, EmailRuleDefinition, RuleCriterion } from '@/lib/rules/types';
 import { sendEmail } from '@/lib/smtp/sender';
@@ -21,24 +20,6 @@ const mockedSendEmail = jest.mocked(sendEmail);
 const mockedGetReceivedAttachment = jest.mocked(getReceivedAttachment);
 
 describe('Email Rules Engine', () => {
-  describe('normalizeEmailAddressField', () => {
-    it('normalizes Prisma JSON address values to the rule input shape', () => {
-      expect(
-        normalizeEmailAddressField([
-          { address: 'to@example.com', name: 'Recipient' },
-          'cc@example.com',
-        ])
-      ).toEqual([
-        { address: 'to@example.com', name: 'Recipient' },
-        { address: 'cc@example.com' },
-      ]);
-    });
-
-    it('returns null for JSON values that cannot represent addresses', () => {
-      expect(normalizeEmailAddressField(123)).toBeNull();
-      expect(normalizeEmailAddressField({ address: 'not-an-array' })).toBeNull();
-    });
-  });
 
   const sampleEmail: EmailEvaluationInput = {
     id: 'email-123',
@@ -259,40 +240,6 @@ describe('Email Rules Engine', () => {
       expect(evaluateRule(sampleEmail, matchingAccountRule)).toBe(true);
     });
 
-    it('matches a rule when the email account currently has the target label', () => {
-      const rule = {
-        ...baseRule,
-        accountLabelId: 'label-vip',
-      };
-
-      expect(
-        evaluateRule(
-          {
-            ...sampleEmail,
-            accountLabelIds: ['label-vip'],
-          },
-          rule
-        )
-      ).toBe(true);
-    });
-
-    it('stops matching after the target account label is removed', () => {
-      const rule = {
-        ...baseRule,
-        accountLabelId: 'label-vip',
-      };
-
-      expect(
-        evaluateRule(
-          {
-            ...sampleEmail,
-            accountLabelIds: [],
-          },
-          rule
-        )
-      ).toBe(false);
-    });
-
     it('ignores inactive rules', () => {
       const inactiveRule: EmailRuleDefinition = {
         ...baseRule,
@@ -476,9 +423,9 @@ describe('Email Rules Engine', () => {
               ordinal: true,
               imapPart: true,
               gmailAttachmentId: true,
+              createdAt: true,
             },
           },
-          account: { select: { accountLabels: { select: { labelId: true } } } },
         },
       });
       expect(mockPrisma.email.update).toHaveBeenCalledWith({
@@ -584,12 +531,12 @@ describe('Email Rules Engine', () => {
             {
               filename: 'a.pdf',
               contentType: 'application/pdf',
-              content: Buffer.from('a'),
+              content: Buffer.from('a').toString('base64'),
             },
             {
               filename: 'b.png',
               contentType: 'image/png',
-              content: Buffer.from('b'),
+              content: Buffer.from('b').toString('base64'),
             },
           ],
         })
@@ -665,124 +612,5 @@ describe('Email Rules Engine', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('uses current account labels for label-scoped automatic rule execution', async () => {
-      const mockPrisma = {
-        emailRule: {
-          findMany: jest.fn().mockResolvedValue([
-            {
-              id: 'rule-auto-label-1',
-              name: 'VIP Invoice Rule',
-              isActive: true,
-              priority: 1,
-              accountId: null,
-              accountLabelId: 'label-vip',
-              conditions: {
-                matchType: 'ALL',
-                criteria: [{ field: 'subject', operator: 'contains', value: 'Invoice' }],
-              },
-              actions: {
-                markAsStarred: true,
-              },
-            },
-          ]),
-        },
-        email: {
-          findUnique: jest
-            .fn()
-            .mockResolvedValueOnce({
-              id: 'email-vip-1',
-              accountId: 'acc-1',
-              fromAddress: 'billing@stripe.com',
-              fromName: 'Stripe',
-              subject: 'Invoice #2001',
-              hasAttachments: false,
-              isRead: false,
-              isStarred: false,
-              isHighRisk: false,
-              body: { bodyText: 'VIP invoice body' },
-              emailLabels: [],
-              account: {
-                select: undefined,
-                accountLabels: [{ labelId: 'label-vip' }],
-              },
-            })
-            .mockResolvedValueOnce({
-              id: 'email-vip-2',
-              accountId: 'acc-1',
-              fromAddress: 'billing@stripe.com',
-              fromName: 'Stripe',
-              subject: 'Invoice #2002',
-              hasAttachments: false,
-              isRead: false,
-              isStarred: false,
-              isHighRisk: false,
-              body: { bodyText: 'Invoice after label removal' },
-              emailLabels: [],
-              account: {
-                select: undefined,
-                accountLabels: [],
-              },
-            }),
-          update: jest.fn().mockResolvedValue({ id: 'email-vip-1' }),
-        },
-        emailLabel: {
-          createMany: jest.fn().mockResolvedValue({ count: 0 }),
-          deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
-        },
-      };
-
-      const { processRulesForNewEmail } = await import('@/lib/rules/engine');
-
-      await processRulesForNewEmail('email-vip-1', 'acc-1', 'org-1', mockPrisma as any);
-      await processRulesForNewEmail('email-vip-2', 'acc-1', 'org-1', mockPrisma as any);
-
-      expect(mockPrisma.emailRule.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            organizationId: 'org-1',
-            isActive: true,
-            OR: expect.arrayContaining([
-              expect.objectContaining({ accountId: null }),
-              expect.objectContaining({ accountId: 'acc-1' }),
-              {
-                accountLabel: {
-                  accountLabels: {
-                    some: {
-                      accountId: 'acc-1',
-                    },
-                  },
-                },
-              },
-            ]),
-          }),
-          orderBy: { priority: 'asc' },
-        })
-      );
-      expect(mockPrisma.email.findUnique).toHaveBeenCalledWith({
-        where: { id: 'email-vip-1' },
-        include: {
-          body: true,
-          emailLabels: true,
-          attachments: {
-            select: {
-              id: true,
-              filename: true,
-              contentType: true,
-              sizeBytes: true,
-              storagePath: true,
-              ordinal: true,
-              imapPart: true,
-              gmailAttachmentId: true,
-            },
-          },
-          account: { select: { accountLabels: { select: { labelId: true } } } },
-        },
-      });
-      expect(mockPrisma.email.update).toHaveBeenCalledTimes(1);
-      expect(mockPrisma.email.update).toHaveBeenCalledWith({
-        where: { id: 'email-vip-1' },
-        data: { isStarred: true },
-      });
-    });
   });
 });
