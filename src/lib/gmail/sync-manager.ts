@@ -4,30 +4,17 @@ import { resolveThreadId } from '@/lib/imap/threading';
 import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
-import { getValidAccessToken, fetchMessageFull, fetchMessagesList, fetchMessageRaw } from './api';
+import {
+  type GmailMessagePart,
+  getValidAccessToken,
+  fetchMessageFull,
+  fetchMessagesList,
+  fetchMessageRaw,
+} from './api';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 import { sendAccountPushNotification } from '@/lib/notifications/account-push';
-
-interface GmailMessagePartBody {
-  attachmentId?: string;
-  data?: string;
-}
-
-interface GmailMessagePartHeader {
-  name?: string;
-  value?: string;
-}
-
-interface GmailMessagePart {
-  partId?: string;
-  mimeType?: string;
-  filename?: string;
-  headers?: GmailMessagePartHeader[];
-  body?: GmailMessagePartBody;
-  parts?: GmailMessagePart[];
-}
 
 function isTextPart(part: GmailMessagePart): boolean {
   return (part.mimeType ?? '').toLowerCase().startsWith('text/');

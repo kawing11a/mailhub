@@ -115,6 +115,29 @@ export interface GmailMessageListResult {
   resultSizeEstimate: number;
 }
 
+export interface GmailMessagePartBody {
+  attachmentId?: string;
+  data?: string;
+}
+
+export interface GmailMessagePartHeader {
+  name?: string;
+  value?: string;
+}
+
+export interface GmailMessagePart {
+  partId?: string;
+  mimeType?: string;
+  filename?: string;
+  headers?: GmailMessagePartHeader[];
+  body?: GmailMessagePartBody;
+  parts?: GmailMessagePart[];
+}
+
+export interface GmailFullMessage {
+  payload?: GmailMessagePart;
+}
+
 /**
  * Fetch list of message IDs.
  */
@@ -176,7 +199,7 @@ export async function fetchMessageRaw(
 export async function fetchMessageFull(
   accessToken: string,
   messageId: string
-): Promise<any> {
+): Promise<GmailFullMessage> {
   const res = await gmailFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
