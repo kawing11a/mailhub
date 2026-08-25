@@ -203,6 +203,48 @@ describe('mail content account access', () => {
     expect(getReceivedAttachment).toHaveBeenCalledWith('email-1', 'att-1');
   });
 
+  it('serves a legacy received attachment from its existing storage path', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-legacy' });
+    (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({
+      id: 'att-legacy',
+      emailId: 'email-legacy',
+      filename: 'legacy.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 6,
+      storagePath: '.storage/attachments/att-legacy',
+    });
+    (readStoredAttachment as jest.Mock).mockResolvedValue({
+      filename: 'legacy.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 6,
+      content: Buffer.from('legacy'),
+    });
+
+    const response = await getAttachment(
+      new Request(
+        'http://localhost/api/accounts/all/emails/email-legacy/attachments/att-legacy'
+      ) as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-legacy',
+          attachmentId: 'att-legacy',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe('legacy');
+    expect(readStoredAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'att-legacy',
+        emailId: 'email-legacy',
+        storagePath: '.storage/attachments/att-legacy',
+      })
+    );
+    expect(getReceivedAttachment).not.toHaveBeenCalled();
+  });
+
   it('returns 404 when the provider no longer has the attachment', async () => {
     (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-1' });
     (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({

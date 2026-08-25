@@ -15,6 +15,9 @@ jest.mock('@/lib/db/prisma', () => ({
       create: jest.fn(),
       deleteMany: jest.fn(),
     },
+    attachment: {
+      create: jest.fn(),
+    },
   },
 }));
 
@@ -26,7 +29,17 @@ jest.mock('@/lib/activity/log', () => ({
   logActivity: jest.fn(),
 }));
 
+jest.mock('fs/promises', () => ({
+  mkdir: jest.fn(),
+  writeFile: jest.fn(),
+}));
+
+jest.mock('crypto', () => ({
+  randomUUID: jest.fn(() => 'attachment-1'),
+}));
+
 import type { NextRequest } from 'next/server';
+import * as fs from 'fs/promises';
 import { POST } from '@/app/api/accounts/[id]/emails/send/route';
 import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
@@ -36,14 +49,25 @@ import { logActivity } from '@/lib/activity/log';
 const mockAuthenticate = authenticate as jest.Mock;
 const mockFindAccount = prisma.emailAccount.findFirst as jest.Mock;
 const mockCreateEmail = prisma.email.create as jest.Mock;
+const mockCreateAttachment = prisma.attachment.create as jest.Mock;
 const mockDeleteDraft = prisma.email.deleteMany as jest.Mock;
 const mockSendEmail = sendEmail as jest.Mock;
 const mockLogActivity = logActivity as jest.Mock;
+const mockMkdir = fs.mkdir as jest.Mock;
+const mockWriteFile = fs.writeFile as jest.Mock;
 
 function createRequest(
   overrides: Partial<{
     bodyText: string | undefined;
     bodyHtml: string | undefined;
+    attachments:
+      | Array<{
+          filename: string;
+          contentType: string;
+          content: string;
+          sizeBytes?: number;
+        }>
+      | undefined;
   }> = {}
 ): NextRequest {
   return new Request('http://localhost/api/accounts/account-1/emails/send', {
@@ -53,6 +77,7 @@ function createRequest(
       to: ['recipient@example.com'],
       subject: 'Timestamp test',
       bodyText: 'Hello',
+      attachments: undefined,
       ...overrides,
     }),
   }) as NextRequest;
@@ -71,8 +96,11 @@ describe('POST sent email', () => {
       emailAddress: 'sender@example.com',
     });
     mockCreateEmail.mockResolvedValue({ id: 'email-1' });
+    mockCreateAttachment.mockResolvedValue({ id: 'attachment-1' });
     mockDeleteDraft.mockResolvedValue({ count: 0 });
     mockLogActivity.mockResolvedValue(undefined);
+    mockMkdir.mockResolvedValue(undefined);
+    mockWriteFile.mockResolvedValue(undefined);
   });
 
   it('stores one provider-confirmed time as sentAt and receivedAt', async () => {
@@ -151,6 +179,49 @@ describe('POST sent email', () => {
     expect(response.status).toBe(500);
     expect(mockCreateEmail).not.toHaveBeenCalled();
     expect(mockLogActivity).not.toHaveBeenCalled();
+  });
+
+  it('stores sent attachments on local storage paths and keeps provider reference fields unset', async () => {
+    mockSendEmail.mockResolvedValue({ messageId: '<attachment@example.com>' });
+
+    const response = await POST(
+      createRequest({
+        attachments: [
+          {
+            filename: 'report.pdf',
+            contentType: 'application/pdf',
+            content: Buffer.from('pdf').toString('base64'),
+          },
+        ],
+      }),
+      {
+        params: Promise.resolve({ id: 'account-1' }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockMkdir).toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      expect.stringContaining('.storage'),
+      Buffer.from('pdf')
+    );
+    expect(mockCreateAttachment).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        id: 'attachment-1',
+        emailId: 'email-1',
+        filename: 'report.pdf',
+        contentType: 'application/pdf',
+        sizeBytes: 3,
+        storagePath: expect.stringContaining('.storage'),
+      }),
+    });
+    expect(mockCreateAttachment.mock.calls[0][0].data).toEqual(
+      expect.not.objectContaining({
+        ordinal: expect.anything(),
+        imapPart: expect.anything(),
+        gmailAttachmentId: expect.anything(),
+      })
+    );
   });
 
   it('blocks a member without account access before sending or saving content', async () => {

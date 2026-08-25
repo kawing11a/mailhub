@@ -40,8 +40,22 @@ jest.mock('@/lib/gmail/api', () => ({
 jest.mock('imapflow', () => ({ ImapFlow: jest.fn() }));
 jest.mock('nodemailer', () => ({ createTransport: jest.fn() }));
 jest.mock('uuid', () => ({ v4: jest.fn(() => 'draft-message-id') }));
+jest.mock('fs/promises', () => ({ readFile: jest.fn() }));
+
+const mockMailComposer = jest.fn();
+jest.mock('nodemailer/lib/mail-composer', () => {
+  return jest.fn().mockImplementation((options) => {
+    mockMailComposer(options);
+    return {
+      compile: () => ({
+        build: jest.fn().mockResolvedValue(Buffer.from('mime-message')),
+      }),
+    };
+  });
+});
 
 import type { NextRequest } from 'next/server';
+import * as fs from 'fs/promises';
 import { PUT as saveDraft } from '@/app/api/accounts/[id]/drafts/route';
 import { POST as syncDraft } from '@/app/api/accounts/[id]/drafts/sync/route';
 import { POST as markRead } from '@/app/api/accounts/[id]/read-all/route';
@@ -53,6 +67,7 @@ import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 import { getAccountStats, getDecryptedAccount } from '@/lib/accounts/service';
 import { searchQueue } from '@/lib/queue/client';
+import { getValidAccessToken, syncDraftRaw } from '@/lib/gmail/api';
 import { ImapFlow } from 'imapflow';
 import { createTransport } from 'nodemailer';
 
@@ -64,6 +79,9 @@ const memberWhere = {
     { memberAccess: { some: { userId: 'member-1' } } },
   ],
 };
+const mockReadFile = fs.readFile as jest.Mock;
+const mockGetValidAccessToken = getValidAccessToken as jest.Mock;
+const mockSyncDraftRaw = syncDraftRaw as jest.Mock;
 
 describe('related mail route account access', () => {
   beforeEach(() => {
@@ -74,6 +92,9 @@ describe('related mail route account access', () => {
       role: 'member',
     });
     (requireAdmin as jest.Mock).mockReturnValue(null);
+    mockReadFile.mockResolvedValue(Buffer.from('draft'));
+    mockGetValidAccessToken.mockResolvedValue('access-token');
+    mockSyncDraftRaw.mockResolvedValue(undefined);
   });
 
   it.each([
@@ -152,6 +173,60 @@ describe('related mail route account access', () => {
     expect(prisma.emailAccount.findFirst).toHaveBeenCalledWith({ where: memberWhere });
     expect(prisma.email.findMany).not.toHaveBeenCalled();
     expect(searchQueue.addBulk).not.toHaveBeenCalled();
+  });
+
+  it('keeps local draft attachments available to draft synchronization', async () => {
+    (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValueOnce({
+      id: 'account-1',
+      label: 'Mailbox',
+      emailAddress: 'sender@example.com',
+      provider: 'gmail',
+    });
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({
+      id: 'draft-1',
+      accountId: 'account-1',
+      isDraft: true,
+      subject: 'Draft subject',
+      toAddresses: [{ address: 'recipient@example.com', name: '' }],
+      ccAddresses: [],
+      bccAddresses: [],
+      body: { bodyHtml: '<p>draft</p>', bodyText: 'draft' },
+      attachments: [
+        {
+          id: 'att-draft-1',
+          filename: 'draft.pdf',
+          contentType: 'application/pdf',
+          storagePath: '.storage/attachments/att-draft-1',
+        },
+      ],
+    });
+
+    const response = await syncDraft(
+      new Request('http://localhost/api/accounts/account-1/drafts/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draftId: 'draft-1' }),
+      }) as NextRequest,
+      { params: Promise.resolve({ id: 'account-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockReadFile).toHaveBeenCalledWith('.storage/attachments/att-draft-1');
+    expect(mockMailComposer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            filename: 'draft.pdf',
+            content: Buffer.from('draft'),
+            contentType: 'application/pdf',
+          }),
+        ],
+      })
+    );
+    expect(mockSyncDraftRaw).toHaveBeenCalledWith(
+      'access-token',
+      Buffer.from('mime-message')
+    );
   });
 
   it('blocks inaccessible account stats before aggregate reads', async () => {
