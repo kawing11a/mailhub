@@ -109,6 +109,7 @@ model Email {
   id               String    @id @default(uuid()) @db.Uuid
   accountId        String    @map("account_id") @db.Uuid
   messageId        String    @map("message_id") @db.VarChar(512)
+  providerMessageId String?   @map("provider_message_id") @db.VarChar(512)
   uid              BigInt?
   threadId         String?   @map("thread_id") @db.VarChar(512)
   folder           String    @db.VarChar(100)
@@ -159,14 +160,17 @@ model EmailBody {
 }
 
 model Attachment {
-  id          String   @id @default(uuid()) @db.Uuid
-  emailId     String   @map("email_id") @db.Uuid
-  filename    String?  @db.VarChar(512)
-  contentType String?  @map("content_type") @db.VarChar(255)
-  sizeBytes   Int?     @map("size_bytes")
-  storagePath String?  @map("storage_path")
-  cid         String?  @db.VarChar(255)
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  id                String   @id @default(uuid()) @db.Uuid
+  emailId           String   @map("email_id") @db.Uuid
+  filename          String?  @db.VarChar(512)
+  contentType       String?  @map("content_type") @db.VarChar(255)
+  sizeBytes         Int?     @map("size_bytes")
+  storagePath       String?  @map("storage_path")
+  ordinal           Int?     @map("ordinal")
+  imapPart          String?  @map("imap_part") @db.VarChar(255)
+  gmailAttachmentId String?  @map("gmail_attachment_id") @db.VarChar(512)
+  cid               String?  @db.VarChar(255)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   email Email @relation(fields: [emailId], references: [id], onDelete: Cascade)
 
