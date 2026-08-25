@@ -43,6 +43,12 @@ jest.mock('@/lib/email/server-sync', () => ({
   deleteManyOnServer: jest.fn(),
 }));
 jest.mock('@/lib/smtp/sender', () => ({ sendEmail: jest.fn() }));
+jest.mock('@/lib/email/attachment-retrieval', () => ({
+  getReceivedAttachment: jest.fn(),
+  readStoredAttachment: jest.fn(),
+  AttachmentNotFoundError: class AttachmentNotFoundError extends Error {},
+  AttachmentProviderError: class AttachmentProviderError extends Error {},
+}));
 
 import type { NextRequest } from 'next/server';
 import { GET as getEmail } from '@/app/api/accounts/[id]/emails/[emailId]/route';
@@ -54,6 +60,12 @@ import { GET as getThread } from '@/app/api/emails/thread/[threadId]/route';
 import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 import { restoreOnServer, deleteManyOnServer } from '@/lib/email/server-sync';
+import {
+  AttachmentNotFoundError,
+  AttachmentProviderError,
+  getReceivedAttachment,
+  readStoredAttachment,
+} from '@/lib/email/attachment-retrieval';
 
 const memberAccountWhere = {
   organizationId: 'org-1',
@@ -66,11 +78,16 @@ const memberAccountWhere = {
 describe('mail content account access', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
     (authenticate as jest.Mock).mockResolvedValue({
       userId: 'member-1',
       organizationId: 'org-1',
       role: 'member',
     });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('filters unified email detail before returning or marking content read', async () => {
@@ -110,6 +127,150 @@ describe('mail content account access', () => {
       select: { id: true },
     });
     expect(prisma.attachment.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('reports the number of bytes actually read from attachment storage', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-1' });
+    (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({
+      id: 'att-1',
+      emailId: 'email-1',
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 99,
+      storagePath: '.storage/attachments/att-1',
+    });
+    (readStoredAttachment as jest.Mock).mockResolvedValue({
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 3,
+      content: Buffer.from('pdf'),
+    });
+
+    const response = await getAttachment(
+      new Request('http://localhost/api/accounts/all/emails/email-1/attachments/att-1') as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-1',
+          attachmentId: 'att-1',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Length')).toBe('3');
+    expect(await response.text()).toBe('pdf');
+    expect(readStoredAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'att-1',
+        emailId: 'email-1',
+        storagePath: '.storage/attachments/att-1',
+      })
+    );
+  });
+
+  it('retrieves a received attachment after access is verified', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-1' });
+    (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({
+      id: 'att-1',
+      emailId: 'email-1',
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 3,
+      storagePath: null,
+    });
+    (getReceivedAttachment as jest.Mock).mockResolvedValue({
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 3,
+      content: Buffer.from('pdf'),
+    });
+
+    const response = await getAttachment(
+      new Request('http://localhost/api/accounts/all/emails/email-1/attachments/att-1') as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-1',
+          attachmentId: 'att-1',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Content-Length')).toBe('3');
+    expect(await response.text()).toBe('pdf');
+    expect(getReceivedAttachment).toHaveBeenCalledWith('email-1', 'att-1');
+  });
+
+  it('returns 404 when the provider no longer has the attachment', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-1' });
+    (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({
+      id: 'att-1',
+      emailId: 'email-1',
+      storagePath: null,
+    });
+    (getReceivedAttachment as jest.Mock).mockRejectedValue(
+      new AttachmentNotFoundError()
+    );
+
+    const response = await getAttachment(
+      new Request('http://localhost/api/accounts/all/emails/email-1/attachments/att-1') as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-1',
+          attachmentId: 'att-1',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(404);
+  });
+
+  it('returns 502 for an authorized provider failure', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({ id: 'email-1' });
+    (prisma.attachment.findUnique as jest.Mock).mockResolvedValue({
+      id: 'att-1',
+      emailId: 'email-1',
+      storagePath: null,
+    });
+    (getReceivedAttachment as jest.Mock).mockRejectedValue(
+      new AttachmentProviderError()
+    );
+
+    const response = await getAttachment(
+      new Request('http://localhost/api/accounts/all/emails/email-1/attachments/att-1') as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-1',
+          attachmentId: 'att-1',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(502);
+  });
+
+  it('rejects inaccessible unified-account attachments before retrieval', async () => {
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue(null);
+
+    const response = await getAttachment(
+      new Request(
+        'http://localhost/api/accounts/all/emails/email-hidden/attachments/att-hidden'
+      ) as NextRequest,
+      {
+        params: Promise.resolve({
+          id: 'all',
+          emailId: 'email-hidden',
+          attachmentId: 'att-hidden',
+        }),
+      }
+    );
+
+    expect(response.status).toBe(404);
+    expect(getReceivedAttachment).not.toHaveBeenCalled();
   });
 
   it('filters unified restore before provider or local mutation calls', async () => {

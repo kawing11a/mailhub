@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, apiError } from '@/lib/auth/middleware';
-import * as fs from 'fs/promises';
-import { createReadStream } from 'fs';
-import * as path from 'path';
 import { accountAccessWhere } from '@/lib/accounts/access';
+import {
+  AttachmentNotFoundError,
+  AttachmentProviderError,
+  getReceivedAttachment,
+  readStoredAttachment,
+} from '@/lib/email/attachment-retrieval';
 
 interface RouteParams {
   params: Promise<{ id: string; emailId: string; attachmentId: string }>;
 }
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   const auth = await authenticate(req);
@@ -40,54 +45,59 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   // Fetch the attachment record
   const attachment = await prisma.attachment.findUnique({
-    where: { id: attachmentId, emailId: email.id },
+    where: { id: attachmentId },
   });
 
-  if (!attachment || !attachment.storagePath) {
+  if (!attachment || attachment.emailId !== email.id) {
     return apiError('Attachment not found', 404);
   }
 
   try {
-    // Check multiple candidate paths for robustness across Docker / Windows environments
-    const candidatePaths = [
-      attachment.storagePath,
-      path.resolve(process.cwd(), attachment.storagePath.replace(/^\/app\//, '')),
-      path.resolve(process.cwd(), '.storage', 'attachments', attachment.id),
-      path.resolve(process.cwd(), '.storage', 'attachments', path.basename(attachment.storagePath)),
-    ];
+    const retrieved = attachment.storagePath
+      ? await readStoredAttachment(attachment)
+      : await getReceivedAttachment(email.id, attachment.id);
 
-    let foundPath: string | null = null;
-    for (const cand of candidatePaths) {
-      try {
-        await fs.access(cand);
-        foundPath = cand;
-        break;
-      } catch {
-        // try next candidate
-      }
-    }
-
-    if (!foundPath) {
-      return apiError('Attachment file not found on storage', 404);
-    }
-
-    // Read the file as a buffer
-    const fileBuffer = await fs.readFile(foundPath);
-
-    // Create a response with the file buffer
-    const response = new NextResponse(fileBuffer);
-    
-    // Set headers to force download and set correct content type
-    response.headers.set('Content-Type', attachment.contentType || 'application/octet-stream');
+    const response = new NextResponse(new Uint8Array(retrieved.content));
     response.headers.set(
-      'Content-Disposition', 
-      `attachment; filename="${encodeURIComponent(attachment.filename || 'download')}"`
+      'Content-Type',
+      retrieved.contentType || attachment.contentType || 'application/octet-stream'
     );
-    response.headers.set('Content-Length', (attachment.sizeBytes || fileBuffer.length).toString());
+    response.headers.set(
+      'Content-Disposition',
+      buildContentDisposition(retrieved.filename || attachment.filename || 'download')
+    );
+    response.headers.set('Content-Length', retrieved.content.length.toString());
 
     return response;
   } catch (error) {
-    console.error('Error serving attachment:', error);
-    return apiError('Failed to read attachment file', 500);
+    console.error(error);
+
+    if (error instanceof AttachmentNotFoundError) {
+      return apiError('Attachment not found', 404);
+    }
+
+    if (error instanceof AttachmentProviderError) {
+      return apiError('Failed to retrieve attachment', 502);
+    }
+
+    return apiError('Failed to download attachment', 500);
   }
+}
+
+function buildContentDisposition(filename: string): string {
+  const normalized = filename.replace(/[\r\n]+/g, '').trim() || 'download';
+  const asciiFallback =
+    normalized.replace(/[^\x20-\x7E]+/g, '_').replace(/["\\]/g, '_') ||
+    'download';
+
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeRFC5987ValueChars(
+    normalized
+  )}`;
+}
+
+function encodeRFC5987ValueChars(value: string): string {
+  return encodeURIComponent(value).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+  );
 }
