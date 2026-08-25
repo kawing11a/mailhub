@@ -113,7 +113,8 @@ export async function resolveImapCredentials(
  */
 export async function withImapConnection<T>(
   accountId: string,
-  operation: (client: ImapFlow) => Promise<T>
+  operation: (client: ImapFlow) => Promise<T>,
+  options: { propagateErrors?: boolean } = {}
 ): Promise<T | null> {
   const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
   if (!account) return null;
@@ -146,6 +147,7 @@ export async function withImapConnection<T>(
     await client.connect();
   } catch (error) {
     console.error(`Failed to open IMAP connection for account ${accountId}:`, error);
+    if (options.propagateErrors) throw error;
     return null;
   }
 
@@ -153,6 +155,7 @@ export async function withImapConnection<T>(
     return await operation(client);
   } catch (error) {
     console.error(`IMAP operation failed for account ${accountId}:`, error);
+    if (options.propagateErrors) throw error;
     return null;
   } finally {
     try {

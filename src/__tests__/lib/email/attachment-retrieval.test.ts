@@ -42,6 +42,7 @@ import {
   getValidAccessToken,
 } from '@/lib/gmail/api';
 import {
+  AttachmentProviderError,
   AttachmentNotFoundError,
   getReceivedAttachment,
 } from '@/lib/email/attachment-retrieval';
@@ -167,13 +168,23 @@ describe('getReceivedAttachment', () => {
   });
 
   it('fetches only the stored IMAP MIME part', async () => {
-    const { mockDownload } = mockEmailWithImapReference();
+    const { mockDownload, mockGetMailboxLock } = mockEmailWithImapReference();
 
     await expect(getReceivedAttachment('email-1', 'att-1')).resolves.toMatchObject({
       filename: 'report.pdf',
       content: Buffer.from('pdf'),
     });
+    expect(mockGetMailboxLock).toHaveBeenCalledWith('INBOX', { readOnly: true });
     expect(mockDownload).toHaveBeenCalledWith('42', '2.1', { uid: true });
+  });
+
+  it('maps IMAP transport failures to AttachmentProviderError', async () => {
+    mockEmailWithImapReference();
+    mockWithImapConnection.mockRejectedValue(new Error('socket reset'));
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
+      AttachmentProviderError
+    );
   });
 
   it('uses Gmail attachment data without writing a file', async () => {
@@ -207,6 +218,31 @@ describe('getReceivedAttachment', () => {
 
     await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
       AttachmentNotFoundError
+    );
+  });
+
+  it('maps Gmail 404 attachment failures to AttachmentNotFoundError', async () => {
+    mockEmailWithGmailReference();
+    mockGetValidAccessToken.mockResolvedValue('access-token');
+    mockFetchGmailAttachment.mockRejectedValue(new Error('missing'));
+    mockFetchGmailAttachment.mockRejectedValueOnce(
+      new (jest.requireMock('@/lib/gmail/api').GmailApiError)('missing', 404)
+    );
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
+      AttachmentNotFoundError
+    );
+  });
+
+  it('maps Gmail non-404 attachment failures to AttachmentProviderError', async () => {
+    mockEmailWithGmailReference();
+    mockGetValidAccessToken.mockResolvedValue('access-token');
+    mockFetchGmailAttachment.mockRejectedValue(
+      new (jest.requireMock('@/lib/gmail/api').GmailApiError)('boom', 500)
+    );
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).rejects.toBeInstanceOf(
+      AttachmentProviderError
     );
   });
 });

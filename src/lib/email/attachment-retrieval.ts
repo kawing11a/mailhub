@@ -137,50 +137,60 @@ async function retrieveImapAttachment(
   }
 
   const imapPart = attachment.imapPart;
-  let mailboxResolved = false;
-  const result = await withImapConnection(email.accountId, async (client) => {
-    const mailboxPath = LOGICAL_FOLDERS.has(email.folder)
-      ? await resolveMailboxPathOn(client, email.folder)
-      : email.folder;
-    mailboxResolved = true;
+  try {
+    const result = await withImapConnection(
+      email.accountId,
+      async (client) => {
+        const mailboxPath = LOGICAL_FOLDERS.has(email.folder)
+          ? await resolveMailboxPathOn(client, email.folder)
+          : email.folder;
 
-    if (!mailboxPath) {
-      return null;
+        if (!mailboxPath) {
+          return null;
+        }
+
+        const lock = await client.getMailboxLock(mailboxPath, { readOnly: true });
+        try {
+          const download = await client.download(String(email.uid), imapPart, {
+            uid: true,
+          });
+          if (!download) {
+            return null;
+          }
+
+          const content = await collectBuffer(download.content);
+
+          return {
+            filename:
+              attachment.filename ??
+              download.meta?.filename ??
+              DEFAULT_FILENAME,
+            contentType:
+              attachment.contentType ??
+              download.meta?.contentType ??
+              DEFAULT_CONTENT_TYPE,
+            sizeBytes: content.length,
+            content,
+          };
+        } finally {
+          lock.release();
+        }
+      },
+      { propagateErrors: true }
+    );
+
+    if (result === null) {
+      throw new AttachmentNotFoundError();
     }
 
-    const lock = await client.getMailboxLock(mailboxPath);
-    try {
-      const download = await client.download(String(email.uid), imapPart, {
-        uid: true,
-      });
-      if (!download) {
-        return null;
-      }
-
-      const content = await collectBuffer(download.content);
-
-      return {
-        filename:
-          attachment.filename ??
-          download.meta?.filename ??
-          DEFAULT_FILENAME,
-        contentType:
-          attachment.contentType ??
-          download.meta?.contentType ??
-          DEFAULT_CONTENT_TYPE,
-        sizeBytes: content.length,
-        content,
-      };
-    } finally {
-      lock.release();
+    return result;
+  } catch (error) {
+    if (error instanceof AttachmentNotFoundError) {
+      throw error;
     }
-  });
 
-  if (!mailboxResolved || result === null) {
-    throw new AttachmentNotFoundError();
+    throw new AttachmentProviderError('Failed to fetch IMAP attachment');
   }
-
-  return result;
 }
 
 async function retrieveGmailAttachment(
