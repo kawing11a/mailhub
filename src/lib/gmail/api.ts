@@ -212,6 +212,32 @@ export async function fetchMessageFull(
   return await res.json();
 }
 
+export async function fetchGmailAttachment(
+  accessToken: string,
+  messageId: string,
+  attachmentId: string
+): Promise<Buffer> {
+  const res = await gmailFetch(
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}/attachments/${attachmentId}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new GmailApiError(
+      `Failed to fetch attachment ${attachmentId} for Gmail message ${messageId}`,
+      res.status,
+      err
+    );
+  }
+
+  const data = await res.json();
+  const base64Str = (data.data || '').replace(/-/g, '+').replace(/_/g, '/');
+  return Buffer.from(base64Str, 'base64');
+}
+
 /**
  * Send an email using raw RFC822 format buffer.
  */
