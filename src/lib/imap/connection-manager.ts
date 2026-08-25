@@ -1,11 +1,9 @@
 import { ImapFlow, FetchMessageObject } from 'imapflow';
 import { prisma } from '@/lib/db/prisma';
 import { decrypt, encrypt } from '@/lib/crypto';
-import { parseEmail } from './email-parser';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { randomUUID } from 'crypto';
+import { extractImapAttachmentReferences, parseEmail } from './email-parser';
 import { resolveThreadId } from './threading';
+import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
@@ -673,6 +671,7 @@ export class IMAPConnectionManager {
       for await (const message of client.fetch(range, {
         source: true,
         uid: true,
+        bodyStructure: true,
       }, { uid: fetchByUid })) {
         promises.push(this.persistEmail(accountId, organizationId, message, folder, skipNotifications));
 
@@ -726,7 +725,41 @@ export class IMAPConnectionManager {
         }
       }
 
-      // Persist email envelope + body in a transaction
+      // Read attachment metadata before the transaction so filesystem work does
+      // not consume Prisma's interactive transaction timeout.
+      const existingEmail = await prisma.email.findUnique({
+        where: {
+          accountId_messageId: {
+            accountId,
+            messageId: parsed.messageId,
+          },
+        },
+        select: {
+          attachments: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              filename: true,
+              contentType: true,
+              sizeBytes: true,
+              storagePath: true,
+              cid: true,
+              ordinal: true,
+              imapPart: true,
+              gmailAttachmentId: true,
+            },
+          },
+        },
+      });
+
+      const existingAttachments = existingEmail?.attachments ?? [];
+      const reconciledAttachments = buildReceivedAttachmentMetadata(
+        parsed.attachments,
+        existingAttachments,
+        extractImapAttachmentReferences(message.bodyStructure)
+      );
+
+      // Persist email envelope, body, and attachment metadata in a short transaction.
       const email = await prisma.$transaction(async (tx) => {
         const email = await tx.email.upsert({
           where: {
@@ -738,6 +771,7 @@ export class IMAPConnectionManager {
           create: {
             accountId,
             messageId: parsed.messageId,
+            providerMessageId: null,
             uid: message.uid ? BigInt(message.uid) : null,
             threadId,
             folder: finalFolder,
@@ -758,7 +792,28 @@ export class IMAPConnectionManager {
             sentAt: parsed.sentAt,
             rawHeaders: parsed.rawHeaders,
           },
-          update: {}, // Skip if already exists
+          update: {
+            providerMessageId: null,
+            uid: message.uid ? BigInt(message.uid) : null,
+            threadId,
+            folder: finalFolder,
+            isHighRisk,
+            riskReason,
+            subject: parsed.subject,
+            snippet: parsed.snippet,
+            fromAddress: parsed.fromAddress,
+            fromName: parsed.fromName,
+            toAddresses: parsed.toAddresses,
+            ccAddresses: parsed.ccAddresses,
+            bccAddresses: parsed.bccAddresses,
+            replyTo: parsed.replyTo,
+            inReplyTo: parsed.inReplyTo,
+            referencesHeader: parsed.referencesHeader,
+            hasAttachments: parsed.hasAttachments,
+            receivedAt: parsed.receivedAt,
+            sentAt: parsed.sentAt,
+            rawHeaders: parsed.rawHeaders,
+          },
         });
 
         // Store body separately
@@ -769,44 +824,56 @@ export class IMAPConnectionManager {
             bodyHtml: parsed.bodyHtml,
             bodyText: parsed.bodyText,
           },
-          update: {},
+          update: {
+            bodyHtml: parsed.bodyHtml,
+            bodyText: parsed.bodyText,
+          },
         });
 
-        // Store attachments.
-        // The email above is an upsert, so a re-synced message reuses the same row.
-        // Creating unconditionally here appended a fresh copy of every attachment on
-        // each sync; the attachment set for a given messageId never changes, so skip
-        // entirely (before the disk writes) once any are already stored.
-        const existingAttachments = await tx.attachment.count({
-          where: { emailId: email.id },
-        });
-
-        if (existingAttachments === 0 && parsed.attachments && parsed.attachments.length > 0) {
-          const storageDir = path.join(process.cwd(), '.storage', 'attachments');
-          await fs.mkdir(storageDir, { recursive: true }).catch(() => {});
-
-          for (const att of parsed.attachments) {
-            const attachmentId = randomUUID();
-            const storagePath = path.join(storageDir, attachmentId);
-
-            await fs.writeFile(storagePath, att.content);
-
+        for (const attachment of reconciledAttachments) {
+          if (attachment.existing) {
+            await tx.attachment.update({
+              where: { id: attachment.id },
+              data: {
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                sizeBytes: attachment.sizeBytes,
+                storagePath: attachment.storagePath,
+                ordinal: attachment.ordinal,
+                imapPart: attachment.imapPart,
+                gmailAttachmentId: attachment.gmailAttachmentId,
+                cid: attachment.cid,
+              },
+            });
+          } else {
             await tx.attachment.create({
               data: {
-                id: attachmentId,
+                id: attachment.id,
                 emailId: email.id,
-                filename: att.filename,
-                contentType: att.contentType,
-                sizeBytes: att.size,
-                storagePath,
-                cid: att.cid,
-              }
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                sizeBytes: attachment.sizeBytes,
+                storagePath: attachment.storagePath,
+                ordinal: attachment.ordinal,
+                imapPart: attachment.imapPart,
+                gmailAttachmentId: attachment.gmailAttachmentId,
+                cid: attachment.cid,
+              },
             });
           }
         }
 
+        await tx.attachment.deleteMany({
+          where: {
+            emailId: email.id,
+            id: {
+              notIn: reconciledAttachments.map((attachment) => attachment.id),
+            },
+          },
+        });
+
         return email;
-      });
+      }, { timeout: 30_000 });
 
       // Add to search indexing queue
       await searchQueue.add('index-email', { emailId: email.id });

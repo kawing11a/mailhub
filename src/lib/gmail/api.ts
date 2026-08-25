@@ -173,6 +173,22 @@ export async function fetchMessageRaw(
   return Buffer.from(base64Str, 'base64');
 }
 
+export async function fetchMessageFull(
+  accessToken: string,
+  messageId: string
+): Promise<any> {
+  const res = await gmailFetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => null);
+    throw new GmailApiError(`Failed to fetch full message ${messageId} from Gmail`, res.status, err);
+  }
+
+  return await res.json();
+}
+
 /**
  * Send an email using raw RFC822 format buffer.
  */

@@ -1,4 +1,6 @@
+import type { MessageStructureObject } from 'imapflow';
 import { simpleParser, ParsedMail, AddressObject } from 'mailparser';
+import { createHash } from 'crypto';
 import { createEmailSnippet } from '@/lib/email/snippet';
 
 interface ParsedEmailData {
@@ -39,8 +41,50 @@ function extractAddresses(addr: AddressObject | AddressObject[] | undefined): Ar
   );
 }
 
+function hasFilename(node: MessageStructureObject): boolean {
+  return Boolean(node.dispositionParameters?.filename || node.parameters?.name);
+}
+
+function isInlineNonTextContent(node: MessageStructureObject): boolean {
+  return node.disposition?.toLowerCase() === 'inline' && !!node.id && !node.type.toLowerCase().startsWith('text/');
+}
+
+function isImapAttachmentNode(node: MessageStructureObject): boolean {
+  return (
+    !!node.part &&
+    (
+      node.disposition?.toLowerCase() === 'attachment' ||
+      hasFilename(node) ||
+      isInlineNonTextContent(node)
+    )
+  );
+}
+
+export function extractImapAttachmentReferences(
+  bodyStructure: MessageStructureObject | null | undefined
+): Array<{ ordinal: number; imapPart: string }> {
+  if (!bodyStructure) return [];
+
+  const parts: string[] = [];
+
+  const visit = (node: MessageStructureObject) => {
+    if (isImapAttachmentNode(node) && node.part) {
+      parts.push(node.part);
+    }
+
+    for (const childNode of node.childNodes ?? []) {
+      visit(childNode);
+    }
+  };
+
+  visit(bodyStructure);
+
+  return parts.map((imapPart, ordinal) => ({ ordinal, imapPart }));
+}
+
 export async function parseEmail(raw: Buffer | string): Promise<ParsedEmailData> {
   const parsed: ParsedMail = await simpleParser(raw);
+  const generatedMessageId = createHash('sha256').update(raw).digest('hex');
   const bodyHtml = (parsed.html as string | false) || null;
 
   const rawHeaders: Record<string, string> = {};
@@ -51,7 +95,7 @@ export async function parseEmail(raw: Buffer | string): Promise<ParsedEmailData>
   }
 
   return {
-    messageId: parsed.messageId || `<generated-${Date.now()}@mailhub>`,
+    messageId: parsed.messageId || `<generated-${generatedMessageId}@mailhub>`,
     subject: parsed.subject || null,
     snippet: createEmailSnippet({ bodyText: parsed.text, bodyHtml }),
     fromAddress: parsed.from?.value?.[0]?.address || null,

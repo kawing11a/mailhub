@@ -1,16 +1,77 @@
 import { prisma } from '@/lib/db/prisma';
 import { parseEmail } from '@/lib/imap/email-parser';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import { randomUUID } from 'crypto';
 import { resolveThreadId } from '@/lib/imap/threading';
+import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
 import { searchQueue } from '@/lib/queue/client';
-import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from './api';
+import { getValidAccessToken, fetchMessageFull, fetchMessagesList, fetchMessageRaw } from './api';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 import { sendAccountPushNotification } from '@/lib/notifications/account-push';
+
+interface GmailMessagePartBody {
+  attachmentId?: string;
+  data?: string;
+}
+
+interface GmailMessagePartHeader {
+  name?: string;
+  value?: string;
+}
+
+interface GmailMessagePart {
+  partId?: string;
+  mimeType?: string;
+  filename?: string;
+  headers?: GmailMessagePartHeader[];
+  body?: GmailMessagePartBody;
+  parts?: GmailMessagePart[];
+}
+
+function isTextPart(part: GmailMessagePart): boolean {
+  return (part.mimeType ?? '').toLowerCase().startsWith('text/');
+}
+
+function hasContentIdHeader(part: GmailMessagePart): boolean {
+  return Boolean(
+    part.headers?.some((header) => header.name?.toLowerCase() === 'content-id' && header.value)
+  );
+}
+
+function isGmailAttachmentPart(part: GmailMessagePart): boolean {
+  if (isTextPart(part)) return false;
+
+  const hasAttachmentId = Boolean(part.filename && part.body?.attachmentId);
+  const hasInlineContent = Boolean(part.body?.data && hasContentIdHeader(part));
+
+  return hasAttachmentId || hasInlineContent;
+}
+
+export function extractGmailAttachmentReferences(
+  payload: GmailMessagePart | null | undefined
+): Array<{ ordinal: number; gmailAttachmentId: string | null }> {
+  if (!payload) return [];
+
+  const references: Array<{ ordinal: number; gmailAttachmentId: string | null }> = [];
+
+  const visit = (part: GmailMessagePart) => {
+    if (isGmailAttachmentPart(part)) {
+      references.push({
+        ordinal: references.length,
+        gmailAttachmentId: part.body?.attachmentId ?? null,
+      });
+    }
+
+    for (const childPart of part.parts ?? []) {
+      visit(childPart);
+    }
+  };
+
+  visit(payload);
+
+  return references;
+}
 
 export class GmailSyncManager {
   private pollingIntervals: Map<string, NodeJS.Timeout> = new Map();
@@ -148,6 +209,7 @@ export class GmailSyncManager {
       // Check if we already have it using the gmailMessageId.
       // However, our database unique constraint is on `messageId` (which is the RFC822 Message-ID).
       // We will parse the email to get the RFC822 Message-ID.
+      const fullMessage = await fetchMessageFull(accessToken, gmailMessageId);
       const rawBuffer = await fetchMessageRaw(accessToken, gmailMessageId);
       const parsed = await parseEmail(rawBuffer);
 
@@ -180,6 +242,40 @@ export class GmailSyncManager {
         }
       }
 
+      // Read attachment metadata before the transaction so filesystem work does
+      // not consume Prisma's interactive transaction timeout.
+      const existingEmail = await prisma.email.findUnique({
+        where: {
+          accountId_messageId: {
+            accountId,
+            messageId: parsed.messageId,
+          },
+        },
+        select: {
+          attachments: {
+            orderBy: { createdAt: 'asc' },
+            select: {
+              id: true,
+              filename: true,
+              contentType: true,
+              sizeBytes: true,
+              storagePath: true,
+              cid: true,
+              ordinal: true,
+              imapPart: true,
+              gmailAttachmentId: true,
+            },
+          },
+        },
+      });
+
+      const existingAttachments = existingEmail?.attachments ?? [];
+      const reconciledAttachments = buildReceivedAttachmentMetadata(
+        parsed.attachments,
+        existingAttachments,
+        extractGmailAttachmentReferences(fullMessage.payload)
+      );
+
       const email = await prisma.$transaction(async (tx) => {
         const email = await tx.email.upsert({
           where: {
@@ -192,6 +288,7 @@ export class GmailSyncManager {
           create: {
             accountId,
             messageId: parsed.messageId,
+            providerMessageId: gmailMessageId,
             uid,
             threadId,
             folder: finalFolder,
@@ -212,7 +309,28 @@ export class GmailSyncManager {
             sentAt: parsed.sentAt,
             rawHeaders: parsed.rawHeaders,
           },
-          update: {}, // Skip if already exists
+          update: {
+            providerMessageId: gmailMessageId,
+            uid,
+            threadId,
+            folder: finalFolder,
+            isHighRisk,
+            riskReason,
+            subject: parsed.subject,
+            snippet: parsed.snippet,
+            fromAddress: parsed.fromAddress,
+            fromName: parsed.fromName,
+            toAddresses: parsed.toAddresses,
+            ccAddresses: parsed.ccAddresses,
+            bccAddresses: parsed.bccAddresses,
+            replyTo: parsed.replyTo,
+            inReplyTo: parsed.inReplyTo,
+            referencesHeader: parsed.referencesHeader,
+            hasAttachments: parsed.hasAttachments,
+            receivedAt: parsed.receivedAt,
+            sentAt: parsed.sentAt,
+            rawHeaders: parsed.rawHeaders,
+          },
         });
 
         await tx.emailBody.upsert({
@@ -222,44 +340,56 @@ export class GmailSyncManager {
             bodyHtml: parsed.bodyHtml,
             bodyText: parsed.bodyText,
           },
-          update: {},
+          update: {
+            bodyHtml: parsed.bodyHtml,
+            bodyText: parsed.bodyText,
+          },
         });
 
-        // Store attachments.
-        // The email above is an upsert, so a re-synced message reuses the same row.
-        // Creating unconditionally here appended a fresh copy of every attachment on
-        // each sync; the attachment set for a given messageId never changes, so skip
-        // entirely (before the disk writes) once any are already stored.
-        const existingAttachments = await tx.attachment.count({
-          where: { emailId: email.id },
-        });
-
-        if (existingAttachments === 0 && parsed.attachments && parsed.attachments.length > 0) {
-          const storageDir = path.join(process.cwd(), '.storage', 'attachments');
-          await fs.mkdir(storageDir, { recursive: true }).catch(() => {});
-
-          for (const att of parsed.attachments) {
-            const attachmentId = randomUUID();
-            const storagePath = path.join(storageDir, attachmentId);
-
-            await fs.writeFile(storagePath, att.content);
-
+        for (const attachment of reconciledAttachments) {
+          if (attachment.existing) {
+            await tx.attachment.update({
+              where: { id: attachment.id },
+              data: {
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                sizeBytes: attachment.sizeBytes,
+                storagePath: attachment.storagePath,
+                ordinal: attachment.ordinal,
+                imapPart: attachment.imapPart,
+                gmailAttachmentId: attachment.gmailAttachmentId,
+                cid: attachment.cid,
+              },
+            });
+          } else {
             await tx.attachment.create({
               data: {
-                id: attachmentId,
+                id: attachment.id,
                 emailId: email.id,
-                filename: att.filename,
-                contentType: att.contentType,
-                sizeBytes: att.size,
-                storagePath,
-                cid: att.cid,
-              }
+                filename: attachment.filename,
+                contentType: attachment.contentType,
+                sizeBytes: attachment.sizeBytes,
+                storagePath: attachment.storagePath,
+                ordinal: attachment.ordinal,
+                imapPart: attachment.imapPart,
+                gmailAttachmentId: attachment.gmailAttachmentId,
+                cid: attachment.cid,
+              },
             });
           }
         }
 
+        await tx.attachment.deleteMany({
+          where: {
+            emailId: email.id,
+            id: {
+              notIn: reconciledAttachments.map((attachment) => attachment.id),
+            },
+          },
+        });
+
         return email;
-      });
+      }, { timeout: 30_000 });
 
       // Avoid re-triggering events if the email already existed.
       // Upsert returns the record either way. In a robust system, we check createdAt.
