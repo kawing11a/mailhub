@@ -18,6 +18,12 @@ import {
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { ConditionField, ConditionOperator, MatchType, RuleCriterion } from '@/lib/rules/types';
+import {
+  buildRuleScopePayload,
+  getRuleScopeMode,
+  RuleScopeMode,
+  validateRuleScopeSelection,
+} from '@/lib/rules/scope';
 
 interface LabelItem {
   id: string;
@@ -71,7 +77,9 @@ export function RuleModal({
 }: RuleModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [scopeMode, setScopeMode] = useState<RuleScopeMode>('all');
   const [accountId, setAccountId] = useState<string | null>(null);
+  const [accountLabelId, setAccountLabelId] = useState<string | null>(null);
   const [priority, setPriority] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [stopProcessing, setStopProcessing] = useState(false);
@@ -94,7 +102,9 @@ export function RuleModal({
     if (initialRule) {
       setName(initialRule.name || '');
       setDescription(initialRule.description || '');
+      setScopeMode(getRuleScopeMode(initialRule));
       setAccountId(initialRule.accountId || null);
+      setAccountLabelId(initialRule.accountLabelId || null);
       setPriority(initialRule.priority ?? 0);
       setIsActive(initialRule.isActive ?? true);
       setStopProcessing(initialRule.stopProcessing ?? false);
@@ -124,7 +134,9 @@ export function RuleModal({
       // Reset form
       setName('');
       setDescription('');
+      setScopeMode('all');
       setAccountId(null);
+      setAccountLabelId(null);
       setPriority(0);
       setIsActive(true);
       setStopProcessing(false);
@@ -186,6 +198,18 @@ export function RuleModal({
     }
   };
 
+  const handleScopeModeChange = (mode: RuleScopeMode) => {
+    setScopeMode(mode);
+
+    if (mode === 'account' && !accountId) {
+      setAccountId(accounts[0]?.id || null);
+    }
+
+    if (mode === 'label' && !accountLabelId) {
+      setAccountLabelId(labels[0]?.id || null);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -225,13 +249,23 @@ export function RuleModal({
       return;
     }
 
+    const scopeValidationError = validateRuleScopeSelection(
+      scopeMode,
+      accountId,
+      accountLabelId
+    );
+    if (scopeValidationError) {
+      toast.error(scopeValidationError);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
+      const scope = buildRuleScopePayload(scopeMode, accountId, accountLabelId);
       const payload = {
         name: name.trim(),
         description: description.trim() || null,
-        accountId: accountId || null,
         priority: Number(priority) || 0,
         isActive,
         stopProcessing,
@@ -240,6 +274,7 @@ export function RuleModal({
           criteria: cleanedCriteria,
         },
         actions: actionsPayload,
+        ...scope,
       };
 
       const isEdit = Boolean(initialRule?.id);
@@ -309,17 +344,65 @@ export function RuleModal({
                 Target Account Scope
               </label>
               <select
-                value={accountId || ''}
-                onChange={(e) => setAccountId(e.target.value || null)}
+                value={scopeMode}
+                onChange={(e) => handleScopeModeChange(e.target.value as RuleScopeMode)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-accent-500"
               >
-                <option value="">All Connected Accounts</option>
-                {accounts.map((acc) => (
-                  <option key={acc.id} value={acc.id}>
-                    {acc.label} ({acc.emailAddress})
-                  </option>
-                ))}
+                <option value="all">All Connected Accounts</option>
+                <option value="account">Specific Account</option>
+                <option value="label">Account Label</option>
               </select>
+
+              {scopeMode === 'account' && (
+                <select
+                  value={accountId || ''}
+                  onChange={(e) => setAccountId(e.target.value || null)}
+                  className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-accent-500"
+                >
+                  <option value="" disabled>
+                    Select account...
+                  </option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.label} ({acc.emailAddress})
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {scopeMode === 'label' && (
+                <div className="mt-2 rounded-lg border border-gray-200 bg-white p-2 space-y-2">
+                  {labels.length === 0 ? (
+                    <p className="text-xs text-gray-500">No account labels available yet.</p>
+                  ) : (
+                    labels.map((label) => {
+                      const isSelected = accountLabelId === label.id;
+                      return (
+                        <button
+                          key={label.id}
+                          type="button"
+                          onClick={() => setAccountLabelId(label.id)}
+                          className={clsx(
+                            'w-full inline-flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors',
+                            isSelected
+                              ? 'border-accent-300 bg-accent-50 text-accent-900'
+                              : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          )}
+                        >
+                          <span className="inline-flex items-center gap-2 min-w-0">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: label.color }}
+                            />
+                            <span className="truncate">{label.name}</span>
+                          </span>
+                          {isSelected && <Check className="w-3.5 h-3.5 shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
             <div>
