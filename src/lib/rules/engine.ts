@@ -10,6 +10,35 @@ import { orderAttachmentsByOrdinal } from '@/lib/email/attachment-storage';
 /**
  * Converts Prisma JSON address fields into the shape accepted by the rule engine.
  */
+export function normalizeEmailAddressField(
+  value: unknown
+): EmailEvaluationInput['toAddresses'] {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') return value;
+  if (!Array.isArray(value)) return null;
+
+  if (value.every((item) => typeof item === 'string')) {
+    return value as string[];
+  }
+
+  const normalized: Array<{ address?: string; name?: string }> = [];
+  for (const item of value) {
+    if (typeof item === 'string') {
+      normalized.push({ address: item });
+      continue;
+    }
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+
+    const record = item as Record<string, unknown>;
+    const address = typeof record.address === 'string' ? record.address : undefined;
+    const name = typeof record.name === 'string' ? record.name : undefined;
+
+    if (address || name) normalized.push({ address, name });
+  }
+
+  return normalized;
+}
+
 /**
  * Extracts list of email strings from various to/cc formats
  */
@@ -140,8 +169,15 @@ export function evaluateRule(
     return false;
   }
 
+  if (rule.accountLabelId) {
+    const accountLabelIds = email.accountLabelIds || [];
+    if (!accountLabelIds.includes(rule.accountLabelId)) {
+      return false;
+    }
+  }
+
   const { matchType, criteria } = rule.conditions;
-  if (!criteria || criteria.length === 0) return false;
+  if (!criteria || criteria.length === 0) return true;
 
   if (matchType === 'ANY') {
     return criteria.some((c) => evaluateCriterion(email, c));
@@ -279,7 +315,19 @@ export async function processRulesForNewEmail(
       where: {
         organizationId,
         isActive: true,
-        OR: [{ accountId: null }, { accountId }],
+        OR: [
+          { accountId: null, accountLabelId: null },
+          { accountId },
+          {
+            accountLabel: {
+              accountLabels: {
+                some: {
+                  accountId,
+                },
+              },
+            },
+          },
+        ],
       },
       orderBy: { priority: 'asc' },
     });
@@ -304,6 +352,7 @@ export async function processRulesForNewEmail(
             createdAt: true,
           },
         },
+        account: { select: { accountLabels: { select: { labelId: true } } } },
       },
     });
 
@@ -314,14 +363,15 @@ export async function processRulesForNewEmail(
       accountId: email.accountId,
       fromAddress: email.fromAddress,
       fromName: email.fromName,
-      toAddresses: email.toAddresses as any,
-      ccAddresses: email.ccAddresses as any,
+      toAddresses: normalizeEmailAddressField(email.toAddresses),
+      ccAddresses: normalizeEmailAddressField(email.ccAddresses),
       subject: email.subject,
       bodyText: email.body?.bodyText,
       hasAttachments: email.hasAttachments,
       isRead: email.isRead,
       isStarred: email.isStarred,
       isHighRisk: email.isHighRisk,
+      accountLabelIds: email.account?.accountLabels.map((accountLabel: any) => accountLabel.labelId) || [],
       labelIds: email.emailLabels.map((el: any) => el.labelId),
     };
 
@@ -333,6 +383,7 @@ export async function processRulesForNewEmail(
       priority: r.priority,
       stopProcessing: r.stopProcessing,
       accountId: r.accountId,
+      accountLabelId: r.accountLabelId,
       conditions: r.conditions as any,
       actions: r.actions as any,
     }));

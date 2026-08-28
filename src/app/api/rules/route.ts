@@ -19,7 +19,7 @@ const ruleCriterionSchema = z.object({
 
 const ruleConditionsSchema = z.object({
   matchType: z.enum(['ALL', 'ANY']),
-  criteria: z.array(ruleCriterionSchema).min(1, 'At least one condition is required'),
+  criteria: z.array(ruleCriterionSchema),
 });
 
 const ruleActionsSchema = z.object({
@@ -39,6 +39,7 @@ const createRuleSchema = z.object({
   priority: z.number().int().optional().default(0),
   stopProcessing: z.boolean().optional().default(false),
   accountId: z.string().uuid().optional().nullable(),
+  accountLabelId: z.string().uuid().optional().nullable(),
   conditions: ruleConditionsSchema,
   actions: ruleActionsSchema,
 });
@@ -59,6 +60,13 @@ export async function GET(req: NextRequest) {
             id: true,
             label: true,
             emailAddress: true,
+            color: true,
+          },
+        },
+        accountLabel: {
+          select: {
+            id: true,
+            name: true,
             color: true,
           },
         },
@@ -93,17 +101,33 @@ export async function POST(req: NextRequest) {
       priority,
       stopProcessing,
       accountId,
+      accountLabelId,
       conditions,
       actions,
     } = result.data;
 
-    // If accountId is provided, verify it belongs to the organization
+    if (accountId && accountLabelId) {
+      return NextResponse.json(
+        { error: 'Rule scope cannot include both accountId and accountLabelId' },
+        { status: 400 }
+      );
+    }
+
     if (accountId) {
       const account = await prisma.emailAccount.findFirst({
         where: { id: accountId, organizationId: session.organizationId },
       });
       if (!account) {
         return NextResponse.json({ error: 'Email account not found' }, { status: 404 });
+      }
+    }
+
+    if (accountLabelId) {
+      const label = await prisma.label.findFirst({
+        where: { id: accountLabelId, organizationId: session.organizationId },
+      });
+      if (!label) {
+        return NextResponse.json({ error: 'Account label not found' }, { status: 404 });
       }
     }
 
@@ -116,6 +140,7 @@ export async function POST(req: NextRequest) {
         priority: priority ?? 0,
         stopProcessing: stopProcessing ?? false,
         accountId: accountId || null,
+        accountLabelId: accountLabelId || null,
         conditions: conditions as any,
         actions: actions as any,
       },
@@ -125,6 +150,13 @@ export async function POST(req: NextRequest) {
             id: true,
             label: true,
             emailAddress: true,
+            color: true,
+          },
+        },
+        accountLabel: {
+          select: {
+            id: true,
+            name: true,
             color: true,
           },
         },

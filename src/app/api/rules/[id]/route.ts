@@ -19,7 +19,7 @@ const ruleCriterionSchema = z.object({
 
 const ruleConditionsSchema = z.object({
   matchType: z.enum(['ALL', 'ANY']),
-  criteria: z.array(ruleCriterionSchema).min(1, 'At least one condition is required'),
+  criteria: z.array(ruleCriterionSchema),
 });
 
 const ruleActionsSchema = z.object({
@@ -39,6 +39,7 @@ const updateRuleSchema = z.object({
   priority: z.number().int().optional(),
   stopProcessing: z.boolean().optional(),
   accountId: z.string().uuid().optional().nullable(),
+  accountLabelId: z.string().uuid().optional().nullable(),
   conditions: ruleConditionsSchema.optional(),
   actions: ruleActionsSchema.optional(),
 });
@@ -62,6 +63,13 @@ export async function GET(
             id: true,
             label: true,
             emailAddress: true,
+            color: true,
+          },
+        },
+        accountLabel: {
+          select: {
+            id: true,
+            name: true,
             color: true,
           },
         },
@@ -112,16 +120,41 @@ export async function PUT(
       priority,
       stopProcessing,
       accountId,
+      accountLabelId,
       conditions,
       actions,
     } = result.data;
 
-    if (accountId !== undefined && accountId !== null) {
+    const accountIdProvided = Object.prototype.hasOwnProperty.call(result.data, 'accountId');
+    const accountLabelIdProvided = Object.prototype.hasOwnProperty.call(result.data, 'accountLabelId');
+
+    const effectiveAccountId = accountIdProvided ? accountId ?? null : existing.accountId ?? null;
+    const effectiveAccountLabelId = accountLabelIdProvided
+      ? accountLabelId ?? null
+      : existing.accountLabelId ?? null;
+
+    if (effectiveAccountId && effectiveAccountLabelId) {
+      return NextResponse.json(
+        { error: 'Rule scope cannot include both accountId and accountLabelId' },
+        { status: 400 }
+      );
+    }
+
+    if (accountIdProvided && accountId !== null) {
       const account = await prisma.emailAccount.findFirst({
         where: { id: accountId, organizationId: session.organizationId },
       });
       if (!account) {
         return NextResponse.json({ error: 'Email account not found' }, { status: 404 });
+      }
+    }
+
+    if (accountLabelIdProvided && accountLabelId !== null) {
+      const label = await prisma.label.findFirst({
+        where: { id: accountLabelId, organizationId: session.organizationId },
+      });
+      if (!label) {
+        return NextResponse.json({ error: 'Account label not found' }, { status: 404 });
       }
     }
 
@@ -132,6 +165,7 @@ export async function PUT(
     if (priority !== undefined) updateData.priority = priority;
     if (stopProcessing !== undefined) updateData.stopProcessing = stopProcessing;
     if (accountId !== undefined) updateData.accountId = accountId;
+    if (accountLabelId !== undefined) updateData.accountLabelId = accountLabelId;
     if (conditions !== undefined) updateData.conditions = conditions;
     if (actions !== undefined) updateData.actions = actions;
 
@@ -144,6 +178,13 @@ export async function PUT(
             id: true,
             label: true,
             emailAddress: true,
+            color: true,
+          },
+        },
+        accountLabel: {
+          select: {
+            id: true,
+            name: true,
             color: true,
           },
         },

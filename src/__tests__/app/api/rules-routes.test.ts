@@ -22,6 +22,9 @@ jest.mock('@/lib/db/prisma', () => ({
       findFirst: jest.fn(),
       findMany: jest.fn(),
     },
+    label: {
+      findFirst: jest.fn(),
+    },
     email: {
       findMany: jest.fn(),
       update: jest.fn(),
@@ -48,7 +51,12 @@ import { prisma } from '@/lib/db/prisma';
 const mockAuthenticate = authenticate as jest.Mock;
 const mockPrismaRule = prisma.emailRule as any;
 const mockPrismaAccount = prisma.emailAccount as any;
+const mockPrismaLabel = prisma.label as any;
 const mockPrismaEmail = prisma.email as any;
+
+const accountId = '11111111-1111-4111-8111-111111111111';
+const accountLabelId = '22222222-2222-4222-8222-222222222222';
+const otherAccountLabelId = '33333333-3333-4333-8333-333333333333';
 
 describe('Email Rules API Routes', () => {
   beforeEach(() => {
@@ -68,6 +76,11 @@ describe('Email Rules API Routes', () => {
           name: 'Tag Invoices',
           organizationId: 'org-456',
           priority: 0,
+          accountLabel: {
+            id: accountLabelId,
+            name: 'VIP',
+            color: '#FF0000',
+          },
         },
       ]);
 
@@ -78,6 +91,11 @@ describe('Email Rules API Routes', () => {
       const json = await res.json();
       expect(json.rules).toHaveLength(1);
       expect(json.rules[0].name).toBe('Tag Invoices');
+      expect(json.rules[0].accountLabel).toEqual({
+        id: accountLabelId,
+        name: 'VIP',
+        color: '#FF0000',
+      });
     });
   });
 
@@ -115,13 +133,147 @@ describe('Email Rules API Routes', () => {
       expect(mockPrismaRule.create).toHaveBeenCalled();
     });
 
+    it('accepts an organization-owned accountLabelId and persists it', async () => {
+      const payload = {
+        name: 'VIP Accounts',
+        accountLabelId,
+        conditions: {
+          matchType: 'ALL',
+          criteria: [{ field: 'subject', operator: 'contains', value: 'Urgent' }],
+        },
+        actions: {
+          markAsStarred: true,
+        },
+      };
+
+      mockPrismaLabel.findFirst.mockResolvedValue({
+        id: accountLabelId,
+        organizationId: 'org-456',
+        name: 'VIP',
+        color: '#FF0000',
+      });
+      mockPrismaRule.create.mockResolvedValue({
+        id: 'rule-label-1',
+        organizationId: 'org-456',
+        ...payload,
+        accountId: null,
+        accountLabel: {
+          id: accountLabelId,
+          name: 'VIP',
+          color: '#FF0000',
+        },
+      });
+
+      const req = new Request('http://localhost/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }) as NextRequest;
+
+      const res = await createRule(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.rule.accountLabel).toEqual({
+        id: accountLabelId,
+        name: 'VIP',
+        color: '#FF0000',
+      });
+      expect(mockPrismaLabel.findFirst).toHaveBeenCalledWith({
+        where: { id: accountLabelId, organizationId: 'org-456' },
+      });
+      expect(mockPrismaRule.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            accountId: null,
+            accountLabelId,
+          }),
+        })
+      );
+    });
+
+    it('rejects both non-null accountId and accountLabelId', async () => {
+      const req = new Request('http://localhost/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Invalid Scope',
+          accountId,
+          accountLabelId,
+          conditions: {
+            matchType: 'ALL',
+            criteria: [{ field: 'subject', operator: 'contains', value: 'Invoice' }],
+          },
+          actions: {},
+        }),
+      }) as NextRequest;
+
+      const res = await createRule(req);
+      expect(res.status).toBe(400);
+      expect(mockPrismaRule.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a label from another organization', async () => {
+      mockPrismaLabel.findFirst.mockResolvedValue(null);
+
+      const req = new Request('http://localhost/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Foreign Label',
+          accountLabelId: otherAccountLabelId,
+          conditions: {
+            matchType: 'ALL',
+            criteria: [{ field: 'subject', operator: 'contains', value: 'Invoice' }],
+          },
+          actions: {},
+        }),
+      }) as NextRequest;
+
+      const res = await createRule(req);
+      expect(res.status).toBe(404);
+      expect(mockPrismaRule.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts an empty criteria array when actions are present', async () => {
+      const payload = {
+        name: 'Unconditional Rule',
+        conditions: {
+          matchType: 'ALL',
+          criteria: [],
+        },
+        actions: {
+          markAsStarred: true,
+        },
+      };
+
+      mockPrismaRule.create.mockResolvedValue({
+        id: 'rule-empty-criteria-1',
+        organizationId: 'org-456',
+        ...payload,
+      });
+
+      const req = new Request('http://localhost/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }) as NextRequest;
+
+      const res = await createRule(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.rule.conditions.criteria).toEqual([]);
+      expect(mockPrismaRule.create).toHaveBeenCalled();
+    });
+
     it('rejects payload missing criteria', async () => {
       const req = new Request('http://localhost/api/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: 'Invalid Rule',
-          conditions: { matchType: 'ALL', criteria: [] },
+          conditions: { matchType: 'ALL' },
           actions: {},
         }),
       }) as NextRequest;
@@ -143,6 +295,11 @@ describe('Email Rules API Routes', () => {
         id: 'rule-1',
         organizationId: 'org-456',
         name: 'New Name',
+        accountLabel: {
+          id: accountLabelId,
+          name: 'VIP',
+          color: '#FF0000',
+        },
       });
 
       const req = new Request('http://localhost/api/rules/rule-1', {
@@ -156,6 +313,105 @@ describe('Email Rules API Routes', () => {
 
       const json = await res.json();
       expect(json.rule.name).toBe('New Name');
+      expect(json.rule.accountLabel).toEqual({
+        id: accountLabelId,
+        name: 'VIP',
+        color: '#FF0000',
+      });
+    });
+
+    it('rejects an effective state where omitted existing scope would leave both IDs non-null', async () => {
+      mockPrismaRule.findFirst.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        accountId,
+        accountLabelId: null,
+      });
+      mockPrismaLabel.findFirst.mockResolvedValue({
+        id: accountLabelId,
+        organizationId: 'org-456',
+      });
+
+      const req = new Request('http://localhost/api/rules/rule-1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountLabelId }),
+      }) as NextRequest;
+
+      const res = await updateRule(req, { params: Promise.resolve({ id: 'rule-1' }) });
+      expect(res.status).toBe(400);
+      expect(mockPrismaRule.update).not.toHaveBeenCalled();
+    });
+
+    it('preserves omitted scope fields', async () => {
+      mockPrismaRule.findFirst.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        accountId: null,
+        accountLabelId,
+        name: 'Old Name',
+      });
+      mockPrismaRule.update.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        name: 'Renamed',
+        accountId: null,
+        accountLabelId,
+        accountLabel: {
+          id: accountLabelId,
+          name: 'VIP',
+          color: '#FF0000',
+        },
+      });
+
+      const req = new Request('http://localhost/api/rules/rule-1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Renamed' }),
+      }) as NextRequest;
+
+      const res = await updateRule(req, { params: Promise.resolve({ id: 'rule-1' }) });
+      expect(res.status).toBe(200);
+      expect(mockPrismaRule.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.not.objectContaining({
+            accountId: expect.anything(),
+            accountLabelId: expect.anything(),
+          }),
+        })
+      );
+    });
+
+    it('allows explicit null to clear scope fields', async () => {
+      mockPrismaRule.findFirst.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        accountId: null,
+        accountLabelId,
+      });
+      mockPrismaRule.update.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        accountId: null,
+        accountLabelId: null,
+        accountLabel: null,
+      });
+
+      const req = new Request('http://localhost/api/rules/rule-1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountLabelId: null }),
+      }) as NextRequest;
+
+      const res = await updateRule(req, { params: Promise.resolve({ id: 'rule-1' }) });
+      expect(res.status).toBe(200);
+      expect(mockPrismaRule.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            accountLabelId: null,
+          }),
+        })
+      );
     });
   });
 
@@ -235,6 +491,85 @@ describe('Email Rules API Routes', () => {
         data: { isStarred: true },
       });
     });
+
+    it('filters retroactive runs by current account labels and selects them for evaluation', async () => {
+      mockPrismaRule.findFirst.mockResolvedValue({
+        id: 'rule-label-1',
+        organizationId: 'org-456',
+        name: 'VIP Invoices',
+        priority: 1,
+        accountId: null,
+        accountLabelId,
+        conditions: {
+          matchType: 'ALL',
+          criteria: [{ field: 'subject', operator: 'contains', value: 'Invoice' }],
+        },
+        actions: {
+          markAsStarred: true,
+        },
+      });
+
+      mockPrismaAccount.findMany.mockResolvedValue([{ id: 'acc-1' }]);
+      mockPrismaEmail.findMany.mockResolvedValue([
+        {
+          id: 'email-label-1',
+          accountId: 'acc-1',
+          fromAddress: 'billing@stripe.com',
+          fromName: 'Stripe',
+          subject: 'VIP Invoice',
+          hasAttachments: false,
+          isRead: false,
+          isStarred: false,
+          isHighRisk: false,
+          emailLabels: [],
+          account: {
+            accountLabels: [{ labelId: accountLabelId }],
+          },
+          body: { bodyText: 'invoice body' },
+        },
+      ]);
+
+      const req = new Request('http://localhost/api/rules/rule-label-1/run', {
+        method: 'POST',
+      }) as NextRequest;
+
+      const res = await runRule(req, { params: Promise.resolve({ id: 'rule-label-1' }) });
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.totalEvaluated).toBe(1);
+      expect(json.matchedCount).toBe(1);
+      expect(json.modifiedCount).toBe(1);
+      expect(mockPrismaAccount.findMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: 'org-456',
+          accountLabels: {
+            some: {
+              labelId: accountLabelId,
+            },
+          },
+        },
+        select: { id: true },
+      });
+      expect(mockPrismaEmail.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            accountId: { in: ['acc-1'] },
+          },
+          select: expect.objectContaining({
+            account: {
+              select: {
+                accountLabels: {
+                  select: {
+                    labelId: true,
+                  },
+                },
+              },
+            },
+          }),
+        })
+      );
+    });
   });
 
   describe('POST /api/rules/test', () => {
@@ -265,6 +600,66 @@ describe('Email Rules API Routes', () => {
       const json = await res.json();
       expect(json.matched).toBe(true);
       expect(json.actionsToApply.markAsRead).toBe(true);
+    });
+
+    it('uses sample account labels when dry running a label-scoped rule', async () => {
+      const req = new Request('http://localhost/api/rules/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule: {
+            accountLabelId,
+            conditions: {
+              matchType: 'ALL',
+              criteria: [{ field: 'subject', operator: 'contains', value: 'Security' }],
+            },
+            actions: {
+              markAsRead: true,
+            },
+          },
+          sampleEmail: {
+            subject: 'Security alert',
+            accountLabelIds: [],
+          },
+        }),
+      }) as NextRequest;
+
+      const res = await testRule(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.matched).toBe(false);
+      expect(json.actionsToApply).toBeNull();
+    });
+
+    it('matches a dry run when criteria is empty', async () => {
+      const req = new Request('http://localhost/api/rules/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule: {
+            conditions: {
+              matchType: 'ALL',
+              criteria: [],
+            },
+            actions: {
+              markAsRead: true,
+            },
+          },
+          sampleEmail: {
+            subject: 'Anything at all',
+          },
+        }),
+      }) as NextRequest;
+
+      const res = await testRule(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.matched).toBe(true);
+      expect(json.actionsToApply).toEqual({
+        markAsRead: true,
+      });
     });
   });
 });
