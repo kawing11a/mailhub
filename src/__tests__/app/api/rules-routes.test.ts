@@ -36,6 +36,10 @@ jest.mock('@/lib/db/prisma', () => ({
   },
 }));
 
+jest.mock('@/lib/email/attachment-retrieval', () => ({
+  getReceivedAttachment: jest.fn(),
+}));
+
 import type { NextRequest } from 'next/server';
 import { GET as getRules, POST as createRule } from '@/app/api/rules/route';
 import {
@@ -284,6 +288,39 @@ describe('Email Rules API Routes', () => {
   });
 
   describe('PUT /api/rules/[id]', () => {
+    it('accepts an empty criteria array and persists an unconditional rule', async () => {
+      const conditions = {
+        matchType: 'ALL' as const,
+        criteria: [],
+      };
+
+      mockPrismaRule.findFirst.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        accountId: null,
+        accountLabelId: null,
+      });
+      mockPrismaRule.update.mockResolvedValue({
+        id: 'rule-1',
+        organizationId: 'org-456',
+        conditions,
+      });
+
+      const req = new Request('http://localhost/api/rules/rule-1', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conditions }),
+      }) as NextRequest;
+
+      const res = await updateRule(req, { params: Promise.resolve({ id: 'rule-1' }) });
+      expect(res.status).toBe(200);
+      expect(mockPrismaRule.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ conditions }),
+        })
+      );
+    });
+
     it('updates rule when found in organization', async () => {
       mockPrismaRule.findFirst.mockResolvedValue({
         id: 'rule-1',

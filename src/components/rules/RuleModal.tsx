@@ -119,7 +119,7 @@ export function RuleModal({
   const [markAsHighRisk, setMarkAsHighRisk] = useState(
     Boolean(initialRule?.actions?.markAsHighRisk)
   );
-  const [forwardToInput, setForwardToInput] = useState(
+  const [forwardToInput, setForwardToInput] = useState<string>(
     Array.isArray(initialRule?.actions?.forwardTo) ? initialRule.actions.forwardTo.join(', ') : ''
   );
 
