@@ -67,6 +67,25 @@ const OPERATOR_OPTIONS: Array<{ value: ConditionOperator; label: string }> = [
   { value: 'matches_regex', label: 'matches regex' },
 ];
 
+export function getRuleCriteriaForEdit(initialRule: any): RuleCriterion[] {
+  const initialCriteria = initialRule?.conditions?.criteria;
+  return Array.isArray(initialCriteria)
+    ? initialCriteria
+    : [{ field: 'from', operator: 'contains', value: '' }];
+}
+
+export function cleanRuleCriteria(criteria: RuleCriterion[]): RuleCriterion[] {
+  return criteria.filter((criterion) => {
+    if (criterion.field === 'hasAttachment') return true;
+    if (criterion.field === 'hasLabelId') return Boolean(criterion.value);
+    return String(criterion.value).trim() !== '';
+  });
+}
+
+export function removeRuleCriterion(criteria: RuleCriterion[], index: number): RuleCriterion[] {
+  return criteria.filter((_, idx) => idx !== index);
+}
+
 export function RuleModal({
   isOpen,
   onClose,
@@ -75,26 +94,34 @@ export function RuleModal({
   accounts = [],
   labels = [],
 }: RuleModalProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [scopeMode, setScopeMode] = useState<RuleScopeMode>('all');
-  const [accountId, setAccountId] = useState<string | null>(null);
-  const [accountLabelId, setAccountLabelId] = useState<string | null>(null);
-  const [priority, setPriority] = useState(0);
-  const [isActive, setIsActive] = useState(true);
-  const [stopProcessing, setStopProcessing] = useState(false);
+  const [name, setName] = useState(initialRule?.name || '');
+  const [description, setDescription] = useState(initialRule?.description || '');
+  const [scopeMode, setScopeMode] = useState<RuleScopeMode>(
+    initialRule ? getRuleScopeMode(initialRule) : 'all'
+  );
+  const [accountId, setAccountId] = useState<string | null>(initialRule?.accountId || null);
+  const [accountLabelId, setAccountLabelId] = useState<string | null>(
+    initialRule?.accountLabelId || null
+  );
+  const [priority, setPriority] = useState(initialRule?.priority ?? 0);
+  const [isActive, setIsActive] = useState(initialRule?.isActive ?? true);
+  const [stopProcessing, setStopProcessing] = useState(initialRule?.stopProcessing ?? false);
 
-  const [matchType, setMatchType] = useState<MatchType>('ALL');
-  const [criteria, setCriteria] = useState<RuleCriterion[]>([
-    { field: 'from', operator: 'contains', value: '' },
-  ]);
+  const [matchType, setMatchType] = useState<MatchType>(initialRule?.conditions?.matchType || 'ALL');
+  const [criteria, setCriteria] = useState<RuleCriterion[]>(getRuleCriteriaForEdit(initialRule));
 
-  const [addLabelIds, setAddLabelIds] = useState<string[]>([]);
-  const [removeLabelIds, setRemoveLabelIds] = useState<string[]>([]);
-  const [markAsRead, setMarkAsRead] = useState(false);
-  const [markAsStarred, setMarkAsStarred] = useState(false);
-  const [markAsHighRisk, setMarkAsHighRisk] = useState(false);
-  const [forwardToInput, setForwardToInput] = useState('');
+  const [addLabelIds, setAddLabelIds] = useState<string[]>(initialRule?.actions?.addLabelIds || []);
+  const [removeLabelIds, setRemoveLabelIds] = useState<string[]>(
+    initialRule?.actions?.removeLabelIds || []
+  );
+  const [markAsRead, setMarkAsRead] = useState(Boolean(initialRule?.actions?.markAsRead));
+  const [markAsStarred, setMarkAsStarred] = useState(Boolean(initialRule?.actions?.markAsStarred));
+  const [markAsHighRisk, setMarkAsHighRisk] = useState(
+    Boolean(initialRule?.actions?.markAsHighRisk)
+  );
+  const [forwardToInput, setForwardToInput] = useState(
+    Array.isArray(initialRule?.actions?.forwardTo) ? initialRule.actions.forwardTo.join(', ') : ''
+  );
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -111,11 +138,7 @@ export function RuleModal({
 
       if (initialRule.conditions) {
         setMatchType(initialRule.conditions.matchType || 'ALL');
-        setCriteria(
-          initialRule.conditions.criteria && initialRule.conditions.criteria.length > 0
-            ? initialRule.conditions.criteria
-            : [{ field: 'from', operator: 'contains', value: '' }]
-        );
+        setCriteria(getRuleCriteriaForEdit(initialRule));
       }
 
       if (initialRule.actions) {
@@ -158,8 +181,7 @@ export function RuleModal({
   };
 
   const handleRemoveCriterion = (index: number) => {
-    if (criteria.length === 1) return;
-    setCriteria(criteria.filter((_, idx) => idx !== index));
+    setCriteria(removeRuleCriterion(criteria, index));
   };
 
   const handleUpdateCriterion = (index: number, patch: Partial<RuleCriterion>) => {
@@ -218,16 +240,7 @@ export function RuleModal({
       return;
     }
 
-    const cleanedCriteria = criteria.filter((c) => {
-      if (c.field === 'hasAttachment') return true;
-      if (c.field === 'hasLabelId') return Boolean(c.value);
-      return String(c.value).trim() !== '';
-    });
-
-    if (cleanedCriteria.length === 0) {
-      toast.error('Please configure at least one condition with a value');
-      return;
-    }
+    const cleanedCriteria = cleanRuleCriteria(criteria);
 
     const actionsPayload: Record<string, any> = {};
     if (addLabelIds.length > 0) actionsPayload.addLabelIds = addLabelIds;
@@ -424,17 +437,19 @@ export function RuleModal({
               <span className="text-xs font-semibold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
                 <span>1. If incoming email matches</span>
               </span>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-gray-500">Match logic:</span>
-                <select
-                  value={matchType}
-                  onChange={(e) => setMatchType(e.target.value as MatchType)}
-                  className="px-2 py-1 border border-gray-300 rounded-md bg-white font-medium text-gray-800"
-                >
-                  <option value="ALL">ALL conditions must match (AND)</option>
-                  <option value="ANY">ANY condition can match (OR)</option>
-                </select>
-              </div>
+              {criteria.length > 0 && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500">Match logic:</span>
+                  <select
+                    value={matchType}
+                    onChange={(e) => setMatchType(e.target.value as MatchType)}
+                    className="px-2 py-1 border border-gray-300 rounded-md bg-white font-medium text-gray-800"
+                  >
+                    <option value="ALL">ALL conditions must match (AND)</option>
+                    <option value="ANY">ANY condition can match (OR)</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Criteria Rows */}
@@ -527,14 +542,20 @@ export function RuleModal({
                   <button
                     type="button"
                     onClick={() => handleRemoveCriterion(idx)}
-                    disabled={criteria.length === 1}
-                    className="p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 rounded transition-colors self-end sm:self-center"
+                    className="p-1.5 text-gray-400 hover:text-red-600 rounded transition-colors self-end sm:self-center"
                     title="Remove condition"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               ))}
+
+              {criteria.length === 0 && (
+                <p className="text-xs text-gray-500">
+                  No email conditions: this rule applies to all incoming emails in the selected
+                  scope.
+                </p>
+              )}
             </div>
 
             <button
