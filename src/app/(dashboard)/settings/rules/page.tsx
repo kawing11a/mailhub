@@ -263,22 +263,28 @@ export default function RulesSettingsPage() {
                   {/* Conditions Summary */}
                   <div className="text-xs text-gray-600 flex flex-wrap items-center gap-1.5 pt-1">
                     <span className="font-semibold text-gray-700">If:</span>
-                    <span className="text-gray-500 italic">
-                      ({conditions?.matchType === 'ANY' ? 'Any condition' : 'All conditions'})
-                    </span>
-                    {conditions?.criteria?.map((c, idx) => (
-                      <span
-                        key={idx}
-                        className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded text-[11px] border border-gray-200"
-                      >
-                        <span className="font-medium">{c.field}</span> {c.operator}{' '}
-                        <span className="font-semibold">
-                          {c.field === 'hasLabelId'
-                            ? getLabelById(String(c.value))?.name || String(c.value)
-                            : String(c.value)}
+                    {conditions?.criteria?.length === 0 ? (
+                      <span className="text-gray-500 italic">All incoming emails</span>
+                    ) : (
+                      <>
+                        <span className="text-gray-500 italic">
+                          ({conditions?.matchType === 'ANY' ? 'Any condition' : 'All conditions'})
                         </span>
-                      </span>
-                    ))}
+                        {conditions?.criteria?.map((c, idx) => (
+                          <span
+                            key={idx}
+                            className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded text-[11px] border border-gray-200"
+                          >
+                            <span className="font-medium">{c.field}</span> {c.operator}{' '}
+                            <span className="font-semibold">
+                              {c.field === 'hasLabelId'
+                                ? getLabelById(String(c.value))?.name || String(c.value)
+                                : String(c.value)}
+                            </span>
+                          </span>
+                        ))}
+                      </>
+                    )}
                   </div>
 
                   {/* Actions Summary */}

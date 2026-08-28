@@ -54,6 +54,27 @@ type QueryOptions = {
   enabled?: boolean;
 };
 
+type MockRule = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  conditions: {
+    matchType: 'ALL' | 'ANY';
+    criteria: Array<{
+      field: string;
+      operator: string;
+      value: string;
+    }>;
+  };
+  actions: {
+    addLabelIds?: string[];
+    markAsRead?: boolean;
+    markAsStarred?: boolean;
+    markAsHighRisk?: boolean;
+    forwardTo?: string[];
+  };
+};
+
 describe('Settings navigation and member guards', () => {
   let queryOptions: QueryOptions[];
 
@@ -81,7 +102,7 @@ describe('Settings navigation and member guards', () => {
     });
   });
 
-  function configureQueries(role: 'admin' | 'member') {
+  function configureQueries(role: 'admin' | 'member', rules: MockRule[] = []) {
     mockUseQuery.mockImplementation((options: QueryOptions) => {
       queryOptions.push(options);
 
@@ -100,7 +121,7 @@ describe('Settings navigation and member guards', () => {
       }
 
       if (options.queryKey[0] === 'rules') {
-        return { data: { rules: [] }, isLoading: false };
+        return { data: { rules }, isLoading: false };
       }
 
       if (options.queryKey[0] === 'labels') {
@@ -233,6 +254,27 @@ describe('Settings navigation and member guards', () => {
       queryOptions.find(({ queryKey }) => queryKey[0] === 'accounts')?.enabled
     ).toBe(false);
     expect(mockUseMutation).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders an unconditional rules summary when a rule has no criteria', () => {
+    configureQueries('admin', [
+      {
+        id: 'rule-1',
+        name: 'Catch everything',
+        isActive: true,
+        conditions: {
+          matchType: 'ALL',
+          criteria: [],
+        },
+        actions: {
+          markAsRead: true,
+        },
+      },
+    ]);
+
+    const html = renderToStaticMarkup(<RulesSettingsPage />);
+
+    expect(html).toContain('All incoming emails');
   });
 
   it('runs every rules-page hook while auth is loading without enabling protected queries', () => {
