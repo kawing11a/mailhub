@@ -661,5 +661,34 @@ describe('Email Rules API Routes', () => {
         markAsRead: true,
       });
     });
+
+    it('does not match a scoped dry run when criteria is empty and sample accountId is missing', async () => {
+      const req = new Request('http://localhost/api/rules/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rule: {
+            accountId,
+            conditions: {
+              matchType: 'ALL',
+              criteria: [],
+            },
+            actions: {
+              markAsRead: true,
+            },
+          },
+          sampleEmail: {
+            subject: 'Anything at all',
+          },
+        }),
+      }) as NextRequest;
+
+      const res = await testRule(req);
+      expect(res.status).toBe(200);
+
+      const json = await res.json();
+      expect(json.matched).toBe(false);
+      expect(json.actionsToApply).toBeNull();
+    });
   });
 });

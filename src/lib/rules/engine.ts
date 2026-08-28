@@ -165,7 +165,7 @@ export function evaluateRule(
   if (!rule.isActive) return false;
 
   // Account Scope check
-  if (rule.accountId && email.accountId && rule.accountId !== email.accountId) {
+  if (rule.accountId && rule.accountId !== email.accountId) {
     return false;
   }
 

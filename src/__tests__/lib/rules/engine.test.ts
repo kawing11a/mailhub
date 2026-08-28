@@ -291,6 +291,16 @@ describe('Email Rules Engine', () => {
       expect(evaluateRule(sampleEmail, rule)).toBe(false);
     });
 
+    it('does not match a scoped unconditional rule when the email accountId is missing', () => {
+      const rule = {
+        ...baseRule,
+        accountId: 'acc-1',
+        conditions: { matchType: 'ALL', criteria: [] },
+      };
+
+      expect(evaluateRule({ ...sampleEmail, accountId: undefined }, rule)).toBe(false);
+    });
+
     it('ignores inactive rules', () => {
       const inactiveRule: EmailRuleDefinition = {
         ...baseRule,
