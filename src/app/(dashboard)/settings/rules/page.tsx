@@ -225,7 +225,19 @@ export default function RulesSettingsPage() {
                         Priority: {rule.priority}
                       </span>
                     )}
-                    {rule.account ? (
+                    {rule.accountLabelId ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full font-medium border"
+                        style={{
+                          backgroundColor: `${rule.accountLabel?.color || '#8B5CF6'}15`,
+                          borderColor: `${rule.accountLabel?.color || '#8B5CF6'}40`,
+                          color: rule.accountLabel?.color || '#8B5CF6',
+                        }}
+                      >
+                        <Tag className="w-3 h-3" />
+                        <span>{rule.accountLabel?.name || rule.accountLabelId}</span>
+                      </span>
+                    ) : rule.account ? (
                       <span
                         className="text-[11px] px-2 py-0.5 rounded-full font-medium text-white"
                         style={{ backgroundColor: rule.account.color || '#3B82F6' }}
