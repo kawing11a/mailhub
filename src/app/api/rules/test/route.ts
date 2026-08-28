@@ -10,6 +10,7 @@ const testRuleSchema = z.object({
     isActive: z.boolean().optional().default(true),
     priority: z.number().optional().default(0),
     accountId: z.string().optional().nullable(),
+    accountLabelId: z.string().optional().nullable(),
     conditions: z.object({
       matchType: z.enum(['ALL', 'ANY']),
       criteria: z.array(
@@ -39,6 +40,7 @@ const testRuleSchema = z.object({
   }),
   sampleEmail: z.object({
     accountId: z.string().optional(),
+    accountLabelIds: z.array(z.string()).optional(),
     fromAddress: z.string().optional().nullable(),
     fromName: z.string().optional().nullable(),
     toAddresses: z.any().optional(),
@@ -74,11 +76,17 @@ export async function POST(req: NextRequest) {
       isActive: true,
       priority: rule.priority || 0,
       accountId: rule.accountId || null,
+      accountLabelId: rule.accountLabelId || null,
       conditions: rule.conditions as any,
       actions: rule.actions as any,
     };
 
-    const isMatch = evaluateRule(sampleEmail as EmailEvaluationInput, ruleDef);
+    const evaluationInput: EmailEvaluationInput = {
+      ...sampleEmail,
+      accountLabelIds: sampleEmail.accountLabelIds || null,
+    };
+
+    const isMatch = evaluateRule(evaluationInput, ruleDef);
 
     return NextResponse.json({
       matched: isMatch,

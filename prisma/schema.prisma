@@ -188,6 +188,7 @@ model Label {
 
   organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   accountLabels AccountLabel[]
+  accountScopedRules EmailRule[] @relation("EmailRuleAccountLabel")
   emailLabels   EmailLabel[]
 
   @@unique([organizationId, name])
@@ -361,6 +362,7 @@ model EmailRule {
   stopProcessing Boolean   @default(false) @map("stop_processing")
 
   accountId      String?   @map("account_id") @db.Uuid
+  accountLabelId String?   @map("account_label_id") @db.Uuid
 
   conditions     Json
   actions        Json
@@ -370,7 +372,9 @@ model EmailRule {
 
   organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   account        EmailAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountLabel   Label?        @relation("EmailRuleAccountLabel", fields: [accountLabelId], references: [id], onDelete: Cascade)
 
+  @@index([accountLabelId])
   @@index([organizationId, isActive, priority])
   @@map("email_rules")
 }

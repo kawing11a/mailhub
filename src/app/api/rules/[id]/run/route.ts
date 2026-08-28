@@ -1,8 +1,8 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, requireAdmin } from '@/lib/auth/middleware';
-import { evaluateRule, applyRuleActions } from '@/lib/rules/engine';
-import { EmailRuleDefinition } from '@/lib/rules/types';
+import { evaluateRule, applyRuleActions, normalizeEmailAddressField } from '@/lib/rules/engine';
+import { EmailEvaluationInput, EmailRuleDefinition } from '@/lib/rules/types';
 
 export async function POST(
   req: NextRequest,
@@ -30,6 +30,7 @@ export async function POST(
       isActive: true, // For manual trigger, evaluate active criteria
       priority: ruleRecord.priority,
       accountId: ruleRecord.accountId,
+      accountLabelId: ruleRecord.accountLabelId,
       conditions: ruleRecord.conditions as any,
       actions: ruleRecord.actions as any,
     };
@@ -40,6 +41,12 @@ export async function POST(
     };
     if (ruleRecord.accountId) {
       accountFilter.id = ruleRecord.accountId;
+    } else if (ruleRecord.accountLabelId) {
+      accountFilter.accountLabels = {
+        some: {
+          labelId: ruleRecord.accountLabelId,
+        },
+      };
     }
 
     const accounts = await prisma.emailAccount.findMany({
@@ -76,6 +83,13 @@ export async function POST(
         emailLabels: {
           select: { labelId: true },
         },
+        account: {
+          select: {
+            accountLabels: {
+              select: { labelId: true },
+            },
+          },
+        },
         body: {
           select: { bodyText: true },
         },
@@ -86,19 +100,20 @@ export async function POST(
     let matchedCount = 0;
 
     for (const email of emails) {
-      const evaluationInput = {
+      const evaluationInput: EmailEvaluationInput = {
         id: email.id,
         accountId: email.accountId,
         fromAddress: email.fromAddress,
         fromName: email.fromName,
-        toAddresses: email.toAddresses,
-        ccAddresses: email.ccAddresses,
+        toAddresses: normalizeEmailAddressField(email.toAddresses),
+        ccAddresses: normalizeEmailAddressField(email.ccAddresses),
         subject: email.subject,
         bodyText: email.body?.bodyText,
         hasAttachments: email.hasAttachments,
         isRead: email.isRead,
         isStarred: email.isStarred,
         isHighRisk: email.isHighRisk,
+        accountLabelIds: email.account?.accountLabels.map((accountLabel) => accountLabel.labelId) || [],
         labelIds: email.emailLabels.map((el) => el.labelId),
       };
 

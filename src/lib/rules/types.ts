@@ -42,6 +42,7 @@ export interface RuleActions {
 export interface EmailEvaluationInput {
   id?: string;
   accountId?: string;
+  accountLabelIds?: string[] | null;
   fromAddress?: string | null;
   fromName?: string | null;
   toAddresses?: Array<{ address?: string; name?: string }> | string[] | string | null;
@@ -63,6 +64,7 @@ export interface EmailRuleDefinition {
   priority: number;
   stopProcessing?: boolean;
   accountId?: string | null;
+  accountLabelId?: string | null;
   conditions: RuleConditions;
   actions: RuleActions;
 }
