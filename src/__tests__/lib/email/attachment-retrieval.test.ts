@@ -75,7 +75,7 @@ const mockFetchGmailAttachment = fetchGmailAttachment as jest.Mock;
 const mockFetchMessageFull = fetchMessageFull as jest.Mock;
 const mockFsReadFile = fs.readFile as jest.Mock;
 
-function mockEmailWithImapReference() {
+function mockEmailWithImapReference(storagePath: string | null = null) {
   const mockDownload = jest.fn().mockResolvedValue({
     meta: {
       filename: 'downloaded-report.pdf',
@@ -100,7 +100,7 @@ function mockEmailWithImapReference() {
         filename: 'report.pdf',
         contentType: 'application/pdf',
         sizeBytes: 99,
-        storagePath: null,
+        storagePath,
         imapPart: '2.1',
         gmailAttachmentId: null,
         ordinal: 0,
@@ -118,7 +118,7 @@ function mockEmailWithImapReference() {
   return { mockDownload, mockGetMailboxLock };
 }
 
-function mockEmailWithGmailReference() {
+function mockEmailWithGmailReference(storagePath: string | null = null) {
   mockFindEmail.mockResolvedValue({
     id: 'email-1',
     accountId: 'account-1',
@@ -132,7 +132,7 @@ function mockEmailWithGmailReference() {
         filename: 'report.pdf',
         contentType: 'application/pdf',
         sizeBytes: 99,
-        storagePath: null,
+        storagePath,
         imapPart: null,
         gmailAttachmentId: 'gmail-att-1',
         ordinal: 0,
@@ -251,6 +251,38 @@ describe('getReceivedAttachment', () => {
       content: Buffer.from('legacy'),
     });
     expect(mockFsReadFile).toHaveBeenCalledWith('.storage/attachments/att-1');
+  });
+
+  it('falls back to IMAP when a stale storage path is missing', async () => {
+    const { mockDownload } = mockEmailWithImapReference(
+      '.storage/attachments/att-1'
+    );
+    const missingFile = Object.assign(new Error('missing'), { code: 'ENOENT' });
+    mockFsReadFile.mockRejectedValue(missingFile);
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).resolves.toMatchObject({
+      content: Buffer.from('pdf'),
+    });
+    expect(mockFsReadFile).toHaveBeenCalledWith('.storage/attachments/att-1');
+    expect(mockDownload).toHaveBeenCalledWith('42', '2.1', { uid: true });
+  });
+
+  it('falls back to Gmail when a stale storage path is missing', async () => {
+    mockEmailWithGmailReference('.storage/attachments/att-1');
+    const missingFile = Object.assign(new Error('missing'), { code: 'ENOENT' });
+    mockFsReadFile.mockRejectedValue(missingFile);
+    mockGetValidAccessToken.mockResolvedValue('access-token');
+    mockFetchGmailAttachment.mockResolvedValue(Buffer.from('pdf'));
+
+    await expect(getReceivedAttachment('email-1', 'att-1')).resolves.toMatchObject({
+      content: Buffer.from('pdf'),
+    });
+    expect(mockFsReadFile).toHaveBeenCalledWith('.storage/attachments/att-1');
+    expect(mockFetchGmailAttachment).toHaveBeenCalledWith(
+      'access-token',
+      'gmail-message-1',
+      'gmail-att-1'
+    );
   });
 
   it('maps a missing legacy file to AttachmentNotFoundError', async () => {

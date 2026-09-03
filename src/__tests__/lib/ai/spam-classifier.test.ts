@@ -37,6 +37,26 @@ describe('Spam Classifier & Portable Trainer', () => {
   });
 
   describe('classifySpam & online training', () => {
+    it('generates distinct sample IDs when training records share a millisecond timestamp', () => {
+      const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+      try {
+        const first = recordSpamTrainingSample({
+          label: 'spam',
+          subject: 'First sample',
+          snippet: 'First body',
+        });
+        const second = recordSpamTrainingSample({
+          label: 'ham',
+          subject: 'Second sample',
+          snippet: 'Second body',
+        });
+
+        expect(first.sample.id).not.toBe(second.sample.id);
+      } finally {
+        nowSpy.mockRestore();
+      }
+    });
+
     it('classifies obvious default spam patterns with high spam probability', () => {
       const result = classifySpam(
         'Win $1,000,000 cash lottery prize now',

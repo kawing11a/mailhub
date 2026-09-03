@@ -5,6 +5,37 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-09-03
+
+### Added
+- **AI Email Assistance** - label summaries, message explanations, compose/rewrite tools, action-item and tone analysis, translation, and configurable OpenAI-compatible providers.
+- **Summary Notifications** - deliver generated label summaries through Telegram, WeCom, or generic webhooks, with per-channel delivery tracking.
+- **Email Automation Rules** - ordered rules with organization, account, and account-label scopes; `ALL`, `ANY`, and unconditional matching; label, read, star, risk, webhook, and forwarding actions.
+- **Adaptive Spam Training** - train from spam/ham feedback and import or export the portable classifier dataset.
+- **Account Ownership and Sharing** - explicit account owners and granular per-member mailbox access across dashboard, search, labels, signatures, AI, and mail operations.
+- **Lazy Attachment Retrieval** - keep provider references instead of storing every received attachment locally, then download on demand or when forwarding.
+- **Credential Testing** - verify IMAP and SMTP settings before saving an account.
+
+### Fixed
+- Email sync now bounds database and persistence concurrency, retries transient PostgreSQL failures, and advances sync watermarks only after complete persistence.
+- Initial sync jobs now use partition-specific queues and deterministic job IDs while preserving existing `workerPartition` assignments and forwarding legacy jobs safely.
+- Gmail polling no longer overlaps per account; IMAP connections now reconnect on errors and periodically reconcile missed messages.
+- Tightened account-level authorization across settings, API routes, notifications, OAuth callbacks, AI operations, and related mailbox resources.
+- Improved Gmail mailbox matching, attachment-provider error reporting, outbound mail validation, and admin bootstrap consistency.
+- Excluded local worktrees, mail storage, certificates, and development metadata from the Docker build context.
+- Removed unused legacy IMAP packages and pruned development dependencies from the runtime Docker image.
+
+### Changed
+- Updated Next.js to `16.3.4`, aligned its ESLint configuration, and refreshed TipTap, Mailparser, and Tailwind dependencies to security-fixed releases.
+- Refresh-token handling now retries expired API requests automatically, with a seven-day access-token and one-month refresh-token window.
+- AI summarization uses cleaned email text, adaptive chunking, and Meilisearch with a database fallback for larger workloads.
+- Added database pool, sync concurrency, provider polling, and reconciliation controls to `.env.example` and documented worker partition capacity planning.
+- Updated `docker-compose.yml` image tags and Docker examples to `kawing11a/mailhub:0.1.5`.
+
+### Upgrade notes
+- Run `npx prisma migrate deploy` before starting the new web and worker containers. This release adds account ownership, user-scoped push subscriptions, email rules, AI experiment/notification data, and lazy attachment reference fields.
+- Keep a worker running for every `workerPartition` already assigned to an email account; adding workers does not rebalance existing accounts automatically.
+
 ## [0.1.4] - 2026-08-04
 
 ### Added

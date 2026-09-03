@@ -101,7 +101,16 @@ export async function getReceivedAttachment(
   }
 
   if (attachment.storagePath) {
-    return readStoredAttachment(attachment);
+    try {
+      return await readStoredAttachment(attachment);
+    } catch (error) {
+      // Older versions could persist the storage path before the file was
+      // successfully written. If the file is gone, continue with the
+      // provider reference so the attachment can be recovered on demand.
+      if (!(error instanceof AttachmentNotFoundError)) {
+        throw error;
+      }
+    }
   }
 
   if (attachment.imapPart) {

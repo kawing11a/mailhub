@@ -1,7 +1,8 @@
 # Dynamic Account-Label Scope for Email Rules
 
-**Date:** 2026-08-21  
-**Status:** Approved for specification review
+**Date:** 2026-08-24
+
+**Status:** Approved
 
 ## Goal
 
@@ -9,7 +10,7 @@ Allow an email rule to target every email account carrying a selected account la
 
 ## Existing Context
 
-`EmailRule` currently supports three effective scopes:
+`EmailRule` currently supports two effective scopes:
 
 - `accountId = null`: all organization accounts.
 - `accountId = <id>`: one account.

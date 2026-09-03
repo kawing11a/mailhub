@@ -42,3 +42,10 @@
   - Passed
 - `git diff --check`
   - Returned only pre-existing CRLF warnings in unrelated dirty files; no new diff formatting errors from Task 5 changes
+
+## Task 5 Review Note
+
+- `src/lib/rules/engine.ts` and `src/__tests__/lib/rules/engine.test.ts` already contained pre-existing account-label scope and address-normalization edits before Task 5 work began.
+- Those pre-existing edits were preserved and are not part of the attachment-forwarding change.
+- No code changes were made for this review-note update.
+- The attachment-forwarding implementation itself passed the listed verification tests above.

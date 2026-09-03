@@ -273,7 +273,7 @@ describe('Email Rules Engine', () => {
     });
 
     it('matches every email when criteria is empty', () => {
-      const rule = {
+      const rule: EmailRuleDefinition = {
         ...baseRule,
         conditions: { matchType: 'ALL', criteria: [] },
       };
@@ -282,7 +282,7 @@ describe('Email Rules Engine', () => {
     });
 
     it('still enforces account scope when criteria is empty', () => {
-      const rule = {
+      const rule: EmailRuleDefinition = {
         ...baseRule,
         accountId: 'acc-2',
         conditions: { matchType: 'ALL', criteria: [] },
@@ -292,7 +292,7 @@ describe('Email Rules Engine', () => {
     });
 
     it('does not match a scoped unconditional rule when the email accountId is missing', () => {
-      const rule = {
+      const rule: EmailRuleDefinition = {
         ...baseRule,
         accountId: 'acc-1',
         conditions: { matchType: 'ALL', criteria: [] },

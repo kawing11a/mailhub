@@ -184,8 +184,8 @@ export async function updateAccount(
 
   // If connection settings changed, queue a sync
   if (data.isActive) {
-    const { syncQueue } = await import('@/lib/queue/client');
-    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
+    const { enqueueInitialSync } = await import('@/lib/queue/client');
+    await enqueueInitialSync(account);
   }
 
   return account;

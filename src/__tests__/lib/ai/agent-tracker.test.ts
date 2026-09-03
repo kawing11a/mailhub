@@ -98,4 +98,23 @@ describe('Agent Tracker Service', () => {
     expect(failedLog).toBeDefined();
     expect(failedLog?.detail).toBe('Rate limit exceeded on OpenAI');
   });
+
+  test('uses distinct log IDs when runs start and fail in the same millisecond', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+    try {
+      const first = await initAgentRun('same-time-run-1', 'Orders');
+      const second = await initAgentRun('same-time-run-2', 'Orders');
+
+      expect(first.logs[0].id).not.toBe(second.logs[0].id);
+
+      const failedFirst = await failAgentRun('same-time-fail-1', 'First failure');
+      const failedSecond = await failAgentRun('same-time-fail-2', 'Second failure');
+
+      expect(failedFirst?.logs.find((log) => log.status === 'failed')?.id).not.toBe(
+        failedSecond?.logs.find((log) => log.status === 'failed')?.id
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 });

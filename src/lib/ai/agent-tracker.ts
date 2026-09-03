@@ -1,4 +1,5 @@
 import { redis } from '@/lib/redis';
+import { createUniqueId } from '@/lib/identifiers';
 
 export interface AgentLogEntry {
   id: string;
@@ -60,7 +61,7 @@ export async function initAgentRun(
   const limitText = config?.limit && config.limit > 0 ? `Max ${config.limit}` : 'All';
 
   const initialLog: AgentLogEntry = {
-    id: `log-init-${Date.now()}`,
+    id: createUniqueId('log-init'),
     timestamp: now,
     step: 'INITIALIZING',
     title: 'AI Agent session queued',
@@ -202,7 +203,7 @@ export async function failAgentRun(
   return updateAgentStep(
     runId,
     {
-      id: `step-failed-${Date.now()}`,
+      id: createUniqueId('step-failed'),
       step: 'FAILED',
       title: 'Agent run encountered an error',
       detail: errorMessage,

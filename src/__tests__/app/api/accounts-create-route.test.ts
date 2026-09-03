@@ -16,9 +16,7 @@ jest.mock('@/lib/accounts/service', () => {
 });
 
 jest.mock('@/lib/queue/client', () => ({
-  syncQueue: {
-    add: jest.fn(),
-  },
+  enqueueInitialSync: jest.fn(),
 }));
 
 jest.mock('@/lib/network/outbound-host', () => {
@@ -33,7 +31,7 @@ import type { NextRequest } from 'next/server';
 import { POST } from '@/app/api/accounts/route';
 import { authenticate } from '@/lib/auth/middleware';
 import { createAccount } from '@/lib/accounts/service';
-import { syncQueue } from '@/lib/queue/client';
+import { enqueueInitialSync } from '@/lib/queue/client';
 import {
   resolveSafeOutboundHost,
   UnsafeOutboundHostError,
@@ -41,7 +39,7 @@ import {
 
 const mockAuthenticate = authenticate as jest.Mock;
 const mockCreateAccount = createAccount as jest.Mock;
-const mockQueueAdd = syncQueue.add as jest.Mock;
+const mockEnqueueInitialSync = enqueueInitialSync as jest.Mock;
 const mockResolveHost = resolveSafeOutboundHost as jest.Mock;
 
 function createRequest(body: Record<string, unknown>): NextRequest {
@@ -81,6 +79,7 @@ describe('POST /api/accounts', () => {
       label: 'Support',
       emailAddress: 'support@example.com',
       provider: 'imap',
+      workerPartition: 'worker-1',
     };
 
     mockCreateAccount.mockImplementation(
@@ -90,7 +89,7 @@ describe('POST /api/accounts', () => {
           resolveCreate = resolve;
         })
     );
-    mockQueueAdd.mockResolvedValue(undefined);
+    mockEnqueueInitialSync.mockResolvedValue(undefined);
 
     const body = {
       label: 'Support',
@@ -113,16 +112,13 @@ describe('POST /api/accounts', () => {
       ...body,
       emailAddress: 'support@example.com',
     });
-    expect(mockQueueAdd).not.toHaveBeenCalled();
+    expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
 
     resolveCreate?.(createdAccount);
 
     const response = await responsePromise;
     expect(response.status).toBe(201);
-    expect(mockQueueAdd).toHaveBeenCalledWith('initial-sync', {
-      accountId: 'account-1',
-      folder: 'ALL',
-    });
+    expect(mockEnqueueInitialSync).toHaveBeenCalledWith(createdAccount);
 
     const responseBody = await response.json();
     expect(responseBody).not.toHaveProperty('ownerUserId');
@@ -157,6 +153,6 @@ describe('POST /api/accounts', () => {
 
     expect(response.status).toBe(422);
     expect(mockCreateAccount).not.toHaveBeenCalled();
-    expect(mockQueueAdd).not.toHaveBeenCalled();
+    expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
   });
 });

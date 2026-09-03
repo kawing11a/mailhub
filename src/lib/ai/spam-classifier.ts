@@ -1,4 +1,5 @@
 import { extractCleanEmailText } from '@/lib/email/clean-text';
+import { createUniqueId } from '@/lib/identifiers';
 
 export interface SpamTrainingSample {
   id: string;
@@ -290,7 +291,7 @@ export function recordSpamTrainingSample(args: {
   }
 
   const sample: SpamTrainingSample = {
-    id: emailId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `sample-${Date.now()}`),
+    id: emailId || createUniqueId('sample'),
     label,
     fromAddress,
     fromDomain,

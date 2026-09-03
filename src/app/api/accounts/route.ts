@@ -66,8 +66,8 @@ export async function POST(req: NextRequest) {
     const account = await createAccount(auth.organizationId, auth.userId, parsed.data);
     // After creating the account, queue initial sync
     // Connection initialization happens asynchronously inside the worker process
-    const { syncQueue } = await import('@/lib/queue/client');
-    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
+    const { enqueueInitialSync } = await import('@/lib/queue/client');
+    await enqueueInitialSync(account);
     return apiResponse(sanitizeAccount(account), 201);
   } catch (error: unknown) {
     if (error instanceof UnsafeOutboundHostError) {

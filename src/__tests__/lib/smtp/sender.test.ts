@@ -5,6 +5,7 @@ import { getValidAccessToken, sendMessageRaw } from '@/lib/gmail/api';
 import nodemailer from 'nodemailer';
 
 jest.mock('@/lib/accounts/service');
+jest.mock('@/lib/db/prisma', () => ({ prisma: {} }));
 jest.mock('@/lib/accounts/tokens');
 jest.mock('@/lib/gmail/api');
 jest.mock('nodemailer');
@@ -106,6 +107,36 @@ describe('sendEmail sender', () => {
         contentBytes: Buffer.from('hello').toString('base64'),
       }),
     ]);
+  });
+
+  it('generates distinct Graph fallback message IDs in the same millisecond', async () => {
+    mockGetValidOAuthAccessToken.mockResolvedValue('mock.outlook.jwt_access_token');
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-outlook-1',
+      label: 'Outlook Account',
+      emailAddress: 'user@outlook.com',
+      provider: 'outlook',
+      oauthProvider: 'microsoft',
+    });
+    global.fetch = jest.fn().mockResolvedValue({ ok: true });
+
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+    try {
+      const first = await sendEmail('acc-outlook-1', {
+        to: ['recipient@example.com'],
+        subject: 'First',
+        bodyText: 'First message',
+      });
+      const second = await sendEmail('acc-outlook-1', {
+        to: ['recipient@example.com'],
+        subject: 'Second',
+        bodyText: 'Second message',
+      });
+
+      expect(first.messageId).not.toBe(second.messageId);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('throws an error if Microsoft Graph API fails for Outlook accounts', async () => {
@@ -234,6 +265,35 @@ describe('sendEmail sender', () => {
 
     const rawMessage = mockSendMessageRaw.mock.calls[0][1] as Buffer;
     expect(rawMessage.toString()).toMatch(/^Bcc: bcc1@example\.com, bcc2@example\.com$/mi);
+  });
+
+  it('generates distinct Gmail fallback message IDs in the same millisecond', async () => {
+    mockGetDecryptedAccount.mockResolvedValue({
+      id: 'acc-gmail-1',
+      label: 'Gmail Account',
+      emailAddress: 'sender@gmail.com',
+      provider: 'gmail',
+    });
+    mockGetValidAccessToken.mockResolvedValue('mock.gmail.access.token');
+    mockSendMessageRaw.mockResolvedValue({ id: '' });
+
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+    try {
+      const first = await sendEmail('acc-gmail-1', {
+        to: ['recipient@example.com'],
+        subject: 'First',
+        bodyText: 'First message',
+      });
+      const second = await sendEmail('acc-gmail-1', {
+        to: ['recipient@example.com'],
+        subject: 'Second',
+        bodyText: 'Second message',
+      });
+
+      expect(first.messageId).not.toBe(second.messageId);
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('throws an error if SMTP credentials are missing for non-OAuth account', async () => {

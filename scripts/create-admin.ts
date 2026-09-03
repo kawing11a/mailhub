@@ -5,13 +5,7 @@ config({ path: '.env' });
 import { hash } from 'bcryptjs';
 import * as readline from 'readline';
 import { prisma } from '../src/lib/db/prisma';
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
+import { createOrganizationSlug } from '../src/lib/identifiers';
 
 function askQuestion(query: string): Promise<string> {
   const rl = readline.createInterface({
@@ -57,7 +51,7 @@ async function main() {
   }
 
   const passwordHash = await hash(password, 12);
-  const slug = `${slugify(orgName)}-${Date.now().toString(36)}`;
+  const slug = createOrganizationSlug(orgName);
 
   const result = await prisma.$transaction(async (tx) => {
     // Find or create organization

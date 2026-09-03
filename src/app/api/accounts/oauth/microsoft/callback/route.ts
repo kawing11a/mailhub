@@ -222,8 +222,8 @@ export async function GET(req: NextRequest) {
 
     // Connection initialization happens asynchronously inside the worker process
     // Enqueue initial sync job
-    const { syncQueue } = await import('@/lib/queue/client');
-    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
+    const { enqueueInitialSync } = await import('@/lib/queue/client');
+    await enqueueInitialSync(account);
 
     if (existingAccount) {
       return NextResponse.redirect(

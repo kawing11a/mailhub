@@ -16,6 +16,9 @@ import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
 import { sendAccountPushNotification } from '@/lib/notifications/account-push';
+import { retryAsync } from '@/lib/retry';
+import { IncompleteSyncError, type SyncResult } from '@/lib/sync-result';
+import { runtimeConfig } from '@/lib/runtime-config';
 
 export function extractGmailAttachmentReferences(
   payload: GmailMessagePart | null | undefined
@@ -28,6 +31,37 @@ export function extractGmailAttachmentReferences(
 
 export class GmailSyncManager {
   private pollingIntervals: Map<string, NodeJS.Timeout> = new Map();
+  private pollingAccountIds: Set<string> = new Set();
+
+  private async persistMessages(
+    messages: Array<{ id: string }>,
+    persist: (message: { id: string }) => Promise<boolean>
+  ): Promise<SyncResult> {
+    const result: SyncResult = { processed: 0, failed: 0 };
+    let nextMessageIndex = 0;
+
+    const worker = async () => {
+      while (nextMessageIndex < messages.length) {
+        const message = messages[nextMessageIndex++];
+
+        try {
+          if (await persist(message)) {
+            result.processed += 1;
+          } else {
+            result.failed += 1;
+          }
+        } catch {
+          result.failed += 1;
+        }
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: runtimeConfig.emailPersistConcurrency }, () => worker())
+    );
+
+    return result;
+  }
 
   /**
    * Initializes polling for a Gmail account
@@ -40,12 +74,11 @@ export class GmailSyncManager {
 
     console.log(`Initializing Gmail polling for account ${account.id}`);
 
-    // Poll every 60 seconds
     const interval = setInterval(() => {
       this.pollNewEmails(account.id, account.organizationId).catch((err) => {
         console.error(`Gmail polling error for account ${account.id}:`, err);
       });
-    }, 60 * 1000);
+    }, runtimeConfig.gmailPollIntervalMs);
 
     this.pollingIntervals.set(account.id, interval);
   }
@@ -53,11 +86,12 @@ export class GmailSyncManager {
   /**
    * Syncs historical emails for all major folders.
    */
-  async syncHistoricalEmails(accountId: string): Promise<void> {
+  async syncHistoricalEmails(accountId: string): Promise<SyncResult> {
     const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
-    if (!account) return;
+    if (!account) return { processed: 0, failed: 0 };
 
     console.log(`Starting historical sync for Gmail account ${accountId}`);
+    const syncResult: SyncResult = { processed: 0, failed: 0 };
     try {
       const accessToken = await getValidAccessToken(accountId);
 
@@ -85,35 +119,52 @@ export class GmailSyncManager {
           if (result.messages && result.messages.length > 0) {
             console.log(`Fetched ${result.messages.length} messages for ${folder} (Account ${accountId})`);
 
-            // Process in batches of 10 for concurrency
-            const batchSize = 10;
-            for (let i = 0; i < result.messages.length; i += batchSize) {
-              const batch = result.messages.slice(i, i + batchSize);
-              await Promise.all(
-                batch.map((msg: any) =>
-                  this.fetchAndPersist(accessToken, accountId, account.organizationId, msg.id, folder, true)
-                )
-              );
-            }
+            const pageResult = await this.persistMessages(result.messages, (message) =>
+              this.fetchAndPersist(
+                accessToken,
+                accountId,
+                account.organizationId,
+                message.id,
+                folder,
+                true
+              )
+            );
+            syncResult.processed += pageResult.processed;
+            syncResult.failed += pageResult.failed;
           }
           pageToken = result.nextPageToken;
         } while (pageToken);
       }
+      if (syncResult.failed > 0) {
+        throw new IncompleteSyncError(accountId, syncResult);
+      }
+
+      return syncResult;
     } catch (error) {
       console.error(`Failed historical sync for Gmail account ${accountId}:`, error);
+      throw error;
     }
   }
 
   /**
    * Polls for new emails since the last sync.
    */
-  private async pollNewEmails(accountId: string, organizationId: string): Promise<void> {
+  private async pollNewEmails(accountId: string, organizationId: string): Promise<SyncResult> {
+    if (this.pollingAccountIds.has(accountId)) {
+      console.log(`Gmail poll already in progress for account ${accountId}`);
+      return { processed: 0, failed: 0 };
+    }
+
+    this.pollingAccountIds.add(accountId);
+
     try {
       const account = await prisma.emailAccount.findUnique({ where: { id: accountId } });
       if (!account || !account.isActive) {
         this.destroyAccount(accountId);
-        return;
+        return { processed: 0, failed: 0 };
       }
+
+      const syncResult: SyncResult = { processed: 0, failed: 0 };
 
       const accessToken = await getValidAccessToken(accountId);
 
@@ -124,17 +175,28 @@ export class GmailSyncManager {
         ? `after:${Math.floor(account.lastSyncedAt.getTime() / 1000)}`
         : '';
 
-      const result = await fetchMessagesList(accessToken, {
-        labelIds: ['INBOX'],
-        maxResults: 50,
-        q,
-      });
+      let pageToken: string | undefined;
+      do {
+        const result = await fetchMessagesList(accessToken, {
+          labelIds: ['INBOX'],
+          maxResults: 50,
+          q,
+          ...(pageToken ? { pageToken } : {}),
+        });
 
-      if (result.messages && result.messages.length > 0) {
-        console.log(`Poll: Found ${result.messages.length} new messages for account ${accountId}`);
-        for (const msg of result.messages) {
-          await this.fetchAndPersist(accessToken, accountId, organizationId, msg.id, 'INBOX');
+        if (result.messages && result.messages.length > 0) {
+          console.log(`Poll: Found ${result.messages.length} new messages for account ${accountId}`);
+          const pollResult = await this.persistMessages(result.messages, (message) =>
+            this.fetchAndPersist(accessToken, accountId, organizationId, message.id, 'INBOX')
+          );
+          syncResult.processed += pollResult.processed;
+          syncResult.failed += pollResult.failed;
         }
+        pageToken = result.nextPageToken;
+      } while (pageToken);
+
+      if (syncResult.failed > 0) {
+        throw new IncompleteSyncError(accountId, syncResult);
       }
 
       await prisma.emailAccount.update({
@@ -145,8 +207,12 @@ export class GmailSyncManager {
         }
       });
 
+      return syncResult;
     } catch (error) {
       console.error(`Polling failed for account ${accountId}:`, error);
+      throw error;
+    } finally {
+      this.pollingAccountIds.delete(accountId);
     }
   }
 
@@ -157,7 +223,7 @@ export class GmailSyncManager {
     gmailMessageId: string,
     folder: string,
     skipNotifications: boolean = false
-  ): Promise<void> {
+  ): Promise<boolean> {
     try {
       // Check if we already have it using the gmailMessageId.
       // However, our database unique constraint is on `messageId` (which is the RFC822 Message-ID).
@@ -231,7 +297,7 @@ export class GmailSyncManager {
         { preserveStoragePath: folder === 'SENT' || folder === 'DRAFTS' }
       );
 
-      const email = await prisma.$transaction(async (tx) => {
+      const email = await retryAsync(() => prisma.$transaction(async (tx) => {
         const email = await tx.email.upsert({
           where: {
             accountId_messageId: {
@@ -344,16 +410,18 @@ export class GmailSyncManager {
         });
 
         return email;
-      }, { timeout: 30_000 });
+      }, { maxWait: 10_000, timeout: 30_000 }));
 
-      // Avoid re-triggering events if the email already existed.
+      // Search indexing is idempotent, and needs to be retried even if an earlier
+      // persistence attempt committed the email before queueing failed.
+      await searchQueue.add('index-email', { emailId: email.id });
+
+      // Avoid re-triggering user-visible events if the email already existed.
       // Upsert returns the record either way. In a robust system, we check createdAt.
       // Assuming if it's within the last few seconds it's new.
       const isNew = email.createdAt.getTime() > Date.now() - 5000;
 
       if (isNew) {
-        await searchQueue.add('index-email', { emailId: email.id });
-
         // Run automated email rules (skip on historical syncs)
         if (!skipNotifications && folder === 'INBOX') {
           processRulesForNewEmail(email.id, accountId, organizationId).catch((ruleErr) => {
@@ -390,8 +458,11 @@ export class GmailSyncManager {
           }
         }
       }
+
+      return true;
     } catch (error) {
       console.error(`Failed to fetch/persist Gmail message ${gmailMessageId} for account ${accountId}:`, error);
+      return false;
     }
   }
 

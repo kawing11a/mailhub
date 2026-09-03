@@ -3,6 +3,7 @@ import { getDecryptedAccount } from '@/lib/accounts/service';
 import type { SendEmailInput } from '@/lib/validation';
 import { getValidAccessToken, sendMessageRaw } from '@/lib/gmail/api';
 import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
+import { createUniqueId } from '@/lib/identifiers';
 
 export async function sendGraphEmail(
   accessToken: string,
@@ -56,7 +57,7 @@ export async function sendGraphEmail(
     throw new Error(`Graph API Error (${response.status}): ${errorDetails}`);
   }
 
-  return { messageId: `<graph-${Date.now()}@microsoft.com>` };
+  return { messageId: `<${createUniqueId('graph')}@microsoft.com>` };
 }
 
 export async function sendEmail(
@@ -99,7 +100,7 @@ export async function sendEmail(
     const result = await sendMessageRaw(accessToken, rawBuffer);
 
     // Attempt to queue the email to be fully indexed immediately or just rely on the sync worker
-    return { messageId: result.id || `<gmail-${Date.now()}>` };
+    return { messageId: result.id || `<${createUniqueId('gmail')}>` };
   } else if (account.provider === 'outlook' || account.oauthProvider === 'microsoft') {
     const { getValidOAuthAccessToken } = await import('@/lib/accounts/tokens');
     const accessToken = await getValidOAuthAccessToken(account.id, 'https://graph.microsoft.com/.default offline_access');

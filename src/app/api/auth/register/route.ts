@@ -4,13 +4,7 @@ import { prisma } from '@/lib/db/prisma';
 import { createToken, createRefreshToken, ACCESS_TOKEN_MAX_AGE, REFRESH_TOKEN_MAX_AGE } from '@/lib/auth/jwt';
 import { registerSchema } from '@/lib/validation';
 import { apiError, apiResponse } from '@/lib/auth/middleware';
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
-}
+import { createOrganizationSlug } from '@/lib/identifiers';
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Create user, org, and membership in a transaction
     const passwordHash = await hash(password, 12);
-    const slug = slugify(organizationName) + '-' + Date.now().toString(36);
+    const slug = createOrganizationSlug(organizationName);
 
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.create({

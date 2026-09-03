@@ -5,7 +5,7 @@ import { imapManager } from '@/lib/imap/connection-manager';
 import { prisma } from '@/lib/db/prisma';
 import { redis } from '@/lib/redis';
 import { initMeilisearch } from '@/lib/search/meilisearch';
-import { syncWorker } from '@/lib/queue/workers/sync';
+import { closeSyncWorkers, ensureSyncWorkersForPartitions } from '@/lib/queue/workers/sync';
 import { searchWorker } from '@/lib/queue/workers/search';
 import { summaryWorker } from '@/lib/queue/workers/summary';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
@@ -28,10 +28,14 @@ async function bootstrap() {
   });
   console.log(`Found ${accounts.length} accounts to monitor.`);
 
+  if (WORKER_PARTITION === 'default') {
+    ensureSyncWorkersForPartitions(accounts.map((account) => account.workerPartition));
+  }
+
   // After initializing connections, enqueue initial sync for each account
-  const { syncQueue } = await import('@/lib/queue/client');
+  const { enqueueInitialSync } = await import('@/lib/queue/client');
   for (const account of accounts) {
-    await syncQueue.add('initial-sync', { accountId: account.id, folder: 'ALL' });
+    await enqueueInitialSync(account);
   }
 
   // 3. Setup heartbeat mechanism
@@ -50,7 +54,7 @@ async function bootstrap() {
   const shutdown = async () => {
     console.log('SIGTERM received. Shutting down worker...');
     clearInterval(heartbeat);
-    await syncWorker.close();
+    await closeSyncWorkers();
     await searchWorker.close();
     await summaryWorker.close();
     await imapManager.shutdown();

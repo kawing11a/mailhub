@@ -52,6 +52,8 @@ Managing multiple email accounts across local clients is a disjointed, sluggish 
 
 - 📧 **Multi-Account & Multi-Tenant**: Connect multiple IMAP/SMTP, Gmail OAuth, or Microsoft Outlook OAuth mailboxes across isolated organization workspaces.
 - 👥 **Granular Access Control**: Organization administrators can manage and grant per-member access permissions to specific email accounts.
+- 🤖 **AI Email Assistance**: Summarize labels, explain messages, draft or rewrite replies, extract action items, analyze tone, translate content, and deliver summaries through Telegram, WeCom, or generic webhooks.
+- ⚙️ **Email Automation Rules**: Apply ordered rules globally or by account/account label, with conditional or match-all execution for labels, read/star/risk state, webhooks, and forwarding.
 - ⚡ **Realtime Email Sync**: High-throughput background sync powered by BullMQ workers with automatic SPAM detection and Meilisearch indexation.
 - 📤 **Multi-Provider Email Sender**: Send emails using native SMTP, Google Gmail API, or Microsoft Graph/Outlook API with automatic token refreshing.
 - 📬 **Aggregated All Emails View**: View and filter emails across all connected accounts simultaneously in a unified stream, complete with customizable reading pane layouts (Right, Bottom, or Off).
@@ -139,6 +141,17 @@ Edit `.env` with your values. Required variables:
 | `AZURE_CLIENT_SECRET` | OAuth 2.0 Client Secret for Microsoft Outlook |
 | `AZURE_TENANT_ID` | Azure Tenant ID (e.g., `common` or specific Directory ID) |
 
+Optional worker and database controls use conservative defaults from `.env.example`:
+
+| Variable | Default | Description |
+|---|---:|---|
+| `DB_POOL_MAX` | `5` | Maximum PostgreSQL connections per Node.js process |
+| `DB_CONNECTION_TIMEOUT_MS` | `10000` | Maximum time to wait for a PostgreSQL connection |
+| `SYNC_WORKER_CONCURRENCY` | `1` | Concurrent sync jobs per worker process |
+| `EMAIL_PERSIST_CONCURRENCY` | `3` | Concurrent email persistence operations per account |
+| `GMAIL_POLL_INTERVAL_MS` | `60000` | Gmail polling interval |
+| `IMAP_RECONCILE_INTERVAL_MS` | `300000` | IMAP recovery reconciliation interval |
+
 ### 3. Start Services
 
 ```bash
@@ -183,6 +196,12 @@ Workers sync email accounts in the background:
 ```bash
 npm run worker
 ```
+
+### Worker partitions and sync limits
+
+An email account keeps the `workerPartition` stored with the account. Its initial-sync job is routed to that partition's queue, so existing accounts assigned to `worker-1` remain handled by a worker deployed with `WORKER_PARTITION=worker-1`. Adding workers does not automatically rebalance existing accounts; keep every partition that owns accounts deployed until you deliberately reassign those accounts.
+
+For a ten-worker deployment, start conservatively with `SYNC_WORKER_CONCURRENCY=1` and `EMAIL_PERSIST_CONCURRENCY=3`. `DB_POOL_MAX` is per Node.js process, so budget it across every worker and the web process rather than per email account. The defaults in `.env.example` limit the database pool to five connections per process and use a ten-second pool checkout timeout.
 
 ### 7. Run Tests
 
@@ -270,21 +289,21 @@ npm test
 Pull and run the official pre-built MailHub Docker image directly from Docker Hub:
 
 ```bash
-# Pull the latest image from Docker Hub
-docker pull kawing11a/mailhub:latest
+# Pull this release from Docker Hub (`latest` points to the same image)
+docker pull kawing11a/mailhub:0.1.5
 
 # Run MailHub web container (using your .env file)
 docker run -d \
   --name mailhub-web \
   -p 3000:3000 \
   --env-file .env \
-  kawing11a/mailhub:latest
+  kawing11a/mailhub:0.1.5
 
 # Run background worker container
 docker run -d \
   --name mailhub-worker \
   --env-file .env \
-  kawing11a/mailhub:latest \
+  kawing11a/mailhub:0.1.5 \
   npm run worker
 ```
 
@@ -297,6 +316,8 @@ docker compose up -d --build
 ```
 
 The Dockerfile uses a multi-stage build (`deps` → `build` → `runner`) producing a lean production image. Workers run as separate containers using the same image with `npm run worker` as the entrypoint.
+
+When upgrading an existing deployment, run `npx prisma migrate deploy` before starting the `0.1.5` web and worker containers.
 
 ## Project Structure
 

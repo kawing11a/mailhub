@@ -2,6 +2,17 @@ node_modules
 npm-debug.log
 .next
 .git
+.agent
+.codex-*-probe-*
+.github
+.storage
+.superpowers
+.vscode
+.worktrees
+certificates
+coverage
+reverse_proxy
+*.tsbuildinfo
 .env.local
 .env
 Dockerfile

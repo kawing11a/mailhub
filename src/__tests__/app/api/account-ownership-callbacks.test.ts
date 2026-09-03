@@ -18,9 +18,7 @@ jest.mock('@/lib/auth/jwt', () => ({
 }));
 
 jest.mock('@/lib/queue/client', () => ({
-  syncQueue: {
-    add: jest.fn(),
-  },
+  enqueueInitialSync: jest.fn(),
 }));
 
 jest.mock('@/lib/accounts/service', () => ({
@@ -33,7 +31,7 @@ import { GET as microsoftCallback } from '@/app/api/accounts/oauth/microsoft/cal
 import { prisma } from '@/lib/db/prisma';
 import { encrypt } from '@/lib/crypto';
 import { verifyToken } from '@/lib/auth/jwt';
-import { syncQueue } from '@/lib/queue/client';
+import { enqueueInitialSync } from '@/lib/queue/client';
 import { createOwnedAccount } from '@/lib/accounts/service';
 
 const mockFindUnique = prisma.emailAccount.findUnique as jest.Mock;
@@ -42,7 +40,7 @@ const mockUpdate = prisma.emailAccount.update as jest.Mock;
 const mockCount = prisma.emailAccount.count as jest.Mock;
 const mockEncrypt = encrypt as jest.Mock;
 const mockVerifyToken = verifyToken as jest.Mock;
-const mockQueueAdd = syncQueue.add as jest.Mock;
+const mockEnqueueInitialSync = enqueueInitialSync as jest.Mock;
 const mockCreateOwnedAccount = createOwnedAccount as jest.Mock;
 const fetchMock = jest.fn();
 
@@ -192,7 +190,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     mockUpdate.mockReset();
     mockCount.mockReset();
     mockVerifyToken.mockReset();
-    mockQueueAdd.mockReset();
+    mockEnqueueInitialSync.mockReset();
     mockCreateOwnedAccount.mockReset();
     fetchMock.mockReset();
     mockEncrypt.mockImplementation((value: string) => `encrypted:${value}`);
@@ -209,7 +207,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       role: 'member',
     });
     mockCount.mockResolvedValue(0);
-    mockQueueAdd.mockResolvedValue(undefined);
+    mockEnqueueInitialSync.mockResolvedValue(undefined);
   });
 
   it('creates a new member-owned account, ignores state ownership, and queues sync only after persistence', async () => {
@@ -258,7 +256,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
         passwordEncrypted: null,
       })
     );
-    expect(mockQueueAdd).not.toHaveBeenCalled();
+    expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
 
     resolveCreate({ id: 'account-new' });
 
@@ -266,10 +264,9 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     expect(response.headers.get('location')).toBe(
       'http://localhost/settings/accounts?success=true&accountId=account-new&share=1'
     );
-    expect(mockQueueAdd).toHaveBeenCalledWith('initial-sync', {
-      accountId: 'account-new',
-      folder: 'ALL',
-    });
+    expect(mockEnqueueInitialSync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'account-new' })
+    );
   });
 
   it('allows the owner to reauthorize an existing account and redirects without share mode', async () => {
@@ -306,10 +303,9 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       }),
     });
     expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
-    expect(mockQueueAdd).toHaveBeenCalledWith('initial-sync', {
-      accountId: 'account-existing',
-      folder: 'ALL',
-    });
+    expect(mockEnqueueInitialSync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'account-existing' })
+    );
     expect(response.headers.get('location')).toBe(
       'http://localhost/settings/accounts?success=true&accountId=account-existing'
     );
@@ -341,10 +337,9 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
         isActive: true,
       }),
     });
-    expect(mockQueueAdd).toHaveBeenCalledWith('initial-sync', {
-      accountId: 'account-existing',
-      folder: 'ALL',
-    });
+    expect(mockEnqueueInitialSync).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'account-existing' })
+    );
     expect(response.headers.get('location')).toBe(
       'http://localhost/settings/accounts?success=true&accountId=account-existing'
     );
@@ -377,7 +372,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
     }
     expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
-    expect(mockQueueAdd).not.toHaveBeenCalled();
+    expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
   });
 
   if (provider.name === 'google') {
@@ -413,7 +408,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockEncrypt).not.toHaveBeenCalled();
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
 
     it('rejects callbacks without a provider-confirmed Google mailbox before credential storage', async () => {
@@ -429,7 +424,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
       expect(mockCount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
 
     it('rejects reauthorization when provider-confirmed email resolves to another users existing account', async () => {
@@ -477,7 +472,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
       expect(mockCount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
 
     it('rejects mixed-case provider-confirmed mailbox reauthorization before credential storage', async () => {
@@ -526,7 +521,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
       expect(mockCount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
   }
 
@@ -599,7 +594,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
       expect(mockCount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
 
     it('rejects callbacks without a confirmed Graph mailbox before any account lookup or storage', async () => {
@@ -618,7 +613,7 @@ describe.each(providerCases)('$name OAuth callback ownership', (provider) => {
       expect(mockEncrypt).not.toHaveBeenCalled();
       expect(mockUpdate).not.toHaveBeenCalled();
       expect(mockCreateOwnedAccount).not.toHaveBeenCalled();
-      expect(mockQueueAdd).not.toHaveBeenCalled();
+      expect(mockEnqueueInitialSync).not.toHaveBeenCalled();
     });
   }
 });
