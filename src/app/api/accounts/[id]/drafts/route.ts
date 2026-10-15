@@ -105,7 +105,8 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
         data: {
           accountId,
           messageId: `<${uuidv4()}@draft.local>`,
-          folder: 'Drafts',
+          // Folder values are normalized across IMAP, Gmail, and list queries.
+          folder: 'DRAFTS',
           subject: data.subject || '',
           fromAddress: account.emailAddress,
           toAddresses,

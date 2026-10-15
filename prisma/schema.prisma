@@ -46,6 +46,8 @@ model OrganizationMember {
   userId         String       @map("user_id") @db.Uuid
   role           String       @default("member") @db.VarChar(20)
   joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
+  personalAiEnabled Boolean @default(true) @map("personal_ai_enabled")
+  semanticSearchEnabled Boolean @default(true) @map("semantic_search_enabled")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -142,6 +144,8 @@ model Email {
   activityLogs EmailActivityLog[]
 
   @@unique([accountId, messageId])
+  @@index([accountId, providerMessageId])
+  @@index([accountId, folder, uid])
   @@index([accountId, folder, receivedAt(sort: Desc)])
   @@index([receivedAt(sort: Desc)])
   @@index([threadId])
@@ -377,4 +381,13 @@ model EmailRule {
   @@index([accountLabelId])
   @@index([organizationId, isActive, priority])
   @@map("email_rules")
+}
+
+model SystemPreference {
+  id                  String   @id @default("global") @db.VarChar(20)
+  isAiEnabled         Boolean  @default(true) @map("is_ai_enabled")
+  semanticSearchEnabled Boolean @default(true) @map("semantic_search_enabled")
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("system_preferences")
 }

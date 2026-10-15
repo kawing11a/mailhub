@@ -4,6 +4,10 @@ jest.mock('@/lib/db/prisma', () => ({
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    email: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+    },
   },
 }));
 
@@ -38,9 +42,15 @@ jest.mock('@/lib/rules/engine', () => ({
 }));
 
 import { prisma } from '@/lib/db/prisma';
-import { fetchMessagesList, getValidAccessToken } from '@/lib/gmail/api';
+import {
+  fetchMessageFull,
+  fetchMessageRaw,
+  fetchMessagesList,
+  getValidAccessToken,
+} from '@/lib/gmail/api';
 import { GmailSyncManager } from '@/lib/gmail/sync-manager';
 import { IncompleteSyncError } from '@/lib/sync-result';
+import { searchQueue } from '@/lib/queue/client';
 
 const activeAccount = {
   id: 'account-1',
@@ -174,5 +184,40 @@ describe('Gmail polling concurrency', () => {
     });
 
     expect(maxConcurrentPersistences).toBe(2);
+  });
+
+  it('skips Gmail fetches when the provider message already exists locally', async () => {
+    const manager = new GmailSyncManager();
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue({
+      id: 'email-existing',
+      folder: 'INBOX',
+    });
+
+    await expect(
+      (manager as any).fetchAndPersist(
+        'access-token',
+        'account-1',
+        'org-1',
+        'gmail-message-1',
+        'INBOX',
+        true
+      )
+    ).resolves.toBe(true);
+
+    expect(prisma.email.findFirst).toHaveBeenCalledWith({
+      where: {
+        accountId: 'account-1',
+        providerMessageId: 'gmail-message-1',
+      },
+      select: {
+        id: true,
+        folder: true,
+      },
+    });
+    expect(fetchMessageFull).not.toHaveBeenCalled();
+    expect(fetchMessageRaw).not.toHaveBeenCalled();
+    expect(searchQueue.add).toHaveBeenCalledWith('index-email', {
+      emailId: 'email-existing',
+    });
   });
 });

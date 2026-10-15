@@ -139,7 +139,9 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
   });
   if (!account) return apiError('Account not found', 404);
 
-  const permanent = email.folder === 'TRASH';
+  // Drafts are discarded directly. They are not user mail and moving one to
+  // Trash leaves it visible in the Drafts workflow after the composer closes.
+  const permanent = email.isDraft || email.folder === 'TRASH';
 
   // Propagate to the server first. For a permanent delete this is what stops the
   // next sync from re-inserting the row via the accountId+messageId upsert.
@@ -169,7 +171,11 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
     // The row is gone on a permanent delete, so referencing it would violate the FK
     emailId: permanent ? undefined : emailId,
     action: 'deleted',
-    metadata: { subject: email.subject, fromTrash: permanent },
+    metadata: {
+      subject: email.subject,
+      fromTrash: email.folder === 'TRASH',
+      ...(email.isDraft ? { fromDraft: true } : {}),
+    },
   });
 
   return apiResponse({

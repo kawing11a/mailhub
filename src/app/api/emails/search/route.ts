@@ -3,6 +3,7 @@ import { meilisearch } from '@/lib/search/meilisearch';
 import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 import { accountAccessWhere } from '@/lib/accounts/access';
+import { getSystemPreferences } from '@/lib/settings/system-preferences';
 
 function filterEquals(field: string, value: string) {
   return `${field} = ${JSON.stringify(value)}`;
@@ -30,6 +31,23 @@ export async function GET(req: NextRequest) {
     const offset = parseInt(req.nextUrl.searchParams.get('offset') || '0');
     const accountId = req.nextUrl.searchParams.get('accountId');
     const folder = req.nextUrl.searchParams.get('folder');
+
+    const [systemPreferences, membership] = await Promise.all([
+      getSystemPreferences(),
+      prisma.organizationMember.findUnique({
+        where: {
+          organizationId_userId: {
+            organizationId: auth.organizationId,
+            userId: auth.userId,
+          },
+        },
+        select: { semanticSearchEnabled: true },
+      }),
+    ]);
+
+    if (!membership) {
+      return NextResponse.json({ error: 'Organization membership not found' }, { status: 404 });
+    }
 
     const filter: Array<string | string[]> = [filterEquals('organizationId', organizationId)];
 
@@ -67,13 +85,25 @@ export async function GET(req: NextRequest) {
       limit,
       offset,
       filter,
-      hybrid: {
-        semanticRatio: 0.5,
-        embedder: 'default',
-      }
     };
 
-    const results = await meilisearch.index('emails').search(query, searchParams);
+    const emailIndex = meilisearch.index('emails');
+    let results;
+    if (systemPreferences.semanticSearchEnabled && membership.semanticSearchEnabled) {
+      try {
+        results = await emailIndex.search(query, {
+          ...searchParams,
+          hybrid: {
+            semanticRatio: 0.5,
+            embedder: 'default',
+          },
+        });
+      } catch {
+        results = await emailIndex.search(query, searchParams);
+      }
+    } else {
+      results = await emailIndex.search(query, searchParams);
+    }
 
     return NextResponse.json(results);
   } catch (error: any) {

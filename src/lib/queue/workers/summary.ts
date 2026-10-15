@@ -2,7 +2,9 @@ import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@/lib/db/prisma';
 import { meilisearch } from '@/lib/search/meilisearch';
-import { generateEmailBatchSummary, EmailForSummary } from '@/lib/ai/summary-service';
+import { generateEmailBatchSummary, generateFallbackEmailBatchDigest, EmailForSummary } from '@/lib/ai/summary-service';
+import { AiUnavailableError } from '@/lib/ai/llm-client';
+import { getSystemPreferences } from '@/lib/settings/system-preferences';
 import { dispatchWebhookNotification, WebhookDispatchResult } from '@/lib/notifications';
 import {
   updateAgentStep,
@@ -67,22 +69,25 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     );
 
     // 2. Fetch AI settings
-    const settings = await prisma.experimentSetting.findUnique({
-      where: { organizationId },
-    });
+    const [systemPreferences, settings] = await Promise.all([
+      getSystemPreferences(),
+      prisma.experimentSetting.findUnique({ where: { organizationId } }),
+    ]);
 
-    if (settings && settings.isAiEnabled === false) {
-      throw new Error('AI features are currently disabled for this organization.');
-    }
+    const aiEnabled = systemPreferences.isAiEnabled && settings?.isAiEnabled !== false;
 
-    const provider = settings?.aiProvider || 'openai';
-    const modelName = settings?.aiModelName || 'gpt-4o-mini';
+    const provider = settings?.aiProvider || undefined;
+    const modelName = settings?.aiModelName || undefined;
+    const providerDescription = provider ? provider.toUpperCase() : 'shared AI configuration';
+    const modelDescription = modelName || 'configured model';
 
     await updateAgentStep(summaryRunId, {
       id: 'step-config',
       step: 'INITIALIZING',
       title: 'Configuration verified',
-      detail: `Active Provider: ${provider.toUpperCase()} | Model: ${modelName}`,
+      detail: aiEnabled
+        ? `Active Provider: ${providerDescription} | Model: ${modelDescription}`
+        : 'AI is disabled; a basic summary will be generated.',
       status: 'completed',
     }, {
       provider,
@@ -253,40 +258,59 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         id: 'step-extract',
         step: 'EXTRACTING_EMAILS',
         title: `Constructed batch of ${emailsToSummarize.length} emails`,
-        detail: `Sanitized snippets & full message bodies into structured context for ${modelName}.`,
+        detail: aiEnabled
+          ? `Sanitized snippets & full message bodies into structured context for ${modelDescription}.`
+          : 'Prepared message details for a basic summary.',
         status: 'completed',
       },
       {
         status: 'AI_SUMMARIZING',
         emailCount: emailsToSummarize.length,
-        currentStepTitle: `AI model analyzing ${emailsToSummarize.length} emails...`,
-        currentStepDetail: `Provider: ${provider} (${modelName})`,
+        currentStepTitle: aiEnabled
+          ? `AI model analyzing ${emailsToSummarize.length} emails...`
+          : `Preparing basic summary for ${emailsToSummarize.length} emails...`,
+        currentStepDetail: aiEnabled ? `Provider: ${providerDescription} (${modelDescription})` : 'AI is disabled',
       }
     );
 
     await updateAgentStep(summaryRunId, {
       id: 'step-ai',
       step: 'AI_SUMMARIZING',
-      title: 'Synthesizing threads and executive summary',
-      detail: `Prompting ${provider} (${modelName}) with instructions to distill key topics, updates, and action items...`,
+      title: aiEnabled ? 'Synthesizing threads and executive summary' : 'Generating basic summary',
+      detail: aiEnabled
+        ? `Prompting ${providerDescription} (${modelDescription}) with instructions to distill key topics, updates, and action items...`
+        : 'Compiling subject, sender, date, and snippet for each email.',
       status: 'running',
     });
 
-    const summaryText = await generateEmailBatchSummary({
-      provider,
-      apiKey: settings?.aiApiKey,
-      baseUrl: settings?.aiBaseUrl,
-      modelName,
-      customPrompt: settings?.aiCustomPrompt,
-      labelName,
-      emails: emailsToSummarize,
-    });
+    let summaryText: string;
+    let usedFallback = !aiEnabled;
+    if (aiEnabled) {
+      try {
+        summaryText = await generateEmailBatchSummary({
+          organizationId,
+          provider,
+          apiKey: settings?.aiApiKey,
+          baseUrl: settings?.aiBaseUrl,
+          modelName,
+          customPrompt: settings?.aiCustomPrompt,
+          labelName,
+          emails: emailsToSummarize,
+        });
+      } catch (error) {
+        if (!(error instanceof AiUnavailableError)) throw error;
+        usedFallback = true;
+        summaryText = generateFallbackEmailBatchDigest({ labelName, emails: emailsToSummarize });
+      }
+    } else {
+      summaryText = generateFallbackEmailBatchDigest({ labelName, emails: emailsToSummarize });
+    }
 
     await updateAgentStep(summaryRunId, {
       id: 'step-ai',
       step: 'AI_SUMMARIZING',
-      title: 'AI synthesis completed',
-      detail: `Generated comprehensive summary (${summaryText.length} characters).`,
+      title: usedFallback ? 'Basic summary completed' : 'AI synthesis completed',
+      detail: `Generated ${usedFallback ? 'basic' : 'AI'} summary (${summaryText.length} characters).`,
       status: 'completed',
     });
 

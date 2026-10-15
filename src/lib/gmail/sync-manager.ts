@@ -168,32 +168,37 @@ export class GmailSyncManager {
 
       const accessToken = await getValidAccessToken(accountId);
 
-      // Query messages newer than the last synced timestamp, or just unread INBOX messages.
-      // To catch all new things safely without missing, we can use history API or a date query.
-      // For simplicity, let's query the INBOX for recent messages.
+      // Query recent messages in the folders the app keeps current. Gmail's
+      // SPAM label is excluded from ordinary INBOX searches, so it must be
+      // requested separately during recurring sync.
       const q = account.lastSyncedAt
         ? `after:${Math.floor(account.lastSyncedAt.getTime() / 1000)}`
         : '';
 
-      let pageToken: string | undefined;
-      do {
-        const result = await fetchMessagesList(accessToken, {
-          labelIds: ['INBOX'],
-          maxResults: 50,
-          q,
-          ...(pageToken ? { pageToken } : {}),
-        });
+      for (const { labelId, folder } of [
+        { labelId: 'INBOX', folder: 'INBOX' },
+        { labelId: 'SPAM', folder: 'SPAM' },
+      ]) {
+        let pageToken: string | undefined;
+        do {
+          const result = await fetchMessagesList(accessToken, {
+            labelIds: [labelId],
+            maxResults: 50,
+            q,
+            ...(pageToken ? { pageToken } : {}),
+          });
 
-        if (result.messages && result.messages.length > 0) {
-          console.log(`Poll: Found ${result.messages.length} new messages for account ${accountId}`);
-          const pollResult = await this.persistMessages(result.messages, (message) =>
-            this.fetchAndPersist(accessToken, accountId, organizationId, message.id, 'INBOX')
-          );
-          syncResult.processed += pollResult.processed;
-          syncResult.failed += pollResult.failed;
-        }
-        pageToken = result.nextPageToken;
-      } while (pageToken);
+          if (result.messages && result.messages.length > 0) {
+            console.log(`Poll: Found ${result.messages.length} new ${folder} messages for account ${accountId}`);
+            const pollResult = await this.persistMessages(result.messages, (message) =>
+              this.fetchAndPersist(accessToken, accountId, organizationId, message.id, folder)
+            );
+            syncResult.processed += pollResult.processed;
+            syncResult.failed += pollResult.failed;
+          }
+          pageToken = result.nextPageToken;
+        } while (pageToken);
+      }
 
       if (syncResult.failed > 0) {
         throw new IncompleteSyncError(accountId, syncResult);
@@ -225,9 +230,33 @@ export class GmailSyncManager {
     skipNotifications: boolean = false
   ): Promise<boolean> {
     try {
-      // Check if we already have it using the gmailMessageId.
-      // However, our database unique constraint is on `messageId` (which is the RFC822 Message-ID).
-      // We will parse the email to get the RFC822 Message-ID.
+      const existingProviderEmail = await prisma.email.findFirst({
+        where: {
+          accountId,
+          providerMessageId: gmailMessageId,
+        },
+        select: {
+          id: true,
+          folder: true,
+        },
+      });
+
+      if (existingProviderEmail) {
+        // A Gmail message can move between INBOX and SPAM after it has already
+        // been stored. Keep its local folder in step with the queried label.
+        if (existingProviderEmail.folder !== folder) {
+          await prisma.email.update({
+            where: { id: existingProviderEmail.id },
+            data: { folder },
+          });
+        }
+
+        // The email may already be persisted while its downstream indexing
+        // job failed. Requeue indexing without spending another Gmail read.
+        await searchQueue.add('index-email', { emailId: existingProviderEmail.id });
+        return true;
+      }
+
       const fullMessage = await fetchMessageFull(accessToken, gmailMessageId);
       const rawBuffer = await fetchMessageRaw(accessToken, gmailMessageId);
       const parsed = await parseEmail(rawBuffer);
@@ -254,7 +283,7 @@ export class GmailSyncManager {
 
       // Only check spam for INBOX and non-historical syncs
       if (!skipNotifications && folder === 'INBOX') {
-        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '');
+        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '', organizationId);
         if (aiCheck.isHighRisk) {
           isHighRisk = true;
           riskReason = aiCheck.reason || 'Flagged by local LLM';

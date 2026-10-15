@@ -24,6 +24,7 @@ import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettin
 
 interface ExperimentSettings {
   isAiEnabled: boolean;
+  systemAiEnabled: boolean;
   aiProvider: string;
   aiApiKeyMasked: string;
   hasApiKey: boolean;
@@ -45,6 +46,7 @@ export default function ExperimentsSettingsPage() {
   const queryClient = useQueryClient();
   const [showApiKey, setShowApiKey] = useState(false);
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [isAiEnabledDraft, setIsAiEnabledDraft] = useState<boolean | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
 
@@ -111,12 +113,14 @@ export default function ExperimentsSettingsPage() {
       if (!res.ok) throw new Error('Failed to update AI settings');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (updated: ExperimentSettings) => {
+      setIsAiEnabledDraft(updated.isAiEnabled);
       queryClient.invalidateQueries({ queryKey: ['experiment-settings'] });
       toast.success('AI Settings updated successfully');
       setApiKeyInput('');
     },
     onError: (err: Error) => {
+      setIsAiEnabledDraft(settings?.isAiEnabled ?? true);
       toast.error(err.message || 'Failed to save settings');
     },
   });
@@ -210,7 +214,15 @@ export default function ExperimentsSettingsPage() {
   const handleSaveAiSettings = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    const isAiEnabled = formData.get('isAiEnabled') === 'on';
+    const isAiEnabled = isAiEnabledDraft ?? settings?.isAiEnabled ?? true;
+    if (settings?.systemAiEnabled === false) {
+      updateSettingsMutation.mutate({ isAiEnabled });
+      return;
+    }
+    if (!isAiEnabled) {
+      updateSettingsMutation.mutate({ isAiEnabled: false });
+      return;
+    }
     const aiProvider = formData.get('aiProvider') as string;
     const aiModelName = formData.get('aiModelName') as string;
     const aiBaseUrl = formData.get('aiBaseUrl') as string;
@@ -258,7 +270,7 @@ export default function ExperimentsSettingsPage() {
             <Bot className="w-5 h-5 text-accent-600" />
             <div>
               <h2 className="text-base font-semibold text-gray-900">AI LLM Provider Configuration</h2>
-              <p className="text-xs text-gray-500">Choose and set up your email summarization engine.</p>
+              <p className="text-xs text-gray-500">Disable organization AI processing or configure its provider.</p>
             </div>
           </div>
         </div>
@@ -267,17 +279,26 @@ export default function ExperimentsSettingsPage() {
           {/* AI Enable Toggle */}
           <div className="flex items-center justify-between">
             <div>
-              <label className="text-sm font-medium text-gray-900">Enable AI Features</label>
-              <p className="text-xs text-gray-500">Turn on AI-powered email summarization by labels.</p>
+              <label htmlFor="isAiEnabled" className="text-sm font-medium text-gray-900">Enable AI Features</label>
+              <p className="text-xs text-gray-500">Turning this off disables organization AI processing and hides provider configuration.</p>
             </div>
             <input
               type="checkbox"
+              id="isAiEnabled"
               name="isAiEnabled"
-              defaultChecked={settings?.isAiEnabled ?? true}
+              checked={isAiEnabledDraft ?? settings?.isAiEnabled ?? true}
+              onChange={(e) => setIsAiEnabledDraft(e.target.checked)}
               className="h-4 w-4 text-accent-600 focus:ring-accent-500 border-gray-300 rounded cursor-pointer"
             />
           </div>
 
+          {settings?.systemAiEnabled === false && (
+            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="status">
+              AI is disabled in System Preferences for every organization. This organization’s AI setting is preserved, but provider configuration is hidden until system AI is enabled.
+            </p>
+          )}
+
+          {settings?.systemAiEnabled !== false && (isAiEnabledDraft ?? settings?.isAiEnabled ?? true) && <>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* AI Provider */}
             <div>
@@ -369,6 +390,7 @@ export default function ExperimentsSettingsPage() {
               className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
             />
           </div>
+          </>}
 
           <div className="flex justify-end pt-2">
             <button

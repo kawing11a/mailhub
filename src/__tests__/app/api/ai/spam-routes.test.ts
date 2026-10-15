@@ -169,7 +169,8 @@ describe('AI Spam API Endpoints & Checker', () => {
       const result = await checkIsHighRisk(
         'URGENT: Claim your lottery jackpot payout',
         'Congratulations, your prize is waiting for wire transfer',
-        'lottery@winner-prize.xyz'
+        'lottery@winner-prize.xyz',
+        'test-organization-id'
       );
 
       expect(result.isHighRisk).toBe(true);
@@ -180,7 +181,8 @@ describe('AI Spam API Endpoints & Checker', () => {
       const result = await checkIsHighRisk(
         'Sprint agenda and team discussion review',
         'Hi team, see attached calendar review for our meeting today.',
-        'dev@company.com'
+        'dev@company.com',
+        'test-organization-id'
       );
 
       expect(result.isHighRisk).toBe(false);

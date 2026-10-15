@@ -3,6 +3,9 @@ jest.mock('@/lib/db/prisma', () => ({
     emailAccount: {
       findUnique: jest.fn(),
     },
+    email: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
   },
 }));
 
@@ -17,9 +20,10 @@ jest.mock('@/lib/queue/client', () => ({ searchQueue: { add: jest.fn() } }));
 jest.mock('@/lib/ai/spam-checker', () => ({ checkIsHighRisk: jest.fn() }));
 jest.mock('@/lib/rules/engine', () => ({ processRulesForNewEmail: jest.fn() }));
 jest.mock('@/lib/runtime-config', () => ({
-  runtimeConfig: { emailPersistConcurrency: 2 },
+  runtimeConfig: { emailPersistConcurrency: 2, imapRequestIntervalMs: 0 },
 }));
 
+import { prisma } from '@/lib/db/prisma';
 import { IMAPConnectionManager } from '@/lib/imap/connection-manager';
 
 describe('IMAP persistence concurrency', () => {
@@ -61,15 +65,64 @@ describe('IMAP persistence concurrency', () => {
     await new Promise((resolve) => setImmediate(resolve));
 
     try {
-      expect(client.fetch).toHaveBeenCalledTimes(1);
+      expect(client.fetch).toHaveBeenCalledTimes(2);
       expect(persistenceCalls).toBe(1);
     } finally {
       resolveFirstPersistence?.();
       await Promise.all([firstFetch, secondFetch]);
     }
 
-    expect(client.fetch).toHaveBeenCalledTimes(2);
+    expect(client.fetch).toHaveBeenCalledTimes(4);
     expect(persistenceCalls).toBe(2);
+  });
+
+  it('fetches full message source only for messages missing locally', async () => {
+    const manager = new IMAPConnectionManager();
+    const client = {
+      fetch: jest.fn(async function* (_range: string, options: { source?: boolean }) {
+        if (options.source) {
+          yield { uid: 2, source: Buffer.from('raw message') };
+          return;
+        }
+
+        yield { uid: 1 };
+        yield { uid: 2 };
+      }),
+    };
+
+    (manager as any).connections.set('account-1', {
+      accountId: 'account-1',
+      organizationId: 'org-1',
+      client,
+      isConnected: true,
+      reconnectAttempts: 0,
+    });
+    (prisma.email.findMany as jest.Mock).mockResolvedValueOnce([
+      { uid: BigInt(1), messageId: 'existing@example.test' },
+    ]);
+    const persistEmail = jest
+      .spyOn(manager as any, 'persistEmail')
+      .mockResolvedValue(true);
+
+    await expect(
+      (manager as any).fetchNewEmailsForAccount('account-1', [1, 2], undefined, 'INBOX', true)
+    ).resolves.toEqual({ processed: 2, failed: 0 });
+
+    expect(client.fetch).toHaveBeenCalledTimes(2);
+    expect(client.fetch.mock.calls[0][1]).toEqual({
+      uid: true,
+      envelope: true,
+      internalDate: true,
+    });
+    expect(client.fetch.mock.calls[1][0]).toBe('2');
+    expect(client.fetch.mock.calls[1][1]).toEqual({
+      source: true,
+      uid: true,
+      bodyStructure: true,
+      internalDate: true,
+    });
+    expect(persistEmail).toHaveBeenCalledTimes(1);
+    expect(persistEmail.mock.calls[0][2]).toMatchObject({ uid: 2 });
   });
 
   it('limits persistence to the configured concurrency', async () => {

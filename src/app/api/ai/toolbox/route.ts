@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callLlmApi } from '@/lib/ai/llm-client';
+import { AiAccessError, AiUnavailableError, callLlmApi } from '@/lib/ai/llm-client';
+import { classifySpam } from '@/lib/ai/spam-classifier';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { authenticate } from '@/lib/auth/middleware';
 import { assertAccountContextAccess } from '@/lib/accounts/access';
@@ -45,13 +46,32 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `Unsupported tool: ${tool}` }, { status: 400 });
     }
 
-    const result = await callLlmApi({
-      systemInstruction,
-      userPrompt,
-    });
+    let result: string;
+    try {
+      result = await callLlmApi({
+        organizationId: auth.organizationId,
+        userId: auth.userId,
+        systemInstruction,
+        userPrompt,
+      });
+    } catch (err) {
+      if (tool !== 'spam_check' || !(err instanceof AiUnavailableError)) throw err;
+      const localResult = classifySpam('', cleanedText, '');
+      return NextResponse.json({
+        tool,
+        result: `Spam risk decision: ${localResult.isSpam ? 'Spam' : 'Not spam'}\nScore: ${localResult.score.toFixed(2)}\nReason: ${localResult.reason}`,
+        status: 'success',
+      });
+    }
 
     return NextResponse.json({ tool, result, status: 'success' });
   } catch (err: any) {
+    if (err instanceof AiUnavailableError) {
+      return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
+    }
+    if (err instanceof AiAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     console.error('AI Toolbox Route Error:', err);
     return NextResponse.json({ error: err.message || 'Failed to execute AI tool' }, { status: 500 });
   }

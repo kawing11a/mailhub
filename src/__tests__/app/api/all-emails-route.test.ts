@@ -70,6 +70,11 @@ describe('GET /api/accounts/all/emails', () => {
             ],
           },
         }),
+        orderBy: [
+          { isStarred: 'desc' },
+          { receivedAt: 'desc' },
+          { createdAt: 'desc' },
+        ],
       })
     );
   });

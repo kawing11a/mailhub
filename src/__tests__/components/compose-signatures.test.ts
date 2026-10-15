@@ -40,6 +40,10 @@ jest.mock('@/hooks/useDraftAutosave', () => ({
   useDraftAutosave: () => mockUseDraftAutosave(),
 }));
 
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({ invalidateQueries: jest.fn() }),
+}));
+
 jest.mock('@/components/email/FromAddressSelect', () => {
   const React = jest.requireActual('react');
 

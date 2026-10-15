@@ -1,5 +1,6 @@
 import { decrypt, encrypt } from '@/lib/crypto';
 import { prisma } from '@/lib/db/prisma';
+import { getGmailRequestKey, withGmailRateLimit } from './rate-limit';
 
 
 
@@ -15,31 +16,65 @@ export class GmailApiError extends Error {
  * truncated exponential backoff for handling 429 and 5xx errors.
  */
 export async function gmailFetch(url: string | URL, options?: RequestInit, maxRetries = 5): Promise<Response> {
-  let retries = 0;
-  const maxBackoff = 32000;
+  return withGmailRateLimit(getGmailRequestKey(options), async () => {
+    let retries = 0;
+    const maxBackoff = 32000;
 
-  while (true) {
-    const res = await fetch(url.toString(), options);
+    while (true) {
+      const res = await fetch(url.toString(), options);
+      const quotaError = await isQuotaErrorResponse(res);
 
-    // Check if it's a rate limit error (429) or a 5xx server error
-    if (res.status === 429 || res.status >= 500) {
-      if (retries >= maxRetries) {
-        return res; // Max retries reached, return the failed response
+      // Gmail can report user/project rate limits as 403 as well as 429.
+      if (res.status === 429 || res.status >= 500 || quotaError) {
+        if (retries >= maxRetries) return res;
+
+        const retryAfterMs = getRetryAfterMs(res);
+        const randomMs = Math.floor(Math.random() * 1000);
+        const backoffMs = Math.min(
+          retryAfterMs ?? (Math.pow(2, retries) * 1000) + randomMs,
+          maxBackoff
+        );
+
+        await res.text().catch(() => null);
+        console.warn(
+          `[Gmail API] Retryable response (${res.status}). Retrying in ${backoffMs}ms... ` +
+            `(Attempt ${retries + 1} of ${maxRetries})`
+        );
+        await new Promise(resolve => setTimeout(resolve, backoffMs));
+        retries++;
+      } else {
+        return res;
       }
-
-      const randomMs = Math.floor(Math.random() * 1000);
-      const backoffMs = Math.min((Math.pow(2, retries) * 1000) + randomMs, maxBackoff);
-
-      // Consume the response body to avoid potential memory leaks before retrying
-      await res.text().catch(() => null);
-
-      console.log(`[Gmail API] Rate limit or server error (${res.status}). Retrying in ${backoffMs}ms... (Attempt ${retries + 1} of ${maxRetries})`);
-      await new Promise(resolve => setTimeout(resolve, backoffMs));
-      retries++;
-    } else {
-      return res;
     }
-  }
+  });
+}
+
+async function isQuotaErrorResponse(response: Response): Promise<boolean> {
+  if (response.status !== 403) return false;
+
+  const body = await response.clone().json().catch(() => null) as {
+    error?: {
+      message?: string;
+      errors?: Array<{ reason?: string; message?: string }>;
+    };
+  } | null;
+
+  const message = body?.error?.message ?? '';
+  const reasons = body?.error?.errors
+    ?.map((error) => `${error.reason ?? ''} ${error.message ?? ''}`)
+    .join(' ') ?? '';
+  return /quota|rate.?limit|user.?rate/i.test(`${message} ${reasons}`);
+}
+
+function getRetryAfterMs(response: Response): number | null {
+  const value = response.headers.get('retry-after');
+  if (!value) return null;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : Math.max(0, timestamp - Date.now());
 }
 
 /**

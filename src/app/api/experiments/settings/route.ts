@@ -6,6 +6,7 @@ import {
   apiResponse,
   apiError,
 } from '@/lib/auth/middleware';
+import { getSystemPreferences } from '@/lib/settings/system-preferences';
 
 export async function GET(req: NextRequest) {
   const auth = await authenticate(req);
@@ -29,14 +30,17 @@ export async function GET(req: NextRequest) {
   }
 
   // Mask API key for security when returning settings to client
-  const maskedApiKey = settings.aiApiKey
-    ? `${settings.aiApiKey.slice(0, 4)}...${settings.aiApiKey.slice(-4)}`
+  const { aiApiKey, ...publicSettings } = settings;
+  const maskedApiKey = aiApiKey
+    ? `${aiApiKey.slice(0, 4)}...${aiApiKey.slice(-4)}`
     : '';
 
+  const systemPreferences = await getSystemPreferences();
   return apiResponse({
-    ...settings,
+    ...publicSettings,
     aiApiKeyMasked: maskedApiKey,
-    hasApiKey: Boolean(settings.aiApiKey),
+    hasApiKey: Boolean(aiApiKey),
+    systemAiEnabled: systemPreferences.isAiEnabled,
   });
 }
 
@@ -47,39 +51,74 @@ export async function PUT(req: NextRequest) {
   if (adminCheck) return adminCheck;
 
   try {
-    const body = await req.json();
-    const { isAiEnabled, aiProvider, aiApiKey, aiBaseUrl, aiModelName, aiCustomPrompt } = body;
+    const body: unknown = await req.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return apiError('A settings object is required', 400);
+    }
+    const input = body as Record<string, unknown>;
+    const existing = await prisma.experimentSetting.findUnique({
+      where: { organizationId: auth.organizationId },
+    });
+    const dataToUpdate: {
+      isAiEnabled?: boolean;
+      aiProvider?: string;
+      aiApiKey?: string;
+      aiBaseUrl?: string | null;
+      aiModelName?: string;
+      aiCustomPrompt?: string | null;
+    } = {};
 
-    const dataToUpdate: any = {
-      isAiEnabled: isAiEnabled !== undefined ? Boolean(isAiEnabled) : true,
-      aiProvider: aiProvider || 'openai',
-      aiBaseUrl: aiBaseUrl || null,
-      aiModelName: aiModelName || 'gpt-4o-mini',
-      aiCustomPrompt: aiCustomPrompt || null,
-    };
-
-    // Only update API key if explicitly provided (not undefined and not masked)
-    if (aiApiKey !== undefined && !aiApiKey.includes('...')) {
-      dataToUpdate.aiApiKey = aiApiKey ? aiApiKey.trim() : null;
+    if ('isAiEnabled' in input) {
+      if (typeof input.isAiEnabled !== 'boolean') return apiError('isAiEnabled must be a boolean', 400);
+      dataToUpdate.isAiEnabled = input.isAiEnabled;
+    }
+    if ('aiProvider' in input) {
+      if (typeof input.aiProvider !== 'string') return apiError('aiProvider must be a string', 400);
+      dataToUpdate.aiProvider = input.aiProvider;
+    }
+    if ('aiModelName' in input) {
+      if (typeof input.aiModelName !== 'string') return apiError('aiModelName must be a string', 400);
+      dataToUpdate.aiModelName = input.aiModelName;
+    }
+    if ('aiBaseUrl' in input) {
+      if (input.aiBaseUrl !== null && typeof input.aiBaseUrl !== 'string') return apiError('aiBaseUrl must be a string or null', 400);
+      dataToUpdate.aiBaseUrl = input.aiBaseUrl as string | null;
+    }
+    if ('aiCustomPrompt' in input) {
+      if (input.aiCustomPrompt !== null && typeof input.aiCustomPrompt !== 'string') return apiError('aiCustomPrompt must be a string or null', 400);
+      dataToUpdate.aiCustomPrompt = input.aiCustomPrompt as string | null;
+    }
+    if ('aiApiKey' in input && typeof input.aiApiKey === 'string') {
+      const key = input.aiApiKey.trim();
+      if (key && !key.includes('...')) dataToUpdate.aiApiKey = key;
     }
 
-    const settings = await prisma.experimentSetting.upsert({
-      where: { organizationId: auth.organizationId },
-      update: dataToUpdate,
-      create: {
-        organizationId: auth.organizationId,
-        ...dataToUpdate,
-      },
-    });
+    const settings = existing
+      ? await prisma.experimentSetting.update({
+          where: { organizationId: auth.organizationId },
+          data: dataToUpdate,
+        })
+      : await prisma.experimentSetting.create({
+          data: {
+            organizationId: auth.organizationId,
+            isAiEnabled: true,
+            aiProvider: 'openai',
+            aiModelName: 'gpt-4o-mini',
+            ...dataToUpdate,
+          },
+        });
 
-    const maskedApiKey = settings.aiApiKey
-      ? `${settings.aiApiKey.slice(0, 4)}...${settings.aiApiKey.slice(-4)}`
+    const { aiApiKey, ...publicSettings } = settings;
+    const maskedApiKey = aiApiKey
+      ? `${aiApiKey.slice(0, 4)}...${aiApiKey.slice(-4)}`
       : '';
 
+    const systemPreferences = await getSystemPreferences();
     return apiResponse({
-      ...settings,
+      ...publicSettings,
       aiApiKeyMasked: maskedApiKey,
-      hasApiKey: Boolean(settings.aiApiKey),
+      hasApiKey: Boolean(aiApiKey),
+      systemAiEnabled: systemPreferences.isAiEnabled,
     });
   } catch (err: any) {
     return apiError(err.message || 'Failed to update experiment settings', 500);

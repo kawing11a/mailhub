@@ -149,7 +149,10 @@ Optional worker and database controls use conservative defaults from `.env.examp
 | `DB_CONNECTION_TIMEOUT_MS` | `10000` | Maximum time to wait for a PostgreSQL connection |
 | `SYNC_WORKER_CONCURRENCY` | `1` | Concurrent sync jobs per worker process |
 | `EMAIL_PERSIST_CONCURRENCY` | `3` | Concurrent email persistence operations per account |
+| `IMAP_STARTUP_CONCURRENCY` | `10` | IMAP listener connections opened in parallel at worker startup |
 | `GMAIL_POLL_INTERVAL_MS` | `60000` | Gmail polling interval |
+| `GMAIL_REQUEST_INTERVAL_MS` | `1000` | Minimum local spacing between Gmail API requests for one identity |
+| `IMAP_REQUEST_INTERVAL_MS` | `250` | Minimum local spacing between Outlook/IMAP requests for one account |
 | `IMAP_RECONCILE_INTERVAL_MS` | `300000` | IMAP recovery reconciliation interval |
 
 ### 3. Start Services
@@ -290,20 +293,20 @@ Pull and run the official pre-built MailHub Docker image directly from Docker Hu
 
 ```bash
 # Pull this release from Docker Hub (`latest` points to the same image)
-docker pull kawing11a/mailhub:0.1.5
+docker pull kawing11a/mailhub:0.1.6
 
 # Run MailHub web container (using your .env file)
 docker run -d \
   --name mailhub-web \
   -p 3000:3000 \
   --env-file .env \
-  kawing11a/mailhub:0.1.5
+  kawing11a/mailhub:0.1.6
 
 # Run background worker container
 docker run -d \
   --name mailhub-worker \
   --env-file .env \
-  kawing11a/mailhub:0.1.5 \
+  kawing11a/mailhub:0.1.6 \
   npm run worker
 ```
 
@@ -317,7 +320,7 @@ docker compose up -d --build
 
 The Dockerfile uses a multi-stage build (`deps` → `build` → `runner`) producing a lean production image. Workers run as separate containers using the same image with `npm run worker` as the entrypoint.
 
-When upgrading an existing deployment, run `npx prisma migrate deploy` before starting the `0.1.5` web and worker containers.
+When upgrading an existing deployment, run `npx prisma migrate deploy` before starting the `0.1.6` web and worker containers.
 
 ## Project Structure
 

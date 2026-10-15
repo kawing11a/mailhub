@@ -1,7 +1,7 @@
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
 jest.mock('@/lib/imap/connection-manager', () => ({
-  imapManager: { shutdown: jest.fn() },
+  imapManager: { initializeAccount: jest.fn().mockResolvedValue(undefined), shutdown: jest.fn() },
 }));
 
 jest.mock('@/lib/db/prisma', () => ({
@@ -28,6 +28,7 @@ import { prisma } from '@/lib/db/prisma';
 import { initMeilisearch } from '@/lib/search/meilisearch';
 import { enqueueInitialSync } from '@/lib/queue/client';
 import { ensureSyncWorkersForPartitions } from '@/lib/queue/workers/sync';
+import { imapManager } from '@/lib/imap/connection-manager';
 
 describe('worker bootstrap partition routing', () => {
   beforeEach(() => {
@@ -48,14 +49,16 @@ describe('worker bootstrap partition routing', () => {
 
   it('keeps worker-1 accounts on their stored partition queue during bootstrap', async () => {
     await import('@/worker');
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let index = 0; index < 8; index += 1) await Promise.resolve();
 
     expect(prisma.emailAccount.findMany).toHaveBeenCalledWith({
       where: { isActive: true, workerPartition: 'worker-1' },
     });
     expect(enqueueInitialSync).toHaveBeenCalledWith({
+      id: 'account-1',
+      workerPartition: 'worker-1',
+    });
+    expect(imapManager.initializeAccount).toHaveBeenCalledWith({
       id: 'account-1',
       workerPartition: 'worker-1',
     });
@@ -70,9 +73,7 @@ describe('worker bootstrap partition routing', () => {
 
     await jest.isolateModulesAsync(async () => {
       await import('@/worker');
-      await Promise.resolve();
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let index = 0; index < 8; index += 1) await Promise.resolve();
     });
 
     expect(ensureSyncWorkersForPartitions).toHaveBeenCalledWith(['worker-1', 'worker-2']);

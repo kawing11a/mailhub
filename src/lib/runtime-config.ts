@@ -10,5 +10,7 @@ export const runtimeConfig = {
   syncWorkerConcurrency: positiveIntegerFromEnvironment('SYNC_WORKER_CONCURRENCY', 1),
   emailPersistConcurrency: positiveIntegerFromEnvironment('EMAIL_PERSIST_CONCURRENCY', 3),
   gmailPollIntervalMs: positiveIntegerFromEnvironment('GMAIL_POLL_INTERVAL_MS', 60000),
+  gmailRequestIntervalMs: positiveIntegerFromEnvironment('GMAIL_REQUEST_INTERVAL_MS', 1000),
+  imapRequestIntervalMs: positiveIntegerFromEnvironment('IMAP_REQUEST_INTERVAL_MS', 250),
   imapReconcileIntervalMs: positiveIntegerFromEnvironment('IMAP_RECONCILE_INTERVAL_MS', 300000),
 };

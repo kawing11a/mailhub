@@ -4,6 +4,8 @@ import { AccountLabelList } from '@/components/labels/AccountLabelList';
 import { useSearch } from '@/hooks/useSearch';
 import { buildReplyAllRecipients } from '@/lib/email/addresses';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
+import { executeBulkEmailAction, type BulkEmailAction } from '@/lib/email/bulk-actions';
+import { sortEmailsWithStarredFirst } from '@/lib/email/list-sorting';
 import { useAccountStore } from '@/stores/accountStore';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
@@ -45,6 +47,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState<BulkEmailAction | null>(null);
 
   // Escape closes the context menu first, then clears the selection
   useEffect(() => {
@@ -72,6 +75,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   // Selection is transient: reset when the viewed list changes
   useEffect(() => {
     setSelectedIds(new Set());
+    setBulkAction(null);
   }, [selectedAccountId, selectedFolder, isSearching]);
 
   const toggleSelect = useCallback((id: string) => {
@@ -140,6 +144,17 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['accountStats'] });
     queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+  };
+
+  const handleToggleStar = (email: any) => {
+    const accountId = email.accountId || selectedAccountId;
+    if (!accountId || accountId === 'all' || accountId === 'new-emails') return;
+
+    updateEmailMutation.mutate({
+      emailId: email.id,
+      accountId,
+      data: { isStarred: !email.isStarred },
+    });
   };
 
   const deleteEmailMutation = useMutation({
@@ -553,6 +568,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       return res.json();
     },
     initialPageParam: 1,
+    // SSE is the fast path, but keep a low-frequency fallback for browsers
+    // that lost the Redis/SSE connection while remaining open for a long time.
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
     getNextPageParam: (lastPage) => {
       if (lastPage.pagination.page < lastPage.pagination.totalPages) {
         return lastPage.pagination.page + 1;
@@ -610,9 +629,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       // Return all retained email objects, sorted newest-first.
       // This preserves emails that have been read (and thus dropped by the server
       // unread filter) until the user navigates away from the page.
-      return Array.from(retainedEmailsMap.values()).sort(
-        (a, b) => new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime()
-      );
+      return sortEmailsWithStarredFirst(Array.from(retainedEmailsMap.values()));
     }
     return flatEmails;
   }, [flatEmails, effectiveReadStatus, retainedEmailsMap]);
@@ -636,16 +653,48 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     () => flatEmails.filter((e: any) => selectedIds.has(e.id)),
     [flatEmails, selectedIds]
   );
-  const selectedEmailIds = useMemo(() => selectedEmails.map((e: any) => e.id), [selectedEmails]);
-  const selectionLabelCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    selectedEmails.forEach((e: any) => {
-      e.emailLabels?.forEach((el: any) => {
-        counts.set(el.label.id, (counts.get(el.label.id) || 0) + 1);
-      });
-    });
-    return counts;
-  }, [selectedEmails]);
+
+  const handleBulkAction = async (action: BulkEmailAction) => {
+    if (selectedEmails.length === 0 || bulkAction) return;
+
+    if (action === 'delete') {
+      const isPermanent = selectedEmails.some(
+        (email: any) => email.folder === 'TRASH' || email.isDraft
+      );
+      const confirmed = window.confirm(
+        isPermanent
+          ? `Permanently delete ${selectedEmails.length} selected ${selectedEmails.length === 1 ? 'email' : 'emails'}?\n\nThis cannot be undone.`
+          : `Move ${selectedEmails.length} selected ${selectedEmails.length === 1 ? 'email' : 'emails'} to trash?`
+      );
+      if (!confirmed) return;
+    }
+
+    setBulkAction(action);
+    const result = await executeBulkEmailAction(
+      selectedEmails.map((email: any) => ({ id: email.id, accountId: email.accountId })),
+      action
+    );
+
+    invalidateAfterMailboxChange();
+    setSelectedIds(new Set(result.failed));
+
+    if (result.failed.length > 0) {
+      toast.error(
+        `${result.succeeded.length} completed, ${result.failed.length} failed. Failed messages remain selected.`
+      );
+    } else if (action === 'delete' && result.serverUnsynced > 0) {
+      toast.error(
+        `${result.succeeded.length} deleted locally, but ${result.serverUnsynced} could not be updated on the mail server.`
+      );
+    } else {
+      const label = action === 'delete'
+        ? 'deleted'
+        : action === 'read' ? 'marked as read' : 'marked as unread';
+      toast.success(`${result.succeeded.length} ${label}`);
+    }
+
+    setBulkAction(null);
+  };
 
   if (!selectedAccountId) {
     return (
@@ -822,7 +871,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         <div className="px-4 py-2 bg-accent-50 border-b border-accent-100 flex items-center justify-between">
           <div className="flex items-center space-x-1">
             <button
-              onClick={() => setSelectedIds(new Set())}
+              onClick={() => {
+                if (!bulkAction) setSelectedIds(new Set());
+              }}
+              disabled={!!bulkAction}
               className="p-1.5 text-accent-700 hover:bg-accent-100 rounded-md transition-colors"
               title="Clear selection"
               aria-label="Clear selection"
@@ -832,6 +884,42 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             <span className="text-sm font-medium text-accent-700">
               {selectedEmails.length} selected
             </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('read')}
+              disabled={!!bulkAction}
+              className="p-1.5 text-accent-700 hover:bg-accent-100 rounded-md transition-colors disabled:opacity-50"
+              title="Mark selected as read"
+              aria-label="Mark selected as read"
+            >
+              <MailOpen className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('unread')}
+              disabled={!!bulkAction}
+              className="p-1.5 text-accent-700 hover:bg-accent-100 rounded-md transition-colors disabled:opacity-50"
+              title="Mark selected as unread"
+              aria-label="Mark selected as unread"
+            >
+              <Mail className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleBulkAction('delete')}
+              disabled={!!bulkAction}
+              className="p-1.5 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+              title="Delete selected"
+              aria-label="Delete selected"
+            >
+              {bulkAction === 'delete' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Trash2 className="w-4 h-4" />
+              )}
+            </button>
           </div>
         </div>
       )}
@@ -859,6 +947,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
                   isChecked={selectedIds.has(email.id)}
                   selectionActive={selectedEmails.length > 0}
                   onToggleSelect={toggleSelect}
+                  onToggleStar={() => handleToggleStar(email)}
                   showAccountBadge={selectedAccountId === 'all' || selectedAccountId === 'new-emails'}
                 />
               ))}

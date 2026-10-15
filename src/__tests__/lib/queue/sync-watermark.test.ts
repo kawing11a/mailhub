@@ -83,9 +83,10 @@ describe('initial sync watermark handling', () => {
 
     expect(prisma.emailAccount.update).not.toHaveBeenCalled();
     expect(redis.publish).not.toHaveBeenCalled();
+    expect(gmailSyncManager.initializeAccount).toHaveBeenCalledWith(gmailAccount);
   });
 
-  it('starts Gmail polling only after the historical sync completes', async () => {
+  it('starts Gmail polling before historical sync so failed backfills still keep receiving mail', async () => {
     let resolveHistoricalSync: ((result: { processed: number; failed: number }) => void) | undefined;
     const historicalSyncStarted = new Promise<void>((resolve) => {
       (gmailSyncManager.syncHistoricalEmails as jest.Mock).mockImplementation(
@@ -103,7 +104,7 @@ describe('initial sync watermark handling', () => {
     });
 
     await historicalSyncStarted;
-    expect(gmailSyncManager.initializeAccount).not.toHaveBeenCalled();
+    expect(gmailSyncManager.initializeAccount).toHaveBeenCalledWith(gmailAccount);
 
     resolveHistoricalSync?.({ processed: 3, failed: 0 });
     await job;

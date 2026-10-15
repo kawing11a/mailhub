@@ -1,6 +1,6 @@
 jest.mock('@/lib/db/prisma', () => ({
   prisma: {
-    email: { findUnique: jest.fn() },
+    email: { findFirst: jest.fn(), findUnique: jest.fn() },
     $transaction: jest.fn(),
   },
 }));

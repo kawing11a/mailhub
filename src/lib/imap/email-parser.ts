@@ -41,6 +41,20 @@ function extractAddresses(addr: AddressObject | AddressObject[] | undefined): Ar
   );
 }
 
+/** IMAP INTERNALDATE is the server/mailbox arrival time, not the sender's Date header. */
+export function resolveImapReceivedAt(
+  internalDate: Date | string | null | undefined,
+  headerDate: Date | null | undefined
+): Date {
+  if (internalDate) {
+    const date = internalDate instanceof Date ? internalDate : new Date(internalDate);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+
+  if (headerDate && !Number.isNaN(headerDate.getTime())) return headerDate;
+  return new Date();
+}
+
 function hasFilename(node: MessageStructureObject): boolean {
   return Boolean(node.dispositionParameters?.filename || node.parameters?.name);
 }

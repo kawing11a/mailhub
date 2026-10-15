@@ -1,3 +1,5 @@
+import { callLlmApi } from '@/lib/ai/llm-client';
+
 export interface EmailForSummary {
   id: string;
   subject?: string | null;
@@ -9,7 +11,8 @@ export interface EmailForSummary {
 }
 
 export interface AiSummarizeOptions {
-  provider: 'openai' | 'claude' | 'ollama' | 'custom' | string;
+  organizationId: string;
+  provider?: 'openai' | 'claude' | 'ollama' | 'custom' | string;
   apiKey?: string | null;
   baseUrl?: string | null;
   modelName?: string | null;
@@ -34,81 +37,32 @@ export function cleanTextBody(text?: string | null, maxLen = 2000): string {
   return sanitized.length > maxLen ? sanitized.slice(0, maxLen) + '...' : sanitized;
 }
 
-interface LlmCallArgs {
-  provider: string;
-  apiKey?: string | null;
-  baseUrl?: string | null;
-  modelName?: string | null;
-  systemInstruction: string;
-  userPrompt: string;
-}
-
-async function callLlmApi(args: LlmCallArgs): Promise<string> {
-  const { provider, apiKey, baseUrl, modelName, systemInstruction, userPrompt } = args;
-
-  if (provider === 'claude') {
-    const endpoint = (baseUrl || 'https://api.anthropic.com/v1').replace(/\/$/, '') + '/messages';
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    };
-    if (apiKey) {
-      headers['x-api-key'] = apiKey;
-    }
-
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: modelName || 'claude-3-5-sonnet-20241022',
-        max_tokens: 1000,
-        system: systemInstruction,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Claude API request failed (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    const textContent = data.content?.find((c: { type: string; text?: string }) => c.type === 'text')?.text;
-    return textContent || 'No summary response text generated from Claude.';
+export function generateFallbackEmailBatchDigest({
+  labelName,
+  emails,
+}: Pick<AiSummarizeOptions, 'labelName' | 'emails'>): string {
+  const heading = `## Basic summary (AI unavailable)\n\nLabel: ${cleanTextBody(labelName) || 'Selected Label'}`;
+  if (emails.length === 0) {
+    return `${heading}\n\nNo emails found under this label.`;
   }
 
-  // Default: OpenAI, Ollama, or Custom OpenAI-compatible endpoint
-  const targetBaseUrl = (baseUrl || (provider === 'ollama' ? 'http://localhost:11434/v1' : 'https://api.openai.com/v1')).replace(/\/$/, '');
-  const endpoint = `${targetBaseUrl}/chat/completions`;
+  const entries = emails.map((email, index) => {
+    const subject = cleanTextBody(email.subject) || '(No Subject)';
+    const senderName = cleanTextBody(email.fromName);
+    const senderAddress = cleanTextBody(email.fromAddress);
+    const sender = senderName && senderAddress
+      ? `${senderName} <${senderAddress}>`
+      : senderName || senderAddress || 'Unknown';
+    const timestamp = email.receivedAt ? new Date(email.receivedAt) : null;
+    const date = timestamp && !Number.isNaN(timestamp.getTime())
+      ? timestamp.toISOString()
+      : 'Unknown';
+    const snippet = cleanTextBody(email.snippet, 500) || '(No snippet)';
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (apiKey) {
-    headers['Authorization'] = `Bearer ${apiKey}`;
-  }
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: modelName || 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.3,
-    }),
+    return `### ${index + 1}. ${subject}\n- From: ${sender}\n- Date: ${date}\n- Snippet: ${snippet}`;
   });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`LLM API request failed (${res.status}): ${errText}`);
-  }
-
-  const data = await res.json();
-  const choiceText = data.choices?.[0]?.message?.content;
-  return choiceText || 'No summary response text generated.';
+  return `${heading}\n\n${entries.join('\n\n')}`;
 }
 
 function formatEmailsForPrompt(emails: EmailForSummary[]): string {
@@ -130,10 +84,11 @@ export async function generateEmailBatchSummary(
   options: AiSummarizeOptions
 ): Promise<string> {
   const {
-    provider = 'openai',
+    organizationId,
+    provider,
     apiKey,
     baseUrl,
-    modelName = 'gpt-4o-mini',
+    modelName,
     customPrompt,
     labelName,
     emails,
@@ -162,6 +117,7 @@ export async function generateEmailBatchSummary(
       const chunkUserPrompt = `Please generate a concise bullet-point summary for batch #${i + 1} (${chunk.length} emails) under label "${labelName}":\n\n${formattedChunk}`;
       
       const chunkSummary = await callLlmApi({
+        organizationId,
         provider,
         apiKey,
         baseUrl,
@@ -177,6 +133,7 @@ export async function generateEmailBatchSummary(
     const reduceUserPrompt = `Below are ${chunkSummaries.length} batch summaries for a total of ${emails.length} emails under label "${labelName}". Synthesize them into a single cohesive executive summary with key highlights and action items in clean Markdown format:\n\n${combinedChunkSummaries}`;
 
     return await callLlmApi({
+      organizationId,
       provider,
       apiKey,
       baseUrl,
@@ -191,6 +148,7 @@ export async function generateEmailBatchSummary(
   const userPrompt = `Please summarize the following ${emails.length} email(s) under the label "${labelName}":\n\n${formattedEmails}`;
 
   return await callLlmApi({
+    organizationId,
     provider,
     apiKey,
     baseUrl,

@@ -2,7 +2,7 @@
 
 import { format, isToday } from 'date-fns';
 import clsx from 'clsx';
-import { Paperclip, User, Check, AlertTriangle } from 'lucide-react';
+import { Paperclip, User, Check, AlertTriangle, Star } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
 import { LabelBadge } from '@/components/labels/LabelBadge';
@@ -19,6 +19,7 @@ interface EmailRowProps {
   /** True when any email in the list is checked — keeps all checkboxes visible. */
   selectionActive?: boolean;
   onToggleSelect?: (id: string) => void;
+  onToggleStar?: () => void;
   showAccountBadge?: boolean;
 }
 
@@ -31,6 +32,7 @@ export function EmailRow({
   isChecked,
   selectionActive,
   onToggleSelect,
+  onToggleStar,
   showAccountBadge = true,
 }: EmailRowProps) {
   const isUnread = email.folder === 'INBOX' && !email.isRead;
@@ -161,6 +163,24 @@ export function EmailRow({
           )}
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleStar?.();
+        }}
+        className={clsx(
+          'ml-2 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md transition-colors',
+          email.isStarred
+            ? 'text-amber-500 hover:bg-amber-50'
+            : 'text-gray-300 hover:bg-gray-100 hover:text-amber-500'
+        )}
+        title={email.isStarred ? 'Remove star' : 'Star email'}
+        aria-label={email.isStarred ? 'Remove star' : 'Star email'}
+      >
+        <Star className={clsx('w-4 h-4', email.isStarred && 'fill-current')} />
+      </button>
     </div>
   );
 }

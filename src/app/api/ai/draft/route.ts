@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callLlmApi } from '@/lib/ai/llm-client';
+import { AiAccessError, AiUnavailableError, callLlmApi } from '@/lib/ai/llm-client';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { authenticate } from '@/lib/auth/middleware';
 import { assertAccountContextAccess } from '@/lib/accounts/access';
@@ -47,12 +47,20 @@ Respond ONLY with the email subject line (if applicable) and body content. Do no
     }
 
     const resultText = await callLlmApi({
+      organizationId: auth.organizationId,
+      userId: auth.userId,
       systemInstruction,
       userPrompt,
     });
 
     return NextResponse.json({ result: resultText, status: 'success' });
   } catch (err: any) {
+    if (err instanceof AiUnavailableError) {
+      return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
+    }
+    if (err instanceof AiAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     console.error('AI Draft Route Error:', err);
     return NextResponse.json({ error: err.message || 'Failed to generate AI draft' }, { status: 500 });
   }

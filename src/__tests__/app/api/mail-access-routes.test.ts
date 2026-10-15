@@ -51,7 +51,7 @@ jest.mock('@/lib/email/attachment-retrieval', () => ({
 }));
 
 import type { NextRequest } from 'next/server';
-import { GET as getEmail } from '@/app/api/accounts/[id]/emails/[emailId]/route';
+import { GET as getEmail, DELETE as deleteEmail } from '@/app/api/accounts/[id]/emails/[emailId]/route';
 import { GET as getAttachment } from '@/app/api/accounts/[id]/emails/[emailId]/attachments/[attachmentId]/route';
 import { POST as restoreEmail } from '@/app/api/accounts/[id]/emails/[emailId]/restore/route';
 import { POST as emptyTrash } from '@/app/api/accounts/[id]/emails/empty-trash/route';
@@ -59,7 +59,12 @@ import { GET as getNewEmails } from '@/app/api/emails/new/route';
 import { GET as getThread } from '@/app/api/emails/thread/[threadId]/route';
 import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
-import { restoreOnServer, deleteManyOnServer } from '@/lib/email/server-sync';
+import {
+  restoreOnServer,
+  deleteOnServer,
+  deleteManyOnServer,
+  moveToTrashOnServer,
+} from '@/lib/email/server-sync';
 import {
   AttachmentNotFoundError,
   AttachmentProviderError,
@@ -330,6 +335,38 @@ describe('mail content account access', () => {
       where: { id: 'email-hidden', account: memberAccountWhere },
     });
     expect(restoreOnServer).not.toHaveBeenCalled();
+    expect(prisma.email.update).not.toHaveBeenCalled();
+  });
+
+  it('permanently deletes a draft instead of moving it to trash', async () => {
+    const draft = {
+      id: 'draft-1',
+      accountId: 'account-1',
+      folder: 'DRAFTS',
+      isDraft: true,
+      uid: null,
+      messageId: '<draft-1@draft.local>',
+      subject: 'Discard me',
+    };
+    (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValue({ id: 'account-1' });
+    (prisma.email.findFirst as jest.Mock).mockResolvedValue(draft);
+    (prisma.emailAccount.findUnique as jest.Mock).mockResolvedValue({
+      id: 'account-1',
+      provider: 'gmail',
+    });
+    (prisma.email.delete as jest.Mock).mockResolvedValue(draft);
+    (deleteOnServer as jest.Mock).mockResolvedValue({ attempted: false, ok: true });
+    (moveToTrashOnServer as jest.Mock).mockResolvedValue({ attempted: false, ok: true });
+
+    const response = await deleteEmail(
+      new Request('http://localhost/api/accounts/account-1/emails/draft-1', {
+        method: 'DELETE',
+      }) as NextRequest,
+      { params: Promise.resolve({ id: 'account-1', emailId: 'draft-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.email.delete).toHaveBeenCalledWith({ where: { id: 'draft-1' } });
     expect(prisma.email.update).not.toHaveBeenCalled();
   });
 

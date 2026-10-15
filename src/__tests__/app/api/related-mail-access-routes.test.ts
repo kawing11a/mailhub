@@ -16,6 +16,8 @@ jest.mock('@/lib/db/prisma', () => ({
     email: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
       updateMany: jest.fn(),
     },
   },
@@ -226,6 +228,30 @@ describe('related mail route account access', () => {
     expect(mockSyncDraftRaw).toHaveBeenCalledWith(
       'access-token',
       Buffer.from('mime-message')
+    );
+  });
+
+  it('stores new drafts in the normalized DRAFTS folder', async () => {
+    (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValue({
+      id: 'account-1',
+      emailAddress: 'sender@example.test',
+    });
+    (prisma.email.create as jest.Mock).mockResolvedValue({ id: 'draft-1' });
+
+    const response = await saveDraft(
+      new Request('http://localhost/api/accounts/account-1/drafts', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject: 'Draft subject', bodyHtml: '<p>Draft</p>' }),
+      }) as NextRequest,
+      { params: Promise.resolve({ id: 'account-1' }) }
+    );
+
+    expect(response.status).toBe(200);
+    expect(prisma.email.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ folder: 'DRAFTS' }),
+      })
     );
   });
 

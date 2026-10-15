@@ -85,6 +85,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
     prisma.email.findMany({
       where,
       orderBy: [
+        { isStarred: 'desc' },
         { receivedAt: 'desc' },
         { createdAt: 'desc' },
       ],

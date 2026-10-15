@@ -1,4 +1,4 @@
-import { parseEmail } from '@/lib/imap/email-parser';
+import { parseEmail, resolveImapReceivedAt } from '@/lib/imap/email-parser';
 
 function rawEmail(subject: string): Buffer {
   return Buffer.from(
@@ -23,5 +23,18 @@ describe('email parser message identifiers', () => {
     ]);
 
     expect(first.messageId).not.toBe(second.messageId);
+  });
+
+  it('prefers the IMAP internal date over the RFC Date header for received time', () => {
+    const headerDate = new Date('2026-08-20T12:00:00.000Z');
+    const internalDate = new Date('2026-08-20T12:10:00.000Z');
+
+    expect(resolveImapReceivedAt(internalDate, headerDate)).toEqual(internalDate);
+  });
+
+  it('falls back to the parsed header date when IMAP has no internal date', () => {
+    const headerDate = new Date('2026-08-20T12:00:00.000Z');
+
+    expect(resolveImapReceivedAt(undefined, headerDate)).toEqual(headerDate);
   });
 });

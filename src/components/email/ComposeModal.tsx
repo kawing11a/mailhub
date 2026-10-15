@@ -31,6 +31,7 @@ import Placeholder from '@tiptap/extension-placeholder';
 import LinkExtension from '@tiptap/extension-link';
 import { ResizableImage, imageDropAndPasteProps } from '@/components/editor/ResizableImageExtension';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { useAccounts } from '@/hooks/useFavouriteMutations';
 import { FromAddressSelect } from './FromAddressSelect';
@@ -64,6 +65,7 @@ const DEFAULT_HEIGHT = 580;
 
 export function ComposeModal() {
   const { isComposeModalOpen, setComposeModalOpen, selectedAccountId, composeDraft, setComposeDraft } = useAccountStore();
+  const queryClient = useQueryClient();
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [bcc, setBcc] = useState('');
@@ -543,6 +545,10 @@ export function ComposeModal() {
     try {
       const identity = await flushDraft();
       if (identity) {
+        // A newly-created draft is not in the cached email list yet. Refresh
+        // all folder/account variants after the local save completes so it can
+        // be reopened immediately from Drafts without a page refresh.
+        void queryClient.invalidateQueries({ queryKey: ['emails'] });
         try {
           const syncRes = await fetch(`/api/accounts/${identity.accountId}/drafts/sync`, {
             method: 'POST',
@@ -562,6 +568,35 @@ export function ComposeModal() {
     } catch (error) {
       console.error('Draft save failed while closing:', error);
       alert('Draft could not be saved. The message will remain open.');
+    } finally {
+      setIsClosing(false);
+    }
+  };
+
+  const handleDiscard = async () => {
+    if (isClosing || isSending) return;
+
+    setIsClosing(true);
+    cancelScheduledSave();
+
+    try {
+      // Flush any in-flight/new draft save first so the API has the definitive
+      // local draft id to delete. This does not sync the draft to the provider.
+      const identity = await flushDraft();
+      if (identity) {
+        const res = await fetch(
+          `/api/accounts/${identity.accountId}/emails/${identity.draftId}`,
+          { method: 'DELETE' }
+        );
+        if (!res.ok) throw new Error('Failed to delete draft');
+
+        await queryClient.invalidateQueries({ queryKey: ['emails'] });
+      }
+
+      resetComposer();
+    } catch (error) {
+      console.error('Draft delete failed:', error);
+      alert('Draft could not be deleted. The message will remain open.');
     } finally {
       setIsClosing(false);
     }
@@ -1079,9 +1114,11 @@ export function ComposeModal() {
           </span>
         </div>
         <button
-          onClick={handleClose}
+          onClick={handleDiscard}
           disabled={isClosing || isSending}
           className="p-2 hover:bg-gray-200 rounded text-gray-500 transition-colors"
+          title="Discard draft"
+          aria-label="Discard draft"
         >
           <Trash2 className="w-4 h-4" />
         </button>

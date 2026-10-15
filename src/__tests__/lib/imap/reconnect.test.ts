@@ -37,11 +37,20 @@ type EventHandler = (...args: any[]) => void | Promise<void>;
 
 function createClient() {
   const handlers = new Map<string, EventHandler[]>();
+  let resolveIdle: ((value: boolean) => void) | undefined;
+  const idle = jest.fn(
+    () =>
+      new Promise<boolean>((resolve) => {
+        resolveIdle = resolve;
+      })
+  );
+  const release = jest.fn(() => resolveIdle?.(true));
 
   return {
     connect: jest.fn().mockResolvedValue(undefined),
     logout: jest.fn().mockResolvedValue(undefined),
-    getMailboxLock: jest.fn().mockResolvedValue({ release: jest.fn() }),
+    getMailboxLock: jest.fn().mockResolvedValue({ release }),
+    idle,
     search: jest.fn().mockResolvedValue([]),
     on: jest.fn((event: string, handler: EventHandler) => {
       handlers.set(event, [...(handlers.get(event) ?? []), handler]);
@@ -88,6 +97,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     (prisma.emailAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
     await (manager as any).registerConnection(account, client, 0);
+    expect(client.idle).toHaveBeenCalledTimes(1);
     await client.emit('error', new Error('socket reset'));
 
     await jest.advanceTimersByTimeAsync(1_000);
@@ -175,13 +185,13 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     expect(jest.getTimerCount()).toBe(0);
   });
 
-  it('starts reconciliation only after initial sync has completed', async () => {
+  it('starts reconciliation even before initial sync completes as a missed-IDLE fallback', async () => {
     const manager = new IMAPConnectionManager();
     const client = createClient();
     const pendingInitialSyncAccount = { ...account, initialSyncCompletedAt: null };
 
     await (manager as any).registerConnection(pendingInitialSyncAccount, client, 0);
-    expect(jest.getTimerCount()).toBe(0);
+    expect(jest.getTimerCount()).toBe(1);
 
     manager.enableReconciliation('account-1');
 

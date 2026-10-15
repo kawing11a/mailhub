@@ -11,6 +11,7 @@ describe('AI LLM Email Summarization Service', () => {
 
   test('returns fallback string when email list is empty', async () => {
     const summary = await generateEmailBatchSummary({
+      organizationId: 'test-organization-id',
       provider: 'openai',
       labelName: 'Invoices',
       emails: [],
@@ -36,6 +37,7 @@ describe('AI LLM Email Summarization Service', () => {
     });
 
     const summary = await generateEmailBatchSummary({
+      organizationId: 'test-organization-id',
       provider: 'openai',
       apiKey: 'sk-test-key',
       modelName: 'gpt-4o-mini',
@@ -74,6 +76,7 @@ describe('AI LLM Email Summarization Service', () => {
     });
 
     const summary = await generateEmailBatchSummary({
+      organizationId: 'test-organization-id',
       provider: 'claude',
       apiKey: 'claude-key',
       modelName: 'claude-3-5-sonnet-20241022',
@@ -109,6 +112,7 @@ describe('AI LLM Email Summarization Service', () => {
     });
 
     const summary = await generateEmailBatchSummary({
+      organizationId: 'test-organization-id',
       provider: 'openai',
       apiKey: 'sk-test-key',
       labelName: 'Support',
@@ -154,6 +158,7 @@ describe('AI LLM Email Summarization Service', () => {
     }));
 
     const summary = await generateEmailBatchSummary({
+      organizationId: 'test-organization-id',
       provider: 'openai',
       apiKey: 'sk-test-key',
       labelName: 'Support',

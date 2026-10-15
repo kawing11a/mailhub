@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { callLlmApi } from '@/lib/ai/llm-client';
+import { AiAccessError, AiUnavailableError, callLlmApi } from '@/lib/ai/llm-client';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { authenticate } from '@/lib/auth/middleware';
 import { assertAccountContextAccess } from '@/lib/accounts/access';
@@ -34,6 +34,8 @@ Your output MUST be a valid JSON object with the following fields:
     const userPrompt = `Subject: ${subject || '(No Subject)'}\n\nEmail Body:\n"""\n${cleanedBody}\n"""`;
 
     const rawResult = await callLlmApi({
+      organizationId: auth.organizationId,
+      userId: auth.userId,
       systemInstruction,
       userPrompt,
       responseFormatJson: true,
@@ -54,6 +56,12 @@ Your output MUST be a valid JSON object with the following fields:
 
     return NextResponse.json({ explanation, status: 'success' });
   } catch (err: any) {
+    if (err instanceof AiUnavailableError) {
+      return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
+    }
+    if (err instanceof AiAccessError) {
+      return NextResponse.json({ error: err.message }, { status: 403 });
+    }
     console.error('AI Explain Route Error:', err);
     return NextResponse.json({ error: err.message || 'Failed to explain email' }, { status: 500 });
   }

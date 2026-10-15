@@ -1,7 +1,11 @@
 import { ImapFlow, FetchMessageObject } from 'imapflow';
 import { prisma } from '@/lib/db/prisma';
 import { decrypt, encrypt } from '@/lib/crypto';
-import { extractImapAttachmentReferences, parseEmail } from './email-parser';
+import {
+  extractImapAttachmentReferences,
+  parseEmail,
+  resolveImapReceivedAt,
+} from './email-parser';
 import { resolveThreadId } from './threading';
 import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
@@ -14,6 +18,7 @@ import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 import { retryAsync } from '@/lib/retry';
 import { IncompleteSyncError, type SyncResult } from '@/lib/sync-result';
 import { runtimeConfig } from '@/lib/runtime-config';
+import { retryImapRequest } from './rate-limit';
 
 interface ConnectionEntry {
   client: ImapFlow;
@@ -25,6 +30,7 @@ interface ConnectionEntry {
   reconciliationInFlight?: boolean;
   reconnectAttempts: number;
   idleLock?: any;
+  idleLoopPromise?: Promise<void>;
   existsHandlerAttached?: boolean;
 }
 
@@ -639,9 +645,10 @@ export class IMAPConnectionManager {
 
       // Start IDLE on INBOX
       await this.startIDLE(account.id);
-      if (account.initialSyncCompletedAt) {
-        this.startReconciliation(account.id, entry);
-      }
+      // IDLE is immediate but can miss events after a provider/network hiccup.
+      // Start the low-frequency fallback even while the historical sync is
+      // pending, so an incomplete backfill cannot leave the account stale.
+      this.startReconciliation(account.id, entry);
     } catch (error: any) {
       console.error(`Failed to connect account ${account.id}:`, error);
       entry.isConnected = false;
@@ -676,6 +683,15 @@ export class IMAPConnectionManager {
     if (!entry || !entry.isConnected) return;
     if (entry.idleLock) return; // Already in IDLE
 
+    // A previous IDLE command may still be unwinding after another IMAP
+    // command interrupted it. Wait for that command before acquiring a new
+    // mailbox lock, otherwise the next IDLE can race the previous DONE.
+    if (entry.idleLoopPromise) {
+      await entry.idleLoopPromise;
+      if (this.connections.get(accountId) !== entry || !entry.isConnected) return;
+      if (entry.idleLock) return;
+    }
+
     const { client } = entry;
 
     try {
@@ -703,8 +719,17 @@ export class IMAPConnectionManager {
           });
         }
 
-        // Enter IDLE — this keeps the connection alive
-        // The exists event above handles new mail notifications
+        // Holding a mailbox lock alone does not issue the IMAP IDLE command.
+        // Keep a real IDLE command running so providers push EXISTS events
+        // immediately instead of waiting for reconciliation.
+        if (typeof (client as ImapFlow & { idle?: () => Promise<boolean> }).idle === 'function') {
+          entry.idleLoopPromise = this.runIdleLoop(accountId, entry).finally(() => {
+            if (this.connections.get(accountId) === entry) {
+              entry.idleLoopPromise = undefined;
+            }
+          });
+        }
+
         console.log(`Entered IDLE for account ${accountId}`);
       } catch (idleError) {
         lock.release();
@@ -748,14 +773,14 @@ export class IMAPConnectionManager {
     this.scheduleReconnect(accountId, entry);
   }
 
-  /** Start the single periodic INBOX reconciliation loop for a connected account. */
+  /** Start the periodic INBOX and Spam/Junk reconciliation loop for an account. */
   private startReconciliation(accountId: string, entry: ConnectionEntry): void {
     if (entry.reconciliationTimer) return;
 
     const intervalMs = runtimeConfig.imapReconcileIntervalMs || 5 * 60 * 1000;
     entry.reconciliationTimer = setInterval(() => {
-      void this.reconcileInbox(accountId).catch((error) => {
-        console.error(`Failed to reconcile IMAP INBOX for account ${accountId}:`, error);
+      void this.reconcileRecentMailboxes(accountId).catch((error) => {
+        console.error(`Failed to reconcile IMAP mailboxes for account ${accountId}:`, error);
       });
     }, intervalMs);
   }
@@ -769,18 +794,18 @@ export class IMAPConnectionManager {
   }
 
   /**
-   * Reconcile recent INBOX messages without opening another IMAP connection.
+   * Reconcile recent INBOX and Spam/Junk messages without opening another IMAP connection.
    * The account mailbox queue keeps this separate from IDLE event fetches and
    * historical sync, while the in-flight marker prevents interval overlap.
    */
-  private async reconcileInbox(accountId: string): Promise<void> {
+  private async reconcileRecentMailboxes(accountId: string): Promise<void> {
     const entry = this.connections.get(accountId);
     if (!entry || !entry.isConnected || entry.reconciliationInFlight) return;
 
     entry.reconciliationInFlight = true;
     try {
       await this.queueAccountMailboxOperation(accountId, () =>
-        this.reconcileInboxForAccount(accountId, entry)
+        this.reconcileMailboxesForAccount(accountId, entry)
       );
     } finally {
       if (this.connections.get(accountId) === entry) {
@@ -789,7 +814,24 @@ export class IMAPConnectionManager {
     }
   }
 
-  private async reconcileInboxForAccount(
+  private async runIdleLoop(accountId: string, entry: ConnectionEntry): Promise<void> {
+    while (
+      this.connections.get(accountId) === entry &&
+      entry.isConnected &&
+      entry.idleLock
+    ) {
+      try {
+        await entry.client.idle();
+      } catch (error) {
+        if (this.connections.get(accountId) === entry && entry.isConnected) {
+          console.error(`IMAP IDLE failed for account ${accountId}:`, error);
+        }
+        break;
+      }
+    }
+  }
+
+  private async reconcileMailboxesForAccount(
     accountId: string,
     expectedEntry: ConnectionEntry
   ): Promise<void> {
@@ -805,23 +847,37 @@ export class IMAPConnectionManager {
       });
       if (!account) return;
 
-      const lock = await entry.client.getMailboxLock('INBOX');
-      try {
-        const cutoff = new Date();
-        const since = account.lastSyncedAt
-          ? new Date(account.lastSyncedAt.getTime() - IMAP_RECONCILIATION_OVERLAP_MS)
-          : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-        const uids = await entry.client.search({ since }, { uid: true });
-        if (Array.isArray(uids) && uids.length > 0) {
-          await this.fetchNewEmailsForAccount(accountId, uids, undefined, 'INBOX', true);
+      const cutoff = new Date();
+      const since = account.lastSyncedAt
+        ? new Date(account.lastSyncedAt.getTime() - IMAP_RECONCILIATION_OVERLAP_MS)
+        : new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+      const mailboxes = await retryImapRequest(accountId, () => entry.client.list());
+
+      for (const mailbox of mailboxes) {
+        const folder = mapSpecialUseToFolder(mailbox);
+        if (folder !== 'INBOX' && folder !== 'SPAM') continue;
+
+        try {
+          const lock = await entry.client.getMailboxLock(mailbox.path);
+          try {
+            const uids = await retryImapRequest(accountId, () =>
+              entry.client.search({ since }, { uid: true })
+            );
+            if (Array.isArray(uids) && uids.length > 0) {
+              await this.fetchNewEmailsForAccount(accountId, uids, undefined, folder, true);
+            }
+          } finally {
+            lock.release();
+          }
+        } catch (error) {
+          console.error(`Failed to reconcile IMAP ${folder} mailbox ${mailbox.path} for account ${accountId}:`, error);
         }
-        await prisma.emailAccount.update({
-          where: { id: accountId },
-          data: { lastSyncedAt: cutoff },
-        });
-      } finally {
-        lock.release();
       }
+
+      await prisma.emailAccount.update({
+        where: { id: accountId },
+        data: { lastSyncedAt: cutoff },
+      });
     } finally {
       if (this.connections.get(accountId) === entry) {
         await this.startIDLE(accountId);
@@ -851,18 +907,68 @@ export class IMAPConnectionManager {
 
       const fetchByUid = Array.isArray(startSeqOrUid);
 
-      const messages = client.fetch(range, {
-        source: true,
-        uid: true,
-        bodyStructure: true,
-      }, { uid: fetchByUid });
-      const iterator = messages[Symbol.asyncIterator]();
+      // First fetch only identifiers and envelopes. Full RFC822 source is much
+      // more expensive, so do not download it for messages already persisted.
+      const discoveredMessages = await this.fetchImapMessagesWithRetry(
+        accountId,
+        range,
+        { uid: true, envelope: true, internalDate: true },
+        { uid: fetchByUid }
+      );
+      if (discoveredMessages.length === 0) return syncResult;
 
+      const messageIds = discoveredMessages
+        .map((message) => normalizeMessageId(message.envelope?.messageId || ''))
+        .filter((messageId): messageId is string => Boolean(messageId));
+      const lookupClauses = [
+        {
+          folder,
+          uid: { in: discoveredMessages.map((message) => BigInt(message.uid)) },
+        },
+        ...(messageIds.length > 0 ? [{ messageId: { in: messageIds } }] : []),
+      ];
+      const existingEmails = await prisma.email.findMany({
+        where: { accountId, OR: lookupClauses },
+        select: { uid: true, messageId: true, folder: true },
+      });
+      const existingUids = new Set(
+        existingEmails
+          .filter((email) => email.folder === folder)
+          .map((email) => (email.uid === null ? null : String(email.uid)))
+          .filter((uid): uid is string => uid !== null)
+      );
+      const existingMessageIds = new Set(
+        existingEmails
+          .filter((email) => email.folder === folder)
+          .map((email) => normalizeMessageId(email.messageId || ''))
+          .filter(Boolean)
+      );
+      const missingMessages = discoveredMessages.filter((message) => {
+        const messageId = normalizeMessageId(message.envelope?.messageId || '');
+        return !existingUids.has(String(message.uid)) && !existingMessageIds.has(messageId);
+      });
+
+      syncResult.processed = discoveredMessages.length - missingMessages.length;
+      if (missingMessages.length === 0) return syncResult;
+
+      const missingUids = missingMessages.map((message) => message.uid);
+      const messages = await this.fetchImapMessagesWithRetry(
+        accountId,
+        missingUids.length > 0 ? missingUids.join(',') : range,
+        {
+          source: true,
+          uid: true,
+          bodyStructure: true,
+          internalDate: true,
+        },
+        { uid: missingUids.length > 0 || fetchByUid }
+      );
+
+      let nextMessageIndex = 0;
       const worker = async () => {
-        while (true) {
-          const { value: message, done } = await iterator.next();
-          if (done) return;
-
+        while (nextMessageIndex < messages.length) {
+          const message = messages[nextMessageIndex];
+          nextMessageIndex += 1;
           try {
             if (await this.persistEmail(accountId, organizationId, message, folder, skipNotifications)) {
               syncResult.processed += 1;
@@ -890,6 +996,21 @@ export class IMAPConnectionManager {
     }
   }
 
+  private async fetchImapMessagesWithRetry(
+    accountId: string,
+    range: string,
+    query: Parameters<ImapFlow['fetch']>[1],
+    options: Parameters<ImapFlow['fetch']>[2]
+  ): Promise<FetchMessageObject[]> {
+    return retryImapRequest(accountId, async () => {
+      const messages: FetchMessageObject[] = [];
+      for await (const message of this.connections.get(accountId)!.client.fetch(range, query, options)) {
+        messages.push(message);
+      }
+      return messages;
+    });
+  }
+
   /**
    * Parse and persist a single email to the database.
    */
@@ -904,6 +1025,7 @@ export class IMAPConnectionManager {
       const rawSource = message.source;
       if (!rawSource) return false;
       const parsed = await parseEmail(rawSource);
+      const receivedAt = resolveImapReceivedAt(message.internalDate, parsed.receivedAt);
 
       // Resolve thread ID (cross-account)
       const threadId = await resolveThreadId(
@@ -919,7 +1041,7 @@ export class IMAPConnectionManager {
 
       // Only check spam for INBOX and non-historical syncs
       if (!skipNotifications && folder === 'INBOX') {
-        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '');
+        const aiCheck = await checkIsHighRisk(parsed.subject || '', parsed.snippet || '', parsed.fromAddress || '', organizationId);
         if (aiCheck.isHighRisk) {
           isHighRisk = true;
           riskReason = aiCheck.reason || 'Flagged by local LLM';
@@ -991,7 +1113,7 @@ export class IMAPConnectionManager {
             inReplyTo: parsed.inReplyTo,
             referencesHeader: parsed.referencesHeader,
             hasAttachments: parsed.hasAttachments,
-            receivedAt: parsed.receivedAt,
+            receivedAt,
             sentAt: parsed.sentAt,
             rawHeaders: parsed.rawHeaders,
           },
@@ -1013,7 +1135,7 @@ export class IMAPConnectionManager {
             inReplyTo: parsed.inReplyTo,
             referencesHeader: parsed.referencesHeader,
             hasAttachments: parsed.hasAttachments,
-            receivedAt: parsed.receivedAt,
+            receivedAt,
             sentAt: parsed.sentAt,
             rawHeaders: parsed.rawHeaders,
           },
@@ -1077,6 +1199,7 @@ export class IMAPConnectionManager {
 
         return email;
       }, { maxWait: 10_000, timeout: 30_000 }));
+      const persistedAt = new Date();
 
       // Add to search indexing queue
       await searchQueue.add('index-email', { emailId: email.id });
@@ -1117,7 +1240,12 @@ export class IMAPConnectionManager {
         }
       }
 
-      console.log(`Persisted email: ${parsed.subject} (${parsed.messageId})`);
+      console.log(
+        `[IMAP] Persisted email: ${parsed.subject} (${parsed.messageId}) ` +
+        `serverReceivedAt=${receivedAt.toISOString()} ` +
+        `persistedAt=${persistedAt.toISOString()} ` +
+        `latencyMs=${Math.max(0, persistedAt.getTime() - receivedAt.getTime())}`
+      );
       return true;
     } catch (error) {
       console.error(`Failed to persist email for account ${accountId}:`, error);
@@ -1217,9 +1345,10 @@ export class IMAPConnectionManager {
    * Fetch historical emails across standard mailboxes.
    */
   async syncHistoricalEmails(accountId: string): Promise<SyncResult> {
-    return this.queueAccountMailboxOperation(accountId, () =>
-      this.syncHistoricalEmailsForAccount(accountId)
-    );
+    // The historical job itself is deliberately not one giant account-queue
+    // item. It yields between mailbox batches so an EXISTS/IDLE fetch can run
+    // promptly for an account whose backfill is still in progress.
+    return this.syncHistoricalEmailsForAccount(accountId);
   }
 
   private async syncHistoricalEmailsForAccount(accountId: string): Promise<SyncResult> {
@@ -1239,7 +1368,9 @@ export class IMAPConnectionManager {
     }
 
     try {
-      const mailboxes = await client.list();
+      const mailboxes = await this.queueAccountMailboxOperation(accountId, () =>
+        retryImapRequest(accountId, () => client.list())
+      );
 
       for (const mailbox of mailboxes) {
         const mappedFolder = mapSpecialUseToFolder(mailbox);
@@ -1247,46 +1378,37 @@ export class IMAPConnectionManager {
 
         console.log(`Syncing ${mailbox.path} -> ${mappedFolder} for account ${accountId}`);
         try {
-          const lock = await client.getMailboxLock(mailbox.path);
-          try {
-            const total = client.mailbox ? client.mailbox.exists : 0;
-            if (total > 0) {
-              const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
-              const uids = await client.search({ since: ninetyDaysAgo }, { uid: true });
+          const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+          const uids = await this.queueAccountMailboxOperation(accountId, () =>
+            this.searchHistoricalMailbox(accountId, entry, mailbox.path, ninetyDaysAgo)
+          );
 
-              if (uids && uids.length > 0) {
-                // Fetch in chunks of 50 to prevent memory exhaustion
-                const CHUNK_SIZE = 50;
-                for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
-                  const chunk = uids.slice(i, i + CHUNK_SIZE);
-                  console.log(`Fetching UIDs chunk ${i} to ${i + chunk.length} from ${mailbox.path} (Total recent: ${uids.length})`);
-                  try {
-                    const chunkResult = await this.fetchNewEmailsForAccount(
-                      accountId,
-                      chunk,
-                      undefined,
-                      mappedFolder,
-                      true
-                    );
-                    syncResult.processed += chunkResult.processed;
-                    syncResult.failed += chunkResult.failed;
-                  } catch (error) {
-                    console.error(
-                      `Failed to sync chunk ${i} from ${mailbox.path} for account ${accountId}:`,
-                      error
-                    );
-                    if (error instanceof IncompleteSyncError) {
-                      syncResult.processed += error.result.processed;
-                      syncResult.failed += error.result.failed;
-                    } else {
-                      syncResult.failed += 1;
-                    }
-                  }
+          if (uids && uids.length > 0) {
+            // Small batches bound the time an incremental EXISTS fetch waits
+            // behind historical persistence for this account.
+            const CHUNK_SIZE = 10;
+            for (let i = 0; i < uids.length; i += CHUNK_SIZE) {
+              const chunk = uids.slice(i, i + CHUNK_SIZE);
+              console.log(`Fetching UIDs chunk ${i} to ${i + chunk.length} from ${mailbox.path} (Total recent: ${uids.length})`);
+              try {
+                const chunkResult = await this.queueAccountMailboxOperation(accountId, () =>
+                  this.fetchHistoricalChunk(accountId, entry, mailbox.path, chunk, mappedFolder)
+                );
+                syncResult.processed += chunkResult.processed;
+                syncResult.failed += chunkResult.failed;
+              } catch (error) {
+                console.error(
+                  `Failed to sync chunk ${i} from ${mailbox.path} for account ${accountId}:`,
+                  error
+                );
+                if (error instanceof IncompleteSyncError) {
+                  syncResult.processed += error.result.processed;
+                  syncResult.failed += error.result.failed;
+                } else {
+                  syncResult.failed += 1;
                 }
               }
             }
-          } finally {
-            lock.release();
           }
         } catch (err) {
           console.error(`Failed to sync mailbox ${mailbox.path} for account ${accountId}:`, err);
@@ -1306,6 +1428,50 @@ export class IMAPConnectionManager {
     }
 
     return syncResult;
+  }
+
+  private async searchHistoricalMailbox(
+    accountId: string,
+    expectedEntry: ConnectionEntry,
+    mailboxPath: string,
+    since: Date
+  ): Promise<number[]> {
+    const entry = this.connections.get(accountId);
+    if (entry !== expectedEntry || !entry.isConnected) return [];
+
+    this.releaseIdle(entry);
+    const lock = await entry.client.getMailboxLock(mailboxPath);
+    try {
+      const result = await retryImapRequest(accountId, () =>
+        entry.client.search({ since }, { uid: true })
+      );
+      return result === false ? [] : result;
+    } finally {
+      lock.release();
+      await this.startIDLE(accountId);
+    }
+  }
+
+  private async fetchHistoricalChunk(
+    accountId: string,
+    expectedEntry: ConnectionEntry,
+    mailboxPath: string,
+    uids: number[],
+    folder: string
+  ): Promise<SyncResult> {
+    const entry = this.connections.get(accountId);
+    if (entry !== expectedEntry || !entry.isConnected) {
+      throw new Error(`IMAP connection changed during historical sync for account ${accountId}`);
+    }
+
+    this.releaseIdle(entry);
+    const lock = await entry.client.getMailboxLock(mailboxPath);
+    try {
+      return await this.fetchNewEmailsForAccount(accountId, uids, undefined, folder, true);
+    } finally {
+      lock.release();
+      await this.startIDLE(accountId);
+    }
   }
 
   /**

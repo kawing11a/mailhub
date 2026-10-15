@@ -73,6 +73,13 @@ async function processSyncJob(
       }
       
       if (account.provider === 'gmail') {
+        // Keep incremental polling alive even when the historical backfill
+        // fails (for example because Gmail temporarily throttles the API).
+        // The backfill can be retried independently without stopping new mail
+        // from being collected.
+        console.log(`Worker: Starting Gmail polling for account ${accountId}`);
+        await gmailSyncManager.initializeAccount(account as any);
+
         const result = await gmailSyncManager.syncHistoricalEmails(accountId);
         if (result.failed > 0) {
           throw new IncompleteSyncError(accountId, result);
@@ -105,10 +112,7 @@ async function processSyncJob(
         }
       });
 
-      if (account.provider === 'gmail') {
-        console.log(`Worker: Starting Gmail polling for account ${accountId} after historical sync`);
-        await gmailSyncManager.initializeAccount(account as any);
-      } else {
+      if (account.provider !== 'gmail') {
         imapManager.enableReconciliation(accountId);
       }
       
