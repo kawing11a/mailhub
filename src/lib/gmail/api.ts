@@ -185,12 +185,16 @@ function hasContentIdHeader(part: GmailMessagePart): boolean {
 
 export function isGmailAttachmentPart(part: GmailMessagePart): boolean {
   const mimeType = (part.mimeType ?? '').toLowerCase();
-  const isCalendarPart = mimeType === 'text/calendar' || mimeType === 'text/x-vcalendar';
+  const isCalendarPart =
+    mimeType.includes('calendar') ||
+    mimeType.includes('ical') ||
+    mimeType.includes('ics') ||
+    mimeType.includes('vcs');
 
-  // Calendar invitations are text MIME parts, but Gmail exposes them as
-  // attachment parts when they have a filename or attachment ID.
+  // Calendar invitations can be inline Gmail payload data or separate
+  // attachment blobs, and may not have a filename.
   if (isCalendarPart) {
-    return Boolean(part.filename || part.body?.attachmentId);
+    return Boolean(part.filename || part.body?.attachmentId || part.body?.data);
   }
 
   if (isTextPart(part)) return false;
