@@ -17,6 +17,15 @@ export interface IcsEvent {
   meetingUrl?: string;
 }
 
+const TORONTO_TIME_ZONE = 'America/Toronto';
+
+const WINDOWS_TIME_ZONE_ALIASES: Record<string, string> = {
+  'Eastern Standard Time': 'America/Toronto',
+  'US/Eastern': 'America/Toronto',
+  'Canada/Eastern': 'America/Toronto',
+  'Toronto Standard Time': 'America/Toronto',
+};
+
 export function isCalendarAttachment(att: { filename?: string | null; contentType?: string | null }): boolean {
   if (!att) return false;
   const filename = att.filename?.toLowerCase() || '';
@@ -193,25 +202,88 @@ export function parseIcsDate(val: string, params: Record<string, string> = {}): 
   if (!val) return null;
   const clean = val.trim().replace(/^["']|["']$/g, '');
 
-  // Format: YYYYMMDDTHHMMSSZ or YYYYMMDDTHHMMSS
-  const m = clean.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  // Format: YYYYMMDDTHHMM[SS][Z]
+  const m = clean.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})?(Z)?$/);
   if (m) {
-    const [_, y, mon, d, h, min, s, isUtc] = m;
+    const [, y, mon, d, h, min, seconds, isUtc] = m;
     if (isUtc) {
-      return new Date(Date.UTC(+y, +mon - 1, +d, +h, +min, +s));
+      return new Date(Date.UTC(+y, +mon - 1, +d, +h, +min, +(seconds || 0)));
     }
-    return new Date(+y, +mon - 1, +d, +h, +min, +s);
+    return dateFromWallClockInZone(
+      +y,
+      +mon,
+      +d,
+      +h,
+      +min,
+      +(seconds || 0),
+      getIanaTimeZone(params.TZID)
+    );
   }
 
   // Format: YYYYMMDD (Date only)
   const mDate = clean.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (mDate) {
     const [_, y, mon, d] = mDate;
-    return new Date(+y, +mon - 1, +d);
+    return dateFromWallClockInZone(+y, +mon, +d, 0, 0, 0, getIanaTimeZone(params.TZID));
   }
 
   const parsed = new Date(clean);
   return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getIanaTimeZone(timeZone: string | undefined): string {
+  const requestedZone = timeZone?.trim().replace(/^"|"$/g, '');
+  if (!requestedZone) return TORONTO_TIME_ZONE;
+
+  const aliasedZone = WINDOWS_TIME_ZONE_ALIASES[requestedZone] || requestedZone;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: aliasedZone });
+    return aliasedZone;
+  } catch {
+    return TORONTO_TIME_ZONE;
+  }
+}
+
+function dateFromWallClockInZone(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  timeZone: string
+): Date {
+  const wallClockTimestamp = Date.UTC(year, month - 1, day, hour, minute, second);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+
+  let timestamp = wallClockTimestamp;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = formatter.formatToParts(new Date(timestamp));
+    const values = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
+    const representedTimestamp = Date.UTC(
+      values.year,
+      values.month - 1,
+      values.day,
+      values.hour,
+      values.minute,
+      values.second
+    );
+    const offset = representedTimestamp - timestamp;
+    const adjustedTimestamp = wallClockTimestamp - offset;
+    if (adjustedTimestamp === timestamp) break;
+    timestamp = adjustedTimestamp;
+  }
+
+  return new Date(timestamp);
 }
 
 function extractMeetingUrl(text: string): string | undefined {
@@ -260,11 +332,11 @@ export function parseMeetingFromEmail(email: {
 
   if (dateTimeMatch) {
     const [_, datePart, startTimePart, endTimePart] = dateTimeMatch;
-    const parsedStart = new Date(`${datePart} ${startTimePart}`);
+    const parsedStart = parseEmailMeetingDateTime(datePart, startTimePart);
     if (!isNaN(parsedStart.getTime())) {
       startDate = parsedStart;
       if (endTimePart) {
-        const parsedEnd = new Date(`${datePart} ${endTimePart}`);
+        const parsedEnd = parseEmailMeetingDateTime(datePart, endTimePart);
         if (!isNaN(parsedEnd.getTime())) {
           endDate = parsedEnd;
         }
@@ -291,4 +363,24 @@ export function parseMeetingFromEmail(email: {
     meetingUrl,
     attendees: [],
   };
+}
+
+function parseEmailMeetingDateTime(datePart: string, timePart: string): Date {
+  const dateMatch = datePart.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+  const timeMatch = timePart.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!dateMatch || !timeMatch) return new Date(Number.NaN);
+
+  const month = new Date(`${dateMatch[1]} 1, 2000`).getMonth() + 1;
+  let hour = Number(timeMatch[1]) % 12;
+  if (timeMatch[3].toUpperCase() === 'PM') hour += 12;
+
+  return dateFromWallClockInZone(
+    Number(dateMatch[3]),
+    month,
+    Number(dateMatch[2]),
+    hour,
+    Number(timeMatch[2]),
+    0,
+    TORONTO_TIME_ZONE
+  );
 }

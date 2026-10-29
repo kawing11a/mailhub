@@ -293,20 +293,20 @@ Pull and run the official pre-built MailHub Docker image directly from Docker Hu
 
 ```bash
 # Pull this release from Docker Hub (`latest` points to the same image)
-docker pull kawing11a/mailhub:0.1.8
+docker pull kawing11a/mailhub:0.1.9
 
 # Run MailHub web container (using your .env file)
 docker run -d \
   --name mailhub-web \
   -p 3000:3000 \
   --env-file .env \
-  kawing11a/mailhub:0.1.8
+  kawing11a/mailhub:0.1.9
 
 # Run background worker container
 docker run -d \
   --name mailhub-worker \
   --env-file .env \
-  kawing11a/mailhub:0.1.8 \
+  kawing11a/mailhub:0.1.9 \
   npm run worker
 ```
 
@@ -320,7 +320,7 @@ docker compose up -d --build
 
 The Dockerfile uses a multi-stage build (`deps` → `build` → `runner`) producing a lean production image. Workers run as separate containers using the same image with `npm run worker` as the entrypoint.
 
-When upgrading an existing deployment, run `npx prisma migrate deploy` before starting the `0.1.8` web and worker containers.
+When upgrading an existing deployment, run `npx prisma migrate deploy` before starting the `0.1.9` web and worker containers.
 
 ## Project Structure
 

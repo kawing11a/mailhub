@@ -1,9 +1,29 @@
 'use client';
 
 import { IcsEvent } from '@/lib/calendar/ics-parser';
-import { format } from 'date-fns';
 import { Clock, MapPin, ChevronDown, ChevronUp, Video, Calendar, User } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+const TORONTO_TIME_ZONE = 'America/Toronto';
+
+function getTorontoClockParts(date: Date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TORONTO_TIME_ZONE,
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+
+  return {
+    hour: Number(parts.find((part) => part.type === 'hour')?.value ?? 0),
+    minute: Number(parts.find((part) => part.type === 'minute')?.value ?? 0),
+  };
+}
+
+function formatTorontoHour(hour: number): string {
+  const displayHour = hour % 12 || 12;
+  return `${displayHour} ${hour < 12 ? 'AM' : 'PM'}`;
+}
 
 interface CalendarEventTimetableProps {
   event: IcsEvent;
@@ -15,10 +35,21 @@ export function CalendarEventTimetable({ event }: CalendarEventTimetableProps) {
   // Format date header: "Wednesday, July 29, 2026 3:00 PM-3:30 PM"
   const formattedDate = useMemo(() => {
     try {
-      const dayStr = format(event.startDate, 'EEEE, MMMM d, yyyy');
-      const startStr = format(event.startDate, 'h:mm a');
-      const endStr = format(event.endDate, 'h:mm a');
-      return `${dayStr} ${startStr}-${endStr}`;
+      const dayStr = new Intl.DateTimeFormat('en-US', {
+        timeZone: TORONTO_TIME_ZONE,
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      }).format(event.startDate);
+      const timeFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: TORONTO_TIME_ZONE,
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      const startStr = timeFormatter.format(event.startDate);
+      const endStr = timeFormatter.format(event.endDate);
+      return `${dayStr} ${startStr}-${endStr} (Toronto time)`;
     } catch {
       return 'Calendar Event';
     }
@@ -26,8 +57,10 @@ export function CalendarEventTimetable({ event }: CalendarEventTimetableProps) {
 
   // Timetable grid layout calculation
   const { hours, startHour, topOffset, blockHeight } = useMemo(() => {
-    const startH = event.startDate.getHours();
-    const endH = event.endDate.getHours();
+    const startTime = getTorontoClockParts(event.startDate);
+    const endTime = getTorontoClockParts(event.endDate);
+    const startH = startTime.hour;
+    const endH = endTime.hour;
 
     // Display range: 1 hour before start hour, up to 1-2 hours after end hour
     const startHour = Math.max(0, startH - 1);
@@ -40,7 +73,7 @@ export function CalendarEventTimetable({ event }: CalendarEventTimetableProps) {
 
     const HOUR_HEIGHT = 54; // px height per hour in timetable
 
-    const startMinutesFromBase = (startH - startHour) * 60 + event.startDate.getMinutes();
+    const startMinutesFromBase = (startH - startHour) * 60 + startTime.minute;
     const topPx = (startMinutesFromBase / 60) * HOUR_HEIGHT;
 
     const durationMinutes = Math.max(15, (event.endDate.getTime() - event.startDate.getTime()) / (1000 * 60));
@@ -104,8 +137,7 @@ export function CalendarEventTimetable({ event }: CalendarEventTimetableProps) {
             {/* Left Hour Scale */}
             <div className="w-14 sm:w-16 border-r border-gray-200 bg-gray-50/40 select-none flex-shrink-0 relative">
               {hours.map((h) => {
-                const labelDate = new Date(2000, 0, 1, h, 0, 0);
-                const labelStr = format(labelDate, 'h a');
+                const labelStr = formatTorontoHour(h);
                 return (
                   <div
                     key={h}
