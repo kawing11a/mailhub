@@ -207,9 +207,12 @@ export async function getAccountStats(accountId: string, auth: AccountAuth) {
   );
   const where = { account: accountWhere };
 
-  const [unreadCount, totalCount, lastSynced] = await Promise.all([
+  const [unreadCount, spamUnreadCount, totalCount, lastSynced] = await Promise.all([
     prisma.email.count({
       where: { ...where, folder: 'INBOX', isRead: false },
+    }),
+    prisma.email.count({
+      where: { ...where, folder: { in: ['SPAM', 'JUNK'] }, isRead: false },
     }),
     prisma.email.count({ where }),
     prisma.emailAccount.findFirst({
@@ -221,6 +224,7 @@ export async function getAccountStats(accountId: string, auth: AccountAuth) {
 
   return {
     unreadCount,
+    spamUnreadCount,
     totalCount,
     lastSyncedAt: lastSynced?.lastSyncedAt,
   };

@@ -64,11 +64,16 @@ function isInlineNonTextContent(node: MessageStructureObject): boolean {
 }
 
 function isImapAttachmentNode(node: MessageStructureObject): boolean {
+  const contentType = node.type.toLowerCase();
+  const isCalendarPart =
+    contentType === 'text/calendar' || contentType === 'text/x-vcalendar';
+
   return (
     !!node.part &&
     (
       node.disposition?.toLowerCase() === 'attachment' ||
       hasFilename(node) ||
+      isCalendarPart ||
       isInlineNonTextContent(node)
     )
   );

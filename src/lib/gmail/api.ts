@@ -184,6 +184,15 @@ function hasContentIdHeader(part: GmailMessagePart): boolean {
 }
 
 export function isGmailAttachmentPart(part: GmailMessagePart): boolean {
+  const mimeType = (part.mimeType ?? '').toLowerCase();
+  const isCalendarPart = mimeType === 'text/calendar' || mimeType === 'text/x-vcalendar';
+
+  // Calendar invitations are text MIME parts, but Gmail exposes them as
+  // attachment parts when they have a filename or attachment ID.
+  if (isCalendarPart) {
+    return Boolean(part.filename || part.body?.attachmentId);
+  }
+
   if (isTextPart(part)) return false;
 
   return Boolean(

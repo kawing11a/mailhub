@@ -777,14 +777,20 @@ export function AccountsSection() {
           {FOLDERS.map((folder) => {
             const isActive = selectedFolder === folder.id;
             const Icon = folder.icon;
-            const unread =
-              folder.id === 'INBOX' && stats?.unreadCount > 0 ? ` (${stats.unreadCount})` : '';
+            const unreadCount =
+              folder.id === 'INBOX'
+                ? stats?.unreadCount ?? 0
+                : folder.id === 'SPAM'
+                  ? stats?.spamUnreadCount ?? 0
+                  : 0;
+            const hasUnread = unreadCount > 0;
 
             return (
               <button
                 key={folder.id}
                 onClick={() => handleFolderSelect(folder.id)}
-                title={`${folder.name}${unread}`}
+                title={`${folder.name}${hasUnread ? ` (${unreadCount} unread)` : ''}`}
+                aria-label={`${folder.name}${hasUnread ? `, ${unreadCount} unread` : ''}`}
                 className={clsx(
                   'relative flex h-12 w-12 items-center justify-center rounded-md transition-all',
                   isActive
@@ -793,17 +799,16 @@ export function AccountsSection() {
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {folder.id === 'INBOX' && stats?.unreadCount > 0 && (
+                {hasUnread && (
                   <span
                     className={clsx(
-                      'absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold ring-2',
+                      'absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2',
                       isActive
-                        ? 'bg-white text-accent-600 ring-accent-600'
-                        : 'bg-accent-600 text-white ring-white'
+                        ? 'ring-accent-600'
+                        : 'ring-white'
                     )}
-                  >
-                    {stats.unreadCount > 99 ? '99+' : stats.unreadCount}
-                  </span>
+                    aria-hidden="true"
+                  />
                 )}
               </button>
             );

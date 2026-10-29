@@ -5,6 +5,17 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-10-29
+
+### Added
+- Unread indicators for Inbox and Spam/Junk folders.
+
+### Fixed
+- Gmail and IMAP now preserve calendar MIME attachment references so event details load from the invitation.
+
+### Changed
+- Updated Docker Compose and Docker Hub examples to use `kawing11a/mailhub:0.1.7`.
+
 ## [0.1.6] - 2026-10-15
 
 ### Added
