@@ -21,6 +21,14 @@ const TORONTO_TIME_ZONE = 'America/Toronto';
 
 const WINDOWS_TIME_ZONE_ALIASES: Record<string, string> = {
   'Eastern Standard Time': 'America/Toronto',
+  'Central Standard Time': 'America/Chicago',
+  'Mountain Standard Time': 'America/Denver',
+  'US Mountain Standard Time': 'America/Phoenix',
+  'Pacific Standard Time': 'America/Los_Angeles',
+  'Alaskan Standard Time': 'America/Anchorage',
+  'Hawaiian Standard Time': 'Pacific/Honolulu',
+  'Atlantic Standard Time': 'America/Halifax',
+  'Newfoundland Standard Time': 'America/St_Johns',
   'US/Eastern': 'America/Toronto',
   'Canada/Eastern': 'America/Toronto',
   'Toronto Standard Time': 'America/Toronto',
