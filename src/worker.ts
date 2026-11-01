@@ -47,7 +47,6 @@ async function bootstrap() {
   console.log(`Bootstrapping Worker [Partition: ${WORKER_PARTITION}]`);
 
   // 1. Initialize dependencies
-  console.log('API KEY BEING USED:', process.env.MEILISEARCH_API_KEY);
   await initMeilisearch();
   const systemPreferences = await getSystemPreferences();
   await configureEmailEmbedder(systemPreferences.semanticSearchEnabled);
