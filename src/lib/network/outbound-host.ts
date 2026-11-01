@@ -142,6 +142,137 @@ function isPublicIpAddress(address: string): boolean {
   return !IPV6_BLOCKS.some(([base, prefix]) => ipv6InSubnet(parsed, base, prefix));
 }
 
+interface Ipv4Cidr {
+  family: 4;
+  base: number;
+  prefix: number;
+}
+
+interface Ipv6Cidr {
+  family: 6;
+  base: bigint;
+  prefix: number;
+}
+
+type IpCidr = Ipv4Cidr | Ipv6Cidr;
+
+function ipv4Mask(prefix: number): number {
+  return prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+}
+
+function parseIpv4Cidr(value: string): Ipv4Cidr | null {
+  const [address, prefixText, extra] = value.trim().split('/');
+  if (extra !== undefined) return null;
+  const parsed = ipv4ToNumber(address.trim());
+  const normalizedPrefix = prefixText?.trim();
+  if (normalizedPrefix !== undefined && !/^\d{1,3}$/.test(normalizedPrefix)) return null;
+  const prefix = normalizedPrefix === undefined ? 32 : Number(normalizedPrefix);
+  if (parsed === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+    return null;
+  }
+  const mask = ipv4Mask(prefix);
+  return { family: 4, base: (parsed & mask) >>> 0, prefix };
+}
+
+function parseIpv6Cidr(value: string): Ipv6Cidr | null {
+  const [address, prefixText, extra] = value.trim().split('/');
+  if (extra !== undefined) return null;
+  const parsed = parseIpv6(address.trim());
+  const normalizedPrefix = prefixText?.trim();
+  if (normalizedPrefix !== undefined && !/^\d{1,3}$/.test(normalizedPrefix)) return null;
+  const prefix = normalizedPrefix === undefined ? 128 : Number(normalizedPrefix);
+  if (parsed === null || !Number.isInteger(prefix) || prefix < 0 || prefix > 128) {
+    return null;
+  }
+  const shift = BigInt(128 - prefix);
+  return { family: 6, base: (parsed >> shift) << shift, prefix };
+}
+
+function parseCidr(value: string): IpCidr | null {
+  const address = value.trim().split('/')[0].trim();
+  const family = isIP(address);
+  if (family === 4) return parseIpv4Cidr(value);
+  if (family === 6) return parseIpv6Cidr(value);
+  return null;
+}
+
+/** Only allow CIDRs that are fully inside a reserved/non-public range. */
+function isReservedCidr(cidr: IpCidr): boolean {
+  if (cidr.family === 4) {
+    return IPV4_BLOCKS.some(([base, prefix]) => {
+      if (cidr.prefix < prefix) return false;
+      const mask = ipv4Mask(prefix);
+      return ((cidr.base & mask) >>> 0) === ((base & mask) >>> 0);
+    });
+  }
+  return IPV6_BLOCKS.some(
+    ([base, prefix]) => cidr.prefix >= prefix && ipv6InSubnet(cidr.base, base, prefix)
+  );
+}
+
+function cidrContains(cidr: IpCidr, address: string): boolean {
+  if (cidr.family === 4) {
+    const parsed = ipv4ToNumber(address);
+    if (parsed === null) return false;
+    return ((parsed & ipv4Mask(cidr.prefix)) >>> 0) === cidr.base;
+  }
+  const parsed = parseIpv6(address);
+  return parsed !== null && ipv6InSubnet(parsed, cidr.base, cidr.prefix);
+}
+
+function allAddressesInCidrs(
+  addresses: Array<{ address: string; family: number }>,
+  cidrs: IpCidr[]
+): boolean {
+  if (addresses.length === 0 || cidrs.length === 0) return false;
+  return addresses.every(({ address, family }) => {
+    if (family !== 4 && family !== 6) return false;
+    return cidrs.some((cidr) => cidr.family === family && cidrContains(cidr, address));
+  });
+}
+
+/**
+ * Exact hostname -> reserved CIDR(s). Repeated entries for the same host merge.
+ * Format: HOST=CIDR[,HOST=CIDR]. Covers LAN mail servers and transparent-proxy
+ * fake-IP ranges. IP literals and non-reserved CIDRs are ignored.
+ */
+function parseHostAllowlist(value: string | undefined): Map<string, IpCidr[]> {
+  const allowlist = new Map<string, IpCidr[]>();
+  for (const rawEntry of (value ?? '').split(',')) {
+    const entry = rawEntry.trim();
+    if (!entry) continue;
+    const separator = entry.indexOf('=');
+    if (separator <= 0) continue;
+    const host = entry
+      .slice(0, separator)
+      .trim()
+      .replace(/\.$/, '')
+      .toLowerCase();
+    if (!host || isIP(host) !== 0) continue;
+    const cidr = parseCidr(entry.slice(separator + 1));
+    if (!cidr || !isReservedCidr(cidr)) continue;
+    const current = allowlist.get(host) ?? [];
+    current.push(cidr);
+    allowlist.set(host, current);
+  }
+  return allowlist;
+}
+
+/**
+ * Local mail-server / transparent-proxy exception. The hostname must match
+ * exactly and every resolved address must be in its reserved CIDR(s). Literal
+ * IPs stay blocked.
+ */
+function isAllowedHost(
+  addresses: Array<{ address: string; family: number }>,
+  hostname: string,
+  literalFamily: number
+): boolean {
+  if (literalFamily !== 0) return false;
+  const cidrs = parseHostAllowlist(process.env.OUTBOUND_HOST_ALLOWLIST).get(hostname);
+  return !!cidrs && allAddressesInCidrs(addresses, cidrs);
+}
+
 export async function resolveSafeOutboundHost(
   host: string,
   lookup: OutboundHostLookup = dnsLookup as OutboundHostLookup
@@ -164,7 +295,7 @@ export async function resolveSafeOutboundHost(
     ({ address, family }) =>
       (family !== 4 && family !== 6) || !isPublicIpAddress(address)
   );
-  if (unsafe) {
+  if (unsafe && !isAllowedHost(addresses, hostname, literalFamily)) {
     throw new UnsafeOutboundHostError(
       `${hostname} resolves to a non-public address (${unsafe.address})`
     );
