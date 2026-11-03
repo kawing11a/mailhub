@@ -5,6 +5,18 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-11-03
+
+### Added
+- Dashboard account and email analytics, with admin-only runtime and queue health widgets.
+
+### Changed
+- Dashboard summaries no longer return or display message-level content.
+- Docker Compose and Docker Hub examples now use `kawing11a/mailhub:0.1.11`.
+
+### Fixed
+- Unread messages in Spam use the same unread row styling as Inbox messages.
+
 ## [0.1.10] - 2026-10-29
 
 ### Fixed

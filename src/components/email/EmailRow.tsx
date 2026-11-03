@@ -35,7 +35,7 @@ export function EmailRow({
   onToggleStar,
   showAccountBadge = true,
 }: EmailRowProps) {
-  const isUnread = email.folder === 'INBOX' && !email.isRead;
+  const isUnread = (email.folder === 'INBOX' || email.folder === 'SPAM') && !email.isRead;
   const { showAvatars, timeFormat } = useUIStore();
   const snippet = typeof email.snippet === 'string' ? email.snippet.trim() : '';
 
