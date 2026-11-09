@@ -1,11 +1,17 @@
 import { prisma } from '@/lib/db/prisma';
 import { getSystemPreferences } from '@/lib/settings/system-preferences';
 
-export type AiUnavailableReason = 'disabled' | 'provider_unavailable';
+export type AiUnavailableReason = 'disabled' | 'provider_unavailable' | 'timeout';
 
 export class AiUnavailableError extends Error {
   constructor(public readonly reason: AiUnavailableReason) {
-    super(reason === 'disabled' ? 'AI is disabled for this organization or member' : 'AI provider is unavailable');
+    super(
+      reason === 'disabled'
+        ? 'AI is disabled for this organization'
+        : reason === 'timeout'
+          ? 'AI provider request timed out'
+          : 'AI provider is unavailable'
+    );
     this.name = 'AiUnavailableError';
   }
 }
@@ -27,9 +33,10 @@ export interface LlmCallArgs {
   systemInstruction: string;
   userPrompt: string;
   responseFormatJson?: boolean;
+  timeoutMs?: number;
 }
 
-const PROVIDER_TIMEOUT_MS = 20_000;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 20_000;
 
 export async function getResolvedAiConfig(organizationId: string, userId?: string) {
   const [systemPreferences, setting, member] = await Promise.all([
@@ -117,7 +124,7 @@ export async function callLlmApi(args: LlmCallArgs): Promise<string> {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(PROVIDER_TIMEOUT_MS),
+      signal: AbortSignal.timeout(args.timeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS),
     });
     if (!res.ok) throw new AiUnavailableError('provider_unavailable');
 
@@ -131,6 +138,9 @@ export async function callLlmApi(args: LlmCallArgs): Promise<string> {
     return content;
   } catch (error) {
     if (error instanceof AiUnavailableError) throw error;
+    if (error instanceof Error && error.name === 'TimeoutError') {
+      throw new AiUnavailableError('timeout');
+    }
     throw new AiUnavailableError('provider_unavailable');
   }
 }

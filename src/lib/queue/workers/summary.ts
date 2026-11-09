@@ -285,6 +285,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
 
     let summaryText: string;
     let usedFallback = !aiEnabled;
+    let fallbackReason: AiUnavailableError['reason'] | null = aiEnabled ? null : 'disabled';
     if (aiEnabled) {
       try {
         summaryText = await generateEmailBatchSummary({
@@ -300,6 +301,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       } catch (error) {
         if (!(error instanceof AiUnavailableError)) throw error;
         usedFallback = true;
+        fallbackReason = error.reason;
         summaryText = generateFallbackEmailBatchDigest({ labelName, emails: emailsToSummarize });
       }
     } else {
@@ -310,7 +312,13 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       id: 'step-ai',
       step: 'AI_SUMMARIZING',
       title: usedFallback ? 'Basic summary completed' : 'AI synthesis completed',
-      detail: `Generated ${usedFallback ? 'basic' : 'AI'} summary (${summaryText.length} characters).`,
+      detail: usedFallback
+        ? fallbackReason === 'timeout'
+          ? `The AI provider exceeded the 180-second timeout; generated a basic summary (${summaryText.length} characters).`
+          : fallbackReason === 'disabled'
+            ? `AI is disabled; generated a basic summary (${summaryText.length} characters).`
+            : `The AI provider was unavailable; generated a basic summary (${summaryText.length} characters).`
+        : `Generated AI summary (${summaryText.length} characters).`,
       status: 'completed',
     });
 

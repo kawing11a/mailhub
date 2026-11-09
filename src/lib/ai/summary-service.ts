@@ -1,5 +1,7 @@
 import { callLlmApi } from '@/lib/ai/llm-client';
 
+const SUMMARY_PROVIDER_TIMEOUT_MS = 180_000;
+
 export interface EmailForSummary {
   id: string;
   subject?: string | null;
@@ -124,6 +126,7 @@ export async function generateEmailBatchSummary(
         modelName,
         systemInstruction,
         userPrompt: chunkUserPrompt,
+        timeoutMs: SUMMARY_PROVIDER_TIMEOUT_MS,
       });
       chunkSummaries.push(`### Batch #${i + 1} Summary:\n${chunkSummary}`);
     }
@@ -140,6 +143,7 @@ export async function generateEmailBatchSummary(
       modelName,
       systemInstruction,
       userPrompt: reduceUserPrompt,
+      timeoutMs: SUMMARY_PROVIDER_TIMEOUT_MS,
     });
   }
 
@@ -155,5 +159,6 @@ export async function generateEmailBatchSummary(
     modelName,
     systemInstruction,
     userPrompt,
+    timeoutMs: SUMMARY_PROVIDER_TIMEOUT_MS,
   });
 }
