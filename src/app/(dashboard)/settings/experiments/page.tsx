@@ -6,32 +6,13 @@ import toast from 'react-hot-toast';
 import { SpamSettingsTab } from '@/components/settings/SpamSettingsTab';
 import {
   FlaskConical,
-  Bot,
   Bell,
   Plus,
   Trash2,
   Send,
   Loader2,
-  CheckCircle2,
-  XCircle,
-  Key,
-  Globe,
-  MessageSquare,
-  Eye,
-  EyeOff,
 } from 'lucide-react';
 import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
-
-interface ExperimentSettings {
-  isAiEnabled: boolean;
-  systemAiEnabled: boolean;
-  aiProvider: string;
-  aiApiKeyMasked: string;
-  hasApiKey: boolean;
-  aiBaseUrl?: string | null;
-  aiModelName: string;
-  aiCustomPrompt?: string | null;
-}
 
 interface WebhookChannel {
   id: string;
@@ -44,9 +25,6 @@ interface WebhookChannel {
 
 export default function ExperimentsSettingsPage() {
   const queryClient = useQueryClient();
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [isAiEnabledDraft, setIsAiEnabledDraft] = useState<boolean | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [testingWebhookId, setTestingWebhookId] = useState<string | null>(null);
 
@@ -80,17 +58,6 @@ export default function ExperimentsSettingsPage() {
 
   const isAdmin = authData?.role === 'admin';
 
-  // Fetch Settings
-  const { data: settings, isLoading: isLoadingSettings } = useQuery<ExperimentSettings>({
-    queryKey: ['experiment-settings'],
-    enabled: isAdmin,
-    queryFn: async () => {
-      const res = await fetch('/api/experiments/settings');
-      if (!res.ok) throw new Error('Failed to load experiment settings');
-      return res.json();
-    },
-  });
-
   // Fetch Webhooks
   const { data: webhooks = [], isLoading: isLoadingWebhooks } = useQuery<WebhookChannel[]>({
     queryKey: ['notification-webhooks'],
@@ -99,29 +66,6 @@ export default function ExperimentsSettingsPage() {
       const res = await fetch('/api/experiments/webhooks');
       if (!res.ok) throw new Error('Failed to load webhooks');
       return res.json();
-    },
-  });
-
-  // Update Settings Mutation
-  const updateSettingsMutation = useMutation({
-    mutationFn: async (updatedData: Partial<ExperimentSettings> & { aiApiKey?: string }) => {
-      const res = await fetch('/api/experiments/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updatedData),
-      });
-      if (!res.ok) throw new Error('Failed to update AI settings');
-      return res.json();
-    },
-    onSuccess: (updated: ExperimentSettings) => {
-      setIsAiEnabledDraft(updated.isAiEnabled);
-      queryClient.invalidateQueries({ queryKey: ['experiment-settings'] });
-      toast.success('AI Settings updated successfully');
-      setApiKeyInput('');
-    },
-    onError: (err: Error) => {
-      setIsAiEnabledDraft(settings?.isAiEnabled ?? true);
-      toast.error(err.message || 'Failed to save settings');
     },
   });
 
@@ -211,34 +155,7 @@ export default function ExperimentsSettingsPage() {
     }
   };
 
-  const handleSaveAiSettings = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const isAiEnabled = isAiEnabledDraft ?? settings?.isAiEnabled ?? true;
-    if (settings?.systemAiEnabled === false) {
-      updateSettingsMutation.mutate({ isAiEnabled });
-      return;
-    }
-    if (!isAiEnabled) {
-      updateSettingsMutation.mutate({ isAiEnabled: false });
-      return;
-    }
-    const aiProvider = formData.get('aiProvider') as string;
-    const aiModelName = formData.get('aiModelName') as string;
-    const aiBaseUrl = formData.get('aiBaseUrl') as string;
-    const aiCustomPrompt = formData.get('aiCustomPrompt') as string;
-
-    updateSettingsMutation.mutate({
-      isAiEnabled,
-      aiProvider,
-      aiModelName,
-      aiBaseUrl: aiBaseUrl || null,
-      aiCustomPrompt: aiCustomPrompt || null,
-      ...(apiKeyInput ? { aiApiKey: apiKeyInput } : {}),
-    });
-  };
-
-  if (isLoadingAuth || (isAdmin && (isLoadingSettings || isLoadingWebhooks))) {
+  if (isLoadingAuth || (isAdmin && isLoadingWebhooks)) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-8 h-8 animate-spin text-accent-600" />
@@ -258,154 +175,10 @@ export default function ExperimentsSettingsPage() {
           <FlaskConical className="w-6 h-6 text-purple-600" />
           <h1 className="text-2xl font-bold text-gray-900">Experimental Features</h1>
         </div>
-        <p className="mt-1 text-sm text-gray-500">
-          Configure experimental AI email summarization models and API webhook notification integrations.
-        </p>
+        <p className="mt-1 text-sm text-gray-500">Configure experimental notification webhook integrations.</p>
       </div>
 
-      {/* Card 1: AI Provider Settings */}
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Bot className="w-5 h-5 text-accent-600" />
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">AI LLM Provider Configuration</h2>
-              <p className="text-xs text-gray-500">Disable organization AI processing or configure its provider.</p>
-            </div>
-          </div>
-        </div>
-
-        <form onSubmit={handleSaveAiSettings} className="p-6 space-y-6">
-          {/* AI Enable Toggle */}
-          <div className="flex items-center justify-between">
-            <div>
-              <label htmlFor="isAiEnabled" className="text-sm font-medium text-gray-900">Enable AI Features</label>
-              <p className="text-xs text-gray-500">Turning this off disables organization AI processing and hides provider configuration.</p>
-            </div>
-            <input
-              type="checkbox"
-              id="isAiEnabled"
-              name="isAiEnabled"
-              checked={isAiEnabledDraft ?? settings?.isAiEnabled ?? true}
-              onChange={(e) => setIsAiEnabledDraft(e.target.checked)}
-              className="h-4 w-4 text-accent-600 focus:ring-accent-500 border-gray-300 rounded cursor-pointer"
-            />
-          </div>
-
-          {settings?.systemAiEnabled === false && (
-            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800" role="status">
-              AI is disabled in System Preferences for every organization. This organization’s AI setting is preserved, but provider configuration is hidden until system AI is enabled.
-            </p>
-          )}
-
-          {settings?.systemAiEnabled !== false && (isAiEnabledDraft ?? settings?.isAiEnabled ?? true) && <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* AI Provider */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                LLM Provider
-              </label>
-              <select
-                name="aiProvider"
-                defaultValue={settings?.aiProvider || 'openai'}
-                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
-              >
-                <option value="ollama">Local LLM — Ollama (Local Server)</option>
-                <option value="lmstudio">Local LLM — LM Studio (Local Server)</option>
-                <option value="local_llm">Local LLM — Other Self-Hosted Endpoint</option>
-                <option value="openai">OpenAI (Official / Cloud)</option>
-                <option value="claude">Anthropic Claude (Cloud)</option>
-                <option value="custom">Custom Endpoint</option>
-              </select>
-            </div>
-
-            {/* Model Name */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-                Model Name
-              </label>
-              <input
-                type="text"
-                name="aiModelName"
-                defaultValue={settings?.aiModelName || 'gpt-4o-mini'}
-                placeholder="e.g. llama3, qwen2.5, deepseek-r1, gpt-4o-mini"
-                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
-              />
-            </div>
-          </div>
-
-          {/* API Key */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-              API Key {settings?.hasApiKey && <span className="text-green-600 font-normal text-xs ml-2">(Key configured: {settings.aiApiKeyMasked})</span>}
-            </label>
-            <div className="relative">
-              <input
-                type={showApiKey ? 'text' : 'password'}
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                placeholder={settings?.hasApiKey ? 'Leave blank to keep existing API Key (Not required for Local LLMs)' : 'Enter API Key (sk-... or leave blank for Local LLM)'}
-                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border pr-10"
-              />
-              <button
-                type="button"
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
-              >
-                {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Base URL & Presets */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Local / Custom Base URL
-              </label>
-              <span className="text-xs text-purple-600">Local LLM Presets available below</span>
-            </div>
-            <input
-              type="text"
-              name="aiBaseUrl"
-              defaultValue={settings?.aiBaseUrl || ''}
-              placeholder="e.g. http://localhost:11434/v1 or http://localhost:1234/v1"
-              className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
-            />
-            <p className="mt-1.5 text-xs text-gray-500">
-              For Local LLMs, set Base URL to <code className="bg-gray-100 px-1 py-0.5 rounded text-purple-700">http://localhost:11434/v1</code> (Ollama) or <code className="bg-gray-100 px-1 py-0.5 rounded text-purple-700">http://localhost:1234/v1</code> (LM Studio).
-            </p>
-          </div>
-
-          {/* Custom Prompt */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
-              System Summary Prompt (Optional)
-            </label>
-            <textarea
-              name="aiCustomPrompt"
-              rows={3}
-              defaultValue={settings?.aiCustomPrompt || ''}
-              placeholder="Custom instructions for summarizing email batches..."
-              className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-accent-500 focus:ring-accent-500 p-2.5 border"
-            />
-          </div>
-          </>}
-
-          <div className="flex justify-end pt-2">
-            <button
-              type="submit"
-              disabled={updateSettingsMutation.isPending}
-              className="px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white rounded-md text-sm font-medium transition-colors flex items-center space-x-2 disabled:opacity-50"
-            >
-              {updateSettingsMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>Save AI Settings</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Card 2: Notification Webhook Channels */}
+      {/* Notification Webhook Channels */}
       <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center space-x-3">

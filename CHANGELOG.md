@@ -5,6 +5,17 @@ All notable changes to **Mailhub** will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-11-09
+
+### Changed
+- AI email analysis and summary calls now follow the system-wide AI setting; removed the per-member AI preference.
+- Added a dedicated AI Settings page for provider configuration and email summary prompts.
+- Email summaries now follow the configured prompt during both chunk processing and final synthesis.
+- Docker Compose and Docker Hub examples now use `kawing11a/mailhub:0.1.12`.
+
+### Removed
+- Removed the personal AI preference and its database column.
+
 ## [0.1.11] - 2026-11-03
 
 ### Added

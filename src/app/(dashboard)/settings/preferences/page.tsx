@@ -8,9 +8,7 @@ import { Palette, Maximize, Check, Layout, Clock, UserCircle, Bot } from 'lucide
 import clsx from 'clsx';
 
 interface AiPreferences {
-  personalAiEnabled: boolean;
   semanticSearchEnabled: boolean;
-  systemAiEnabled: boolean;
   systemSemanticSearchEnabled: boolean;
 }
 
@@ -49,7 +47,7 @@ export default function PreferencesPage() {
     },
   });
   const updateAiPreference = useMutation({
-    mutationFn: async ({ field, value }: { field: keyof AiPreferences; value: boolean }) => {
+    mutationFn: async ({ field, value }: { field: 'semanticSearchEnabled'; value: boolean }) => {
       const res = await fetch('/api/settings/preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -102,18 +100,12 @@ export default function PreferencesPage() {
           </div>
           <div className="divide-y divide-gray-100">
             {([
-              { field: 'personalAiEnabled', label: 'AI features for me', description: 'Allow AI features to process email for your account.' },
               { field: 'semanticSearchEnabled', label: 'Semantic search embeddings', description: 'Create embeddings for semantic email search in your account.' },
             ] as const).map(({ field, label, description }) => (
               <div key={field} className="p-6 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-sm font-medium text-gray-900">{label}</div>
                   <div className="text-xs text-gray-500 mt-1">{description}</div>
-                  {field === 'personalAiEnabled' && aiPreferences?.personalAiEnabled && !aiPreferences.systemAiEnabled && (
-                    <div className="text-xs text-amber-700 mt-2" role="status">
-                      This saved preference is currently overridden because AI is disabled across organizations. Your choice is preserved.
-                    </div>
-                  )}
                   {field === 'semanticSearchEnabled' && aiPreferences?.semanticSearchEnabled && !aiPreferences.systemSemanticSearchEnabled && (
                     <div className="text-xs text-amber-700 mt-2" role="status">
                       This saved preference is currently overridden because semantic search is disabled across organizations. Your choice is preserved.

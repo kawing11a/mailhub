@@ -94,7 +94,7 @@ export default function SystemPreferencesPage() {
       <header>
         <h1 className="app-title text-2xl font-semibold">System Preferences</h1>
         <p className="mt-1 text-sm text-gray-500">
-          These controls apply across every organization. Organization and personal preferences remain saved, but cannot override a system-wide disabled feature.
+          These controls apply across every organization. Organization AI settings cannot override a system-wide disabled feature.
         </p>
       </header>
 

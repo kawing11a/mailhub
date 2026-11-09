@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db/prisma';
 import { getSystemPreferences } from '@/lib/settings/system-preferences';
 
 const preferenceSelect = {
-  personalAiEnabled: true,
   semanticSearchEnabled: true,
 } as const;
 
@@ -45,19 +44,13 @@ export async function PUT(req: NextRequest) {
   const fields = Object.keys(body);
   if (
     fields.length === 0 ||
-    fields.some((field) => field !== 'personalAiEnabled' && field !== 'semanticSearchEnabled')
+    fields.some((field) => field !== 'semanticSearchEnabled')
   ) {
-    return apiError('Only personalAiEnabled and semanticSearchEnabled may be updated', 400);
+    return apiError('Only semanticSearchEnabled may be updated', 400);
   }
 
   const input = body as Record<string, unknown>;
-  const data: { personalAiEnabled?: boolean; semanticSearchEnabled?: boolean } = {};
-  if ('personalAiEnabled' in input) {
-    if (typeof input.personalAiEnabled !== 'boolean') {
-      return apiError('personalAiEnabled must be a boolean', 400);
-    }
-    data.personalAiEnabled = input.personalAiEnabled;
-  }
+  const data: { semanticSearchEnabled?: boolean } = {};
   if ('semanticSearchEnabled' in input) {
     if (typeof input.semanticSearchEnabled !== 'boolean') {
       return apiError('semanticSearchEnabled must be a boolean', 400);

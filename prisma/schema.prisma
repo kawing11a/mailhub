@@ -46,7 +46,6 @@ model OrganizationMember {
   userId         String       @map("user_id") @db.Uuid
   role           String       @default("member") @db.VarChar(20)
   joinedAt       DateTime     @default(now()) @map("joined_at") @db.Timestamptz
-  personalAiEnabled Boolean @default(true) @map("personal_ai_enabled")
   semanticSearchEnabled Boolean @default(true) @map("semantic_search_enabled")
 
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)

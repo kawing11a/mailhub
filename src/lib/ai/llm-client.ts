@@ -38,14 +38,14 @@ export async function getResolvedAiConfig(organizationId: string, userId?: strin
     userId
       ? prisma.organizationMember.findUnique({
           where: { organizationId_userId: { organizationId, userId } },
-          select: { personalAiEnabled: true },
+          select: { userId: true },
         })
       : Promise.resolve(undefined),
   ]);
 
   if (!systemPreferences.isAiEnabled) throw new AiUnavailableError('disabled');
   if (userId && !member) throw new AiAccessError();
-  if (setting?.isAiEnabled === false || member?.personalAiEnabled === false) {
+  if (setting?.isAiEnabled === false) {
     throw new AiUnavailableError('disabled');
   }
 
