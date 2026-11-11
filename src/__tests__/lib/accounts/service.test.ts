@@ -287,8 +287,9 @@ describe('account service ownership creation', () => {
 
   it('scopes unified account statistics to the member accessible accounts', async () => {
     (prisma.email.count as jest.Mock)
-      .mockResolvedValueOnce(2)
-      .mockResolvedValueOnce(5);
+      .mockResolvedValueOnce(2) // INBOX unread
+      .mockResolvedValueOnce(3) // SPAM/JUNK unread
+      .mockResolvedValueOnce(5); // total
     (prisma.emailAccount.findFirst as jest.Mock).mockResolvedValue({
       lastSyncedAt: new Date('2026-08-18T12:00:00.000Z'),
     });
@@ -310,6 +311,13 @@ describe('account service ownership creation', () => {
       where: { account: accessibleAccount, folder: 'INBOX', isRead: false },
     });
     expect(prisma.email.count).toHaveBeenNthCalledWith(2, {
+      where: {
+        account: accessibleAccount,
+        folder: { in: ['SPAM', 'JUNK'] },
+        isRead: false,
+      },
+    });
+    expect(prisma.email.count).toHaveBeenNthCalledWith(3, {
       where: { account: accessibleAccount },
     });
     expect(prisma.emailAccount.findFirst).toHaveBeenCalledWith({
@@ -319,6 +327,7 @@ describe('account service ownership creation', () => {
     });
     expect(stats).toEqual({
       unreadCount: 2,
+      spamUnreadCount: 3,
       totalCount: 5,
       lastSyncedAt: new Date('2026-08-18T12:00:00.000Z'),
     });
