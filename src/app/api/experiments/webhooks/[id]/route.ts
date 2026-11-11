@@ -32,7 +32,7 @@ export async function DELETE(
     });
 
     return apiResponse({ message: 'Webhook deleted successfully' });
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to delete webhook', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to delete webhook', 500);
   }
 }

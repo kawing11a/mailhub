@@ -70,7 +70,7 @@ const MEMBER_TWO_ID = '22222222-2222-4222-8222-222222222222';
 const MEMBER_THREE_ID = '33333333-3333-4333-8333-333333333333';
 
 let stateSetters: jest.Mock[] = [];
-let mutationConfigs: Array<Record<string, any>> = [];
+let mutationConfigs: Array<Record<string, unknown>> = [];
 
 function configureUseState(overrides: unknown[] = []) {
   stateSetters = [];
@@ -91,7 +91,7 @@ function configureUseState(overrides: unknown[] = []) {
 
 function configureMutationMock() {
   mutationConfigs = [];
-  mockUseMutation.mockImplementation((config: Record<string, any>) => {
+  mockUseMutation.mockImplementation((config: Record<string, unknown>) => {
     mutationConfigs.push(config);
     return {
       mutate: jest.fn(),
@@ -137,13 +137,6 @@ function textContent(node: ReactNodeLike): string {
   return childNodes(node).map((child) => textContent(child)).join('');
 }
 
-function findButtonByText(node: ReactNodeLike, label: string) {
-  return findAll(
-    node,
-    (element) => element.type === 'button' && textContent(element).includes(label)
-  )[0];
-}
-
 function getClickHandler(element: ReactElementLike) {
   if (!element.props.onClick) throw new Error('Expected element to have an onClick handler');
   return element.props.onClick;
@@ -169,7 +162,7 @@ function renderAccountsPageContent() {
 describe('member account actions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global as any).fetch = jest.fn();
+    global.fetch = jest.fn() as unknown as typeof global.fetch;
     mockUseEffect.mockImplementation((effect: () => void) => effect());
     mockUseQueryClient.mockReturnValue({
       invalidateQueries: jest.fn(),
@@ -187,8 +180,8 @@ describe('member account actions', () => {
 
   it('shows Connect Account for members and invites them to connect an account in the empty state', () => {
     configureUseState();
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return { data: [], isLoading: false };
         case 'auth-me':
@@ -211,8 +204,8 @@ describe('member account actions', () => {
 
   it('shows Manage Access only for manageable accounts and keeps admin-only controls hidden from non-owner members', () => {
     configureUseState();
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return {
             data: [
@@ -280,8 +273,8 @@ describe('member account actions', () => {
 
   it('keeps inactive owner accounts manageable for members without exposing the admin reauthorize path', () => {
     configureUseState();
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return {
             data: [
@@ -334,8 +327,8 @@ describe('member account actions', () => {
 
   it('retains access management, edit, disconnect, and health controls for admins', () => {
     configureUseState();
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return {
             data: [
@@ -387,8 +380,8 @@ describe('member account actions', () => {
       replace: jest.fn(),
     };
     mockUseRouter.mockReturnValue(router);
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return { data: [], isLoading: false };
         case 'auth-me':
@@ -431,8 +424,8 @@ describe('member account actions', () => {
     mockUseAccountStore.mockImplementation((selector: (state: { setSelectedAccountId: jest.Mock }) => unknown) =>
       selector({ setSelectedAccountId: jest.fn() })
     );
-    mockUseQuery.mockImplementation((config: Record<string, any>) => {
-      switch (config.queryKey[0]) {
+    mockUseQuery.mockImplementation((config: Record<string, unknown>) => {
+      switch ((config.queryKey as unknown[])[0]) {
         case 'accounts':
           return { data: [], isLoading: false };
         case 'auth-me':
@@ -461,7 +454,7 @@ describe('member account actions', () => {
 describe('account access modal in account mode', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (global as any).fetch = jest.fn();
+    global.fetch = jest.fn() as unknown as typeof global.fetch;
     mockUseEffect.mockImplementation((effect: () => void) => effect());
     mockUseQueryClient.mockReturnValue({
       invalidateQueries: jest.fn(),
@@ -541,7 +534,7 @@ describe('account access modal in account mode', () => {
       isLoading: false,
       error: null,
     });
-    (global as any).fetch.mockResolvedValue({
+    (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: jest.fn().mockResolvedValue({ success: true, memberIds: [OWNER_ID, MEMBER_THREE_ID] }),
     });
@@ -554,9 +547,10 @@ describe('account access modal in account mode', () => {
       />
     );
 
-    await mutationConfigs[0].mutationFn([MEMBER_TWO_ID, MEMBER_THREE_ID]);
+    const mutationFn = mutationConfigs[0].mutationFn as (memberIds: string[]) => Promise<unknown>;
+    await mutationFn([MEMBER_TWO_ID, MEMBER_THREE_ID]);
 
-    expect((global as any).fetch).toHaveBeenCalledWith('/api/accounts/account-1/access', {
+    expect(global.fetch).toHaveBeenCalledWith('/api/accounts/account-1/access', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

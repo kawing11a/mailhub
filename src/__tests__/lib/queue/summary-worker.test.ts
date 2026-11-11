@@ -39,6 +39,12 @@ jest.mock('../../../lib/db/prisma', () => ({
     notificationWebhook: {
       findMany: jest.fn(),
     },
+    systemPreference: {
+      upsert: jest.fn().mockResolvedValue({
+        isAiEnabled: true,
+        semanticSearchEnabled: true,
+      }),
+    },
   },
 }));
 

@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
     if (auth instanceof NextResponse) return auth;
     const { organizationId } = auth;
 
-    const webpush = require('web-push');
+    const webpush = await import('web-push');
     
     webpush.setVapidDetails(
       process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
@@ -31,15 +31,19 @@ export async function POST(req: NextRequest) {
     });
 
     const results = await Promise.allSettled(
-      subscriptions.map((sub: any) => 
+      subscriptions.map((sub) =>
         webpush.sendNotification({
           endpoint: sub.endpoint,
           keys: {
             p256dh: sub.p256dh,
             auth: sub.auth,
           }
-        }, pushPayload).catch(async (err: any) => {
-          if (err.statusCode === 404 || err.statusCode === 410) {
+        }, pushPayload).catch(async (err: unknown) => {
+          const statusCode =
+            typeof err === 'object' && err !== null && 'statusCode' in err
+              ? err.statusCode
+              : undefined;
+          if (statusCode === 404 || statusCode === 410) {
             console.log('Push subscription expired or removed, deleting from DB');
             await prisma.pushSubscription.delete({ where: { id: sub.id } });
           } else {
@@ -56,7 +60,7 @@ export async function POST(req: NextRequest) {
       success: true, 
       message: `Sent to ${successCount} out of ${subscriptions.length} devices` 
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to send test notification:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

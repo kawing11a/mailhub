@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, CheckCircle2, MonitorSmartphone, Info, X } from 'lucide-react';
+import { Download, MonitorSmartphone, Info, X } from 'lucide-react';
 import { usePWAInstall } from '@/hooks/usePWAInstall';
 
 interface InstallPWAButtonProps {

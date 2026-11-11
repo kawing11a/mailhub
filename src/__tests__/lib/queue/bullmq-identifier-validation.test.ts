@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { Job, Queue } from 'bullmq';
+import type { RedisConnection } from 'bullmq';
 import { getInitialSyncJobId, getSyncQueueName } from '@/lib/queue/identifiers';
 
 class TestConnection extends EventEmitter {
@@ -22,7 +23,7 @@ describe('BullMQ sync identifiers', () => {
   it('generates a partition queue name and deterministic job ID BullMQ accepts', async () => {
     const queueName = getSyncQueueName('worker-1');
     const jobId = getInitialSyncJobId('account-1');
-    const queue = new Queue(queueName, queueOptions, TestConnection as any);
+    const queue = new Queue(queueName, queueOptions, TestConnection as unknown as typeof RedisConnection);
 
     expect(queueName).toBe('imap-sync-worker-1');
     expect(jobId).toBe('initial-sync-account-1');
@@ -33,12 +34,13 @@ describe('BullMQ sync identifiers', () => {
 
   it('captures BullMQ rejection of colon-containing queue names and custom job IDs', async () => {
     expect(
-      () => new Queue('imap-sync:worker-1', queueOptions, TestConnection as any)
+      () => new Queue('imap-sync:worker-1', queueOptions, TestConnection as unknown as typeof RedisConnection)
     ).toThrow('Queue name cannot contain :');
 
-    const queue = new Queue('imap-sync-worker-1', queueOptions, TestConnection as any);
+    const queue = new Queue('imap-sync-worker-1', queueOptions, TestConnection as unknown as typeof RedisConnection);
     const invalidJob = new Job(queue, 'initial-sync', {}, { jobId: 'initial-sync:account-1' });
-    expect(() => (invalidJob as any).addJob({}, {})).toThrow('Custom Id cannot contain :');
+    const addJob = (invalidJob as unknown as { addJob: (data: object, options: object) => Promise<unknown> }).addJob;
+    expect(() => addJob.call(invalidJob, {}, {})).toThrow('Custom Id cannot contain :');
 
     await queue.close();
   });

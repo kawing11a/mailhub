@@ -54,7 +54,7 @@ Respond ONLY with the email subject line (if applicable) and body content. Do no
     });
 
     return NextResponse.json({ result: resultText, status: 'success' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof AiUnavailableError) {
       return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
     }
@@ -62,6 +62,6 @@ Respond ONLY with the email subject line (if applicable) and body content. Do no
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
     console.error('AI Draft Route Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to generate AI draft' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to generate AI draft' }, { status: 500 });
   }
 }

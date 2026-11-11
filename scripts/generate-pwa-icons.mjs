@@ -1,6 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const zlib = require('zlib');
+import fs from 'node:fs';
+import path from 'node:path';
+import zlib from 'node:zlib';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // CRC32 calculation helper
 function crc32(buf) {

@@ -26,6 +26,17 @@ jest.mock('@/lib/runtime-config', () => ({
 import { prisma } from '@/lib/db/prisma';
 import { IMAPConnectionManager } from '@/lib/imap/connection-manager';
 
+type SyncTestAccess = {
+  connections: Map<string, unknown>;
+  fetchNewEmails: (...args: unknown[]) => Promise<unknown>;
+  fetchNewEmailsForAccount: (...args: unknown[]) => Promise<{ processed: number; failed: number }>;
+  persistEmail: (...args: unknown[]) => Promise<boolean>;
+};
+
+function getTestAccess(manager: IMAPConnectionManager): SyncTestAccess {
+  return manager as unknown as SyncTestAccess;
+}
+
 describe('IMAP persistence concurrency', () => {
   it('queues overlapping fetches for one account behind the active fetch loop', async () => {
     const manager = new IMAPConnectionManager();
@@ -35,7 +46,7 @@ describe('IMAP persistence concurrency', () => {
       }),
     };
 
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'org-1',
       client,
@@ -49,7 +60,7 @@ describe('IMAP persistence concurrency', () => {
       firstPersistenceStarted = resolve;
     });
     let persistenceCalls = 0;
-    jest.spyOn(manager as any, 'persistEmail').mockImplementation(() => {
+    jest.spyOn(getTestAccess(manager), 'persistEmail').mockImplementation(() => {
       persistenceCalls += 1;
       if (persistenceCalls !== 1) return Promise.resolve(true);
 
@@ -59,9 +70,9 @@ describe('IMAP persistence concurrency', () => {
       });
     });
 
-    const firstFetch = (manager as any).fetchNewEmails('account-1', 1, 1);
+    const firstFetch = getTestAccess(manager).fetchNewEmails('account-1', 1, 1);
     await firstPersistenceHasStarted;
-    const secondFetch = (manager as any).fetchNewEmails('account-1', 2, 2);
+    const secondFetch = getTestAccess(manager).fetchNewEmails('account-1', 2, 2);
     await new Promise((resolve) => setImmediate(resolve));
 
     try {
@@ -85,12 +96,12 @@ describe('IMAP persistence concurrency', () => {
           return;
         }
 
-        yield { uid: 1 };
-        yield { uid: 2 };
+        yield { uid: 1, envelope: { messageId: 'existing@example.test' } };
+        yield { uid: 2, envelope: { messageId: 'new@example.test' } };
       }),
     };
 
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'org-1',
       client,
@@ -98,14 +109,14 @@ describe('IMAP persistence concurrency', () => {
       reconnectAttempts: 0,
     });
     (prisma.email.findMany as jest.Mock).mockResolvedValueOnce([
-      { uid: BigInt(1), messageId: 'existing@example.test' },
+      { uid: BigInt(1), messageId: 'existing@example.test', folder: 'INBOX' },
     ]);
     const persistEmail = jest
-      .spyOn(manager as any, 'persistEmail')
+      .spyOn(getTestAccess(manager), 'persistEmail')
       .mockResolvedValue(true);
 
     await expect(
-      (manager as any).fetchNewEmailsForAccount('account-1', [1, 2], undefined, 'INBOX', true)
+      getTestAccess(manager).fetchNewEmailsForAccount('account-1', [1, 2], undefined, 'INBOX', true)
     ).resolves.toEqual({ processed: 2, failed: 0 });
 
     expect(client.fetch).toHaveBeenCalledTimes(2);
@@ -136,7 +147,7 @@ describe('IMAP persistence concurrency', () => {
       },
     };
 
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'org-1',
       client,
@@ -146,7 +157,7 @@ describe('IMAP persistence concurrency', () => {
 
     let activePersistences = 0;
     let maxConcurrentPersistences = 0;
-    jest.spyOn(manager as any, 'persistEmail').mockImplementation(async () => {
+    jest.spyOn(getTestAccess(manager), 'persistEmail').mockImplementation(async () => {
       activePersistences += 1;
       maxConcurrentPersistences = Math.max(maxConcurrentPersistences, activePersistences);
       await new Promise((resolve) => setImmediate(resolve));
@@ -154,7 +165,7 @@ describe('IMAP persistence concurrency', () => {
       return true;
     });
 
-    await expect((manager as any).fetchNewEmails('account-1', 1, 4)).resolves.toEqual({
+    await expect(getTestAccess(manager).fetchNewEmails('account-1', 1, 4)).resolves.toEqual({
       processed: 4,
       failed: 0,
     });

@@ -1,5 +1,6 @@
 let isRefreshing = false;
 let isIntercepted = false;
+type InterceptedFetch = typeof window.fetch & { __originalFetch?: typeof window.fetch };
 let refreshSubscribers: ((success: boolean) => void)[] = [];
 
 function subscribeTokenRefresh(cb: (success: boolean) => void) {
@@ -30,7 +31,7 @@ export async function refreshTokenClient(): Promise<boolean> {
     const success = res.ok;
     onRefreshed(success);
     return success;
-  } catch (err) {
+  } catch {
     onRefreshed(false);
     return false;
   } finally {
@@ -69,7 +70,7 @@ export function setupGlobalFetchInterceptor() {
         // Both access token (7d) and refresh token (30d) expired -> redirect to relogin
         if (!window.location.pathname.startsWith('/login')) {
           const callbackUrl = encodeURIComponent(window.location.pathname + window.location.search);
-          window.location.href = `/login?callbackUrl=${callbackUrl}`;
+          window.location.replace(`/login?callbackUrl=${callbackUrl}`);
         }
       }
     }
@@ -77,7 +78,7 @@ export function setupGlobalFetchInterceptor() {
     return response;
   };
 
-  (interceptedFetch as any).__originalFetch = originalFetch;
+  (interceptedFetch as InterceptedFetch).__originalFetch = originalFetch;
   window.fetch = interceptedFetch;
   if (typeof global !== 'undefined' && global.fetch) {
     global.fetch = interceptedFetch;
@@ -86,8 +87,9 @@ export function setupGlobalFetchInterceptor() {
 
 export function resetFetchInterceptor() {
   if (typeof window === 'undefined') return;
-  if ((window.fetch as any)?.__originalFetch) {
-    const orig = (window.fetch as any).__originalFetch;
+  const currentFetch = window.fetch as InterceptedFetch;
+  if (currentFetch.__originalFetch) {
+    const orig = currentFetch.__originalFetch;
     window.fetch = orig;
     if (typeof global !== 'undefined') {
       global.fetch = orig;

@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       success: true,
       message: `Successfully queued ${emails.length} emails for search reindexing.`
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to reindex account:', error);
     return apiError('Internal server error', 500);
   }

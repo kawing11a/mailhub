@@ -10,6 +10,7 @@ import { closeSyncWorkers, ensureSyncWorkersForPartitions } from '@/lib/queue/wo
 import { searchWorker } from '@/lib/queue/workers/search';
 import { summaryWorker } from '@/lib/queue/workers/summary';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
+import type { EmailAccount } from '@prisma/client';
 
 const WORKER_PARTITION = process.env.WORKER_PARTITION || 'default';
 const IMAP_STARTUP_CONCURRENCY = (() => {
@@ -18,7 +19,7 @@ const IMAP_STARTUP_CONCURRENCY = (() => {
 })();
 
 /** Open mailbox listeners promptly; historical sync is queued separately. */
-async function initializeImapConnections(accounts: any[]): Promise<void> {
+async function initializeImapConnections(accounts: EmailAccount[]): Promise<void> {
   const imapAccounts = accounts.filter((account) => account.provider !== 'gmail');
   let nextAccount = 0;
 

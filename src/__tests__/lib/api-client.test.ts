@@ -3,13 +3,14 @@ import { refreshTokenClient, setupGlobalFetchInterceptor, resetFetchInterceptor 
 describe('Frontend API Client & Token Refresh Interceptor', () => {
   beforeEach(() => {
     resetFetchInterceptor();
-    delete (global as any).window;
+    delete (globalThis as unknown as { window?: Window }).window;
     const mockFetch = jest.fn();
-    (global as any).window = {
+    const testWindow = {
       location: { href: '', pathname: '/inbox', search: '' },
       fetch: mockFetch,
     };
-    global.fetch = mockFetch;
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: testWindow });
+    global.fetch = mockFetch as unknown as typeof global.fetch;
   });
 
   afterEach(() => {
@@ -41,8 +42,12 @@ describe('Frontend API Client & Token Refresh Interceptor', () => {
 
   test('setupGlobalFetchInterceptor intercepts 401, refreshes token, and retries request', async () => {
     let callCount = 0;
-    const fetchMock = jest.fn((input: any) => {
-      const url = typeof input === 'string' ? input : input?.url || String(input);
+    const fetchMock = jest.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string'
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
       if (url.includes('/api/auth/refresh')) {
         return Promise.resolve({ ok: true, status: 200, json: async () => ({ success: true }) });
       }
@@ -53,8 +58,8 @@ describe('Frontend API Client & Token Refresh Interceptor', () => {
       return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: 'success' }) });
     });
 
-    window.fetch = fetchMock as any;
-    global.fetch = fetchMock as any;
+    window.fetch = fetchMock as unknown as typeof window.fetch;
+    global.fetch = fetchMock as unknown as typeof global.fetch;
     setupGlobalFetchInterceptor();
 
     const response = await window.fetch('/api/emails');

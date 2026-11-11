@@ -8,10 +8,24 @@ import { X, Loader2, Mail, AlertTriangle, Server } from 'lucide-react';
 import { updateAccountSchema, type UpdateAccountInput } from '@/lib/validation/schemas';
 import toast from 'react-hot-toast';
 
+export interface EditableAccount {
+  id: string;
+  provider?: string | null;
+  oauthProvider?: string | null;
+  label?: string | null;
+  color?: string | null;
+  emailAddress?: string;
+  imapHost?: string | null;
+  imapPort?: number | null;
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  username?: string | null;
+}
+
 interface EditAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
-  account: any | null;
+  account: EditableAccount | null;
 }
 
 export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalProps) {
@@ -43,7 +57,7 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
   const { data: fetchedAccount, isLoading: isLoadingAccount } = useQuery({
     queryKey: ['account', account?.id],
     queryFn: async () => {
-      const res = await fetch(`/api/accounts/${account.id}`);
+      const res = await fetch(`/api/accounts/${account?.id}`);
       if (!res.ok) throw new Error('Failed to fetch account details');
       return res.json();
     },
@@ -142,8 +156,8 @@ export function EditAccountModal({ isOpen, onClose, account }: EditAccountModalP
       if (!res.ok) throw new Error(data.error || 'Failed to trigger reindex');
 
       toast.success(data.message);
-    } catch (err: any) {
-      setSubmitError(err.message);
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Failed to update account');
       toast.error('Reindex failed');
     } finally {
       setIsReindexing(false);

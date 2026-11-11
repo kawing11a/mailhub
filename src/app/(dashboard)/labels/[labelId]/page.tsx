@@ -1,12 +1,15 @@
 'use client';
 
-import { useState, Suspense, use } from 'react';
+import { Suspense, use } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { EmailRow } from '@/components/email/EmailRow';
 import { EmailViewer } from '@/components/email/EmailViewer';
 import { useSummaryStore } from '@/stores/summaryStore';
 import { Loader2, Sparkles } from 'lucide-react';
+import type { EmailRowData } from '@/components/email/EmailRow';
+
+type LabelSummary = { id: string; name: string; color: string | null };
 
 function LabelContent({ labelId }: { labelId: string }) {
   const searchParams = useSearchParams();
@@ -26,7 +29,7 @@ function LabelContent({ labelId }: { labelId: string }) {
     window.history.pushState(null, '', url);
   };
 
-  const { data: labelData } = useQuery({
+  const { data: labelData } = useQuery<{ labels: LabelSummary[] }>({
     queryKey: ['labels'],
     queryFn: async () => {
       const res = await fetch('/api/labels');
@@ -34,9 +37,9 @@ function LabelContent({ labelId }: { labelId: string }) {
     },
   });
 
-  const label = labelData?.labels?.find((l: any) => l.id === labelId);
+  const label = labelData?.labels?.find((l) => l.id === labelId);
 
-  const { data: emailsData, isLoading } = useQuery({
+  const { data: emailsData, isLoading } = useQuery<{ emails: EmailRowData[] }>({
     queryKey: ['labelEmails', labelId],
     queryFn: async () => {
       const res = await fetch(`/api/labels/${labelId}/emails`);
@@ -48,14 +51,14 @@ function LabelContent({ labelId }: { labelId: string }) {
   const emails = emailsData?.emails || [];
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
+    <div className="flex min-w-0 flex-1 h-full overflow-hidden">
       <div className="w-1/3 min-w-[320px] max-w-[480px] h-full flex flex-col bg-white border-r border-gray-200">
         <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             {label && (
               <div
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: label.color }}
+                style={{ backgroundColor: label.color || undefined }}
               />
             )}
             <h2 className="font-semibold text-gray-900">
@@ -83,7 +86,7 @@ function LabelContent({ labelId }: { labelId: string }) {
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {emails.map((email: any) => (
+              {emails.map((email) => (
                 <EmailRow
                   key={email.id}
                   email={email}
@@ -96,9 +99,10 @@ function LabelContent({ labelId }: { labelId: string }) {
         </div>
       </div>
 
-      <div className="flex-1 h-full bg-white relative">
+      <div className="relative min-h-0 min-w-0 flex-1 h-full bg-white">
         {selectedEmailId ? (
           <EmailViewer 
+            key={selectedEmailId}
             emailId={selectedEmailId} 
             onBack={() => handleSelectEmail(null)}
           />

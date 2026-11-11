@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId, emailId } = await params;
 
-  let where: Record<string, unknown> = { id: emailId };
+  const where: Record<string, unknown> = { id: emailId };
 
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       where: { id: emailId },
       data: { isRead: true },
     });
+    return apiResponse({ ...email, isRead: true });
   }
 
   return apiResponse(email);
@@ -77,7 +78,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const parsed = updateEmailSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.issues[0].message, 422);
 
-  let where: Record<string, unknown> = { id: emailId };
+  const where: Record<string, unknown> = { id: emailId };
 
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({
@@ -117,7 +118,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId, emailId } = await params;
 
-  let where: Record<string, unknown> = { id: emailId };
+  const where: Record<string, unknown> = { id: emailId };
 
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({

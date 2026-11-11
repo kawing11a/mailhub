@@ -4,7 +4,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { runtimeConfig } from '@/lib/runtime-config';
 
 // Polyfill for BigInt serialization in JSON
-(BigInt.prototype as any).toJSON = function () {
+(BigInt.prototype as unknown as { toJSON: () => string }).toJSON = function () {
   return this.toString();
 };
 
@@ -29,7 +29,7 @@ const createPrismaClient = () =>
   });
 
 export const prisma =
-  globalForPrisma.prisma && (globalForPrisma.prisma as any).signature
+  globalForPrisma.prisma && (globalForPrisma.prisma as PrismaClient & { signature?: unknown }).signature
     ? globalForPrisma.prisma
     : createPrismaClient();
 

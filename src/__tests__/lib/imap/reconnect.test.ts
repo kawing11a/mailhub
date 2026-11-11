@@ -32,8 +32,19 @@ import { prisma } from '@/lib/db/prisma';
 import { IMAPConnectionManager } from '@/lib/imap/connection-manager';
 import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 import { ImapFlow } from 'imapflow';
+import type { EmailAccount } from '@prisma/client';
 
-type EventHandler = (...args: any[]) => void | Promise<void>;
+type EventHandler = (...args: unknown[]) => void | Promise<void>;
+type ReconnectTestAccess = {
+  connections: Map<string, unknown>;
+  registerConnection: (...args: unknown[]) => Promise<void>;
+  reconcileRecentMailboxes: (accountId: string) => Promise<void>;
+  fetchNewEmailsForAccount: (...args: unknown[]) => Promise<{ processed: number; failed: number }>;
+};
+
+function getTestAccess(manager: IMAPConnectionManager): ReconnectTestAccess {
+  return manager as unknown as ReconnectTestAccess;
+}
 
 function createClient() {
   const handlers = new Map<string, EventHandler[]>();
@@ -50,12 +61,13 @@ function createClient() {
     connect: jest.fn().mockResolvedValue(undefined),
     logout: jest.fn().mockResolvedValue(undefined),
     getMailboxLock: jest.fn().mockResolvedValue({ release }),
+    list: jest.fn().mockResolvedValue([]),
     idle,
     search: jest.fn().mockResolvedValue([]),
     on: jest.fn((event: string, handler: EventHandler) => {
       handlers.set(event, [...(handlers.get(event) ?? []), handler]);
     }),
-    emit: async (event: string, ...args: any[]) => {
+    emit: async (event: string, ...args: unknown[]) => {
       for (const handler of handlers.get(event) ?? []) {
         await handler(...args);
       }
@@ -79,7 +91,7 @@ const account = {
   provider: 'imap',
   isActive: true,
   initialSyncCompletedAt: new Date('2026-08-26T00:00:00.000Z'),
-} as any;
+} as unknown as EmailAccount;
 
 describe('IMAP reconnect and reconciliation lifecycle', () => {
   beforeEach(() => {
@@ -96,7 +108,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const client = createClient();
     (prisma.emailAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     expect(client.idle).toHaveBeenCalledTimes(1);
     await client.emit('error', new Error('socket reset'));
 
@@ -113,7 +125,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const releaseIdle = jest.fn();
     const reconnectTimer = setTimeout(() => undefined, 60_000);
     const reconciliationTimer = setInterval(() => undefined, 60_000);
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'organization-1',
       client: staleClient,
@@ -140,7 +152,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const client = createClient();
     (prisma.emailAccount.findUnique as jest.Mock).mockResolvedValue(null);
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     await client.emit('error', new Error('socket reset'));
     await jest.advanceTimersByTimeAsync(500);
     await client.emit('close');
@@ -155,9 +167,9 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const manager = new IMAPConnectionManager();
     const client = createClient();
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     await client.emit('error', new Error('socket reset'));
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'organization-1',
       client: createClient(),
@@ -174,7 +186,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const manager = new IMAPConnectionManager();
     const client = createClient();
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     expect(jest.getTimerCount()).toBe(1);
 
     await client.emit('close');
@@ -190,7 +202,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
     const client = createClient();
     const pendingInitialSyncAccount = { ...account, initialSyncCompletedAt: null };
 
-    await (manager as any).registerConnection(pendingInitialSyncAccount, client, 0);
+    await getTestAccess(manager).registerConnection(pendingInitialSyncAccount, client, 0);
     expect(jest.getTimerCount()).toBe(1);
 
     manager.enableReconciliation('account-1');
@@ -212,11 +224,12 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
       );
     });
     (prisma.emailAccount.findUnique as jest.Mock).mockResolvedValue({ lastSyncedAt });
+    client.list.mockResolvedValue([{ path: 'INBOX' }]);
 
-    await (manager as any).registerConnection(account, client, 0);
-    const firstRun = (manager as any).reconcileInbox('account-1');
+    await getTestAccess(manager).registerConnection(account, client, 0);
+    const firstRun = getTestAccess(manager).reconcileRecentMailboxes('account-1');
     await searchStarted;
-    const overlappingRun = (manager as any).reconcileInbox('account-1');
+    const overlappingRun = getTestAccess(manager).reconcileRecentMailboxes('account-1');
 
     expect(client.search).toHaveBeenCalledWith(
       { since: new Date('2026-08-25T12:00:00.000Z') },
@@ -243,14 +256,15 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
       storedCursor = data.lastSyncedAt;
       return { id: 'account-1', lastSyncedAt: storedCursor };
     });
+    client.list.mockResolvedValue([{ path: 'INBOX' }]);
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     const fetch = jest
-      .spyOn(manager as any, 'fetchNewEmailsForAccount')
+      .spyOn(getTestAccess(manager), 'fetchNewEmailsForAccount')
       .mockResolvedValue({ processed: 1, failed: 0 });
 
-    await (manager as any).reconcileInbox('account-1');
-    await (manager as any).reconcileInbox('account-1');
+    await getTestAccess(manager).reconcileRecentMailboxes('account-1');
+    await getTestAccess(manager).reconcileRecentMailboxes('account-1');
 
     expect(prisma.emailAccount.update).toHaveBeenCalledWith({
       where: { id: 'account-1' },
@@ -272,7 +286,7 @@ describe('IMAP reconnect and reconciliation lifecycle', () => {
       Object.assign(new Error('getaddrinfo EAI_AGAIN imap.example.test'), { code: 'EAI_AGAIN' })
     );
 
-    await (manager as any).registerConnection(account, client, 0);
+    await getTestAccess(manager).registerConnection(account, client, 0);
     await client.emit('error', new Error('socket reset'));
     await jest.advanceTimersByTimeAsync(1_000);
 

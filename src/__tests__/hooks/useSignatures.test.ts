@@ -1,4 +1,4 @@
-import { useSignatures, Signature } from '@/hooks/useSignatures';
+import { useSignatures } from '@/hooks/useSignatures';
 
 describe('useSignatures hook exports', () => {
   it('exports useSignatures function', () => {

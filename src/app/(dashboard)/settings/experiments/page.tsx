@@ -14,14 +14,16 @@ import {
 } from 'lucide-react';
 import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
-interface WebhookChannel {
+type WebhookChannel = {
   id: string;
   name: string;
-  type: 'TELEGRAM' | 'WECOM' | 'GENERIC';
-  config: any;
   isActive: boolean;
   createdAt: string;
-}
+} & (
+  | { type: 'TELEGRAM'; config: { chatId?: string } }
+  | { type: 'WECOM'; config: { webhookUrl?: string } }
+  | { type: 'GENERIC'; config: { url?: string } }
+);
 
 export default function ExperimentsSettingsPage() {
   const queryClient = useQueryClient();
@@ -72,14 +74,11 @@ export default function ExperimentsSettingsPage() {
   // Create Webhook Mutation
   const createWebhookMutation = useMutation({
     mutationFn: async () => {
-      let config: any = {};
-      if (newWebhook.type === 'TELEGRAM') {
-        config = { botToken: newWebhook.telegramBotToken, chatId: newWebhook.telegramChatId };
-      } else if (newWebhook.type === 'WECOM') {
-        config = { webhookUrl: newWebhook.wecomWebhookUrl };
-      } else {
-        config = { url: newWebhook.genericUrl, secret: newWebhook.genericSecret };
-      }
+      const config = newWebhook.type === 'TELEGRAM'
+        ? { botToken: newWebhook.telegramBotToken, chatId: newWebhook.telegramChatId }
+        : newWebhook.type === 'WECOM'
+          ? { webhookUrl: newWebhook.wecomWebhookUrl }
+          : { url: newWebhook.genericUrl, secret: newWebhook.genericSecret };
 
       const res = await fetch('/api/experiments/webhooks', {
         method: 'POST',
@@ -148,8 +147,8 @@ export default function ExperimentsSettingsPage() {
         throw new Error(err.error || 'Test notification failed');
       }
       toast.success(`Test message sent to ${webhook.name}!`);
-    } catch (err: any) {
-      toast.error(err.message || 'Test dispatch failed');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Test dispatch failed');
     } finally {
       setTestingWebhookId(null);
     }
@@ -226,9 +225,9 @@ export default function ExperimentsSettingsPage() {
                     <div>
                       <h4 className="text-sm font-semibold text-gray-900">{wh.name}</h4>
                       <p className="text-xs text-gray-500">
-                        {wh.type === 'TELEGRAM' && `Chat ID: ${(wh.config as any)?.chatId || 'N/A'}`}
-                        {wh.type === 'WECOM' && `URL: ${(wh.config as any)?.webhookUrl?.slice(0, 35)}...`}
-                        {wh.type === 'GENERIC' && `URL: ${(wh.config as any)?.url?.slice(0, 35)}...`}
+                {wh.type === 'TELEGRAM' && `Chat ID: ${wh.config.chatId || 'N/A'}`}
+                {wh.type === 'WECOM' && `URL: ${wh.config.webhookUrl?.slice(0, 35)}...`}
+                {wh.type === 'GENERIC' && `URL: ${wh.config.url?.slice(0, 35)}...`}
                       </p>
                     </div>
                   </div>

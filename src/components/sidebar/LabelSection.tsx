@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { useSummaryStore } from '@/stores/summaryStore';
+import type { Label } from '@prisma/client';
 
 export function LabelSection() {
   const pathname = usePathname();
@@ -17,7 +18,7 @@ export function LabelSection() {
   const [labelName, setLabelName] = useState('');
   const openSummaryModal = useSummaryStore((s) => s.openSummaryModal);
 
-  const { data: labelsData, isLoading } = useQuery({
+  const { data: labelsData, isLoading } = useQuery<{ labels: Label[] }>({
     queryKey: ['labels'],
     queryFn: async () => {
       const res = await fetch('/api/labels');
@@ -134,7 +135,7 @@ export function LabelSection() {
           No labels created
         </div>
       ) : (
-        labels.map((label: any) => {
+        labels.map((label) => {
           const isActive = pathname === `/labels/${label.id}`;
           return (
             <Link

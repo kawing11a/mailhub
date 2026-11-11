@@ -14,9 +14,9 @@ export async function GET(req: Request) {
   try {
     const stats = getSpamModelStats();
     return NextResponse.json({ success: true, stats });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Spam Stats Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to fetch spam stats' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to fetch spam stats' }, { status: 500 });
   }
 }
 
@@ -41,8 +41,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Spam Reset Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to reset spam stats' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to reset spam stats' }, { status: 500 });
   }
 }

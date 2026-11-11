@@ -57,20 +57,10 @@ export function useDraftAutosave({
   changeVersion,
 }: UseDraftAutosaveOptions): UseDraftAutosaveResult {
   const [status, setStatus] = useState<DraftSaveStatus>('idle');
-  const snapshotRef = useRef<DraftSnapshot | null>(snapshot);
   const previousAccountIdRef = useRef<string | null>(null);
-  const controllerRef = useRef<DraftAutosaveController | null>(null);
-
-  snapshotRef.current = snapshot;
-
-  if (!controllerRef.current) {
-    controllerRef.current = new DraftAutosaveController(saveDraft, setStatus);
-  }
+  const [controller] = useState(() => new DraftAutosaveController(saveDraft, setStatus));
 
   useEffect(() => {
-    const controller = controllerRef.current;
-    if (!controller) return;
-
     if (!enabled || !snapshot) {
       controller.cancelTimer();
       previousAccountIdRef.current = null;
@@ -100,28 +90,29 @@ export function useDraftAutosave({
     snapshot?.subject,
     snapshot?.attachments?.length,
     changeVersion,
+    snapshot,
+    controller,
   ]);
 
-  useEffect(() => () => controllerRef.current?.dispose(), []);
+  useEffect(() => () => controller.dispose(), [controller]);
 
   const initialize = useCallback((identity: DraftIdentity | null) => {
     previousAccountIdRef.current = identity?.accountId ?? null;
-    controllerRef.current?.initialize(identity);
-  }, []);
+    controller.initialize(identity);
+  }, [controller]);
 
   const flush = useCallback(async () => {
-    const latest = snapshotRef.current;
-    if (!latest) return null;
-    return controllerRef.current?.flush(latest) ?? null;
-  }, []);
+    if (!snapshot) return null;
+    return controller.flush(snapshot);
+  }, [controller, snapshot]);
 
   const cancelScheduledSave = useCallback(() => {
-    controllerRef.current?.cancelTimer();
-  }, []);
+    controller.cancelTimer();
+  }, [controller]);
 
   const getIdentity = useCallback(
-    () => controllerRef.current?.getIdentity() ?? null,
-    []
+    () => controller.getIdentity(),
+    [controller]
   );
 
   return { status, initialize, flush, cancelScheduledSave, getIdentity };

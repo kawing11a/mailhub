@@ -12,6 +12,18 @@ jest.mock('@/lib/db/prisma', () => ({
     email: {
       findUnique: jest.fn(),
     },
+    systemPreference: {
+      upsert: jest.fn().mockResolvedValue({
+        isAiEnabled: true,
+        semanticSearchEnabled: true,
+      }),
+    },
+    experimentSetting: {
+      findUnique: jest.fn().mockResolvedValue(null),
+    },
+    organizationMember: {
+      findUnique: jest.fn().mockResolvedValue({ userId: 'member-1' }),
+    },
   },
 }));
 
@@ -115,7 +127,7 @@ describe('AI API Routes', () => {
       // Verify the payload sent to LLM was sanitized
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       const reqBody = JSON.parse(fetchCall[1].body);
-      const userMessage = reqBody.messages.find((m: any) => m.role === 'user').content;
+const userMessage = reqBody.messages.find((m: { role: string; content: string }) => m.role === 'user').content;
 
       expect(userMessage).toContain('Please review the proposal by tomorrow.');
       expect(userMessage).toContain('Bob');
@@ -169,7 +181,7 @@ describe('AI API Routes', () => {
 
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       const reqBody = JSON.parse(fetchCall[1].body);
-      const userMessage = reqBody.messages.find((m: any) => m.role === 'user').content;
+const userMessage = reqBody.messages.find((m: { role: string; content: string }) => m.role === 'user').content;
       expect(userMessage).not.toContain('<style>');
       expect(userMessage).toContain('Let us meet at 2pm.');
     });
@@ -210,7 +222,7 @@ describe('AI API Routes', () => {
 
       const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
       const reqBody = JSON.parse(fetchCall[1].body);
-      const userMessage = reqBody.messages.find((m: any) => m.role === 'user').content;
+const userMessage = reqBody.messages.find((m: { role: string; content: string }) => m.role === 'user').content;
       expect(userMessage).not.toContain('<p>');
       expect(userMessage).not.toContain('data:image');
     });

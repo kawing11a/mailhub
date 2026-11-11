@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { FileText, ChevronDown, Check, Settings, Plus } from 'lucide-react';
+import { FileText, ChevronDown, Check, Settings } from 'lucide-react';
 import clsx from 'clsx';
 import { Signature } from '@/hooks/useSignatures';
 
@@ -48,8 +48,6 @@ export function SignatureSelect({
       window.removeEventListener('scroll', onReflow, true);
     };
   }, [open]);
-
-  const activeSig = signatures.find((s) => s.id === activeSignatureId);
 
   return (
     <>

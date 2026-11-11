@@ -7,12 +7,21 @@ jest.mock('@/lib/imap/connection-manager', () => ({
 jest.mock('@/lib/db/prisma', () => ({
   prisma: {
     emailAccount: { findMany: jest.fn() },
+    systemPreference: {
+      upsert: jest.fn().mockResolvedValue({
+        isAiEnabled: true,
+        semanticSearchEnabled: true,
+      }),
+    },
     $disconnect: jest.fn(),
   },
 }));
 
 jest.mock('@/lib/redis', () => ({ redis: { set: jest.fn() } }));
-jest.mock('@/lib/search/meilisearch', () => ({ initMeilisearch: jest.fn() }));
+jest.mock('@/lib/search/meilisearch', () => ({
+  initMeilisearch: jest.fn(),
+  configureEmailEmbedder: jest.fn(),
+}));
 jest.mock('@/lib/queue/workers/sync', () => ({
   syncWorker: { close: jest.fn() },
   legacySyncWorker: { close: jest.fn() },
@@ -49,7 +58,7 @@ describe('worker bootstrap partition routing', () => {
 
   it('keeps worker-1 accounts on their stored partition queue during bootstrap', async () => {
     await import('@/worker');
-    for (let index = 0; index < 8; index += 1) await Promise.resolve();
+    await jest.advanceTimersByTimeAsync(1);
 
     expect(prisma.emailAccount.findMany).toHaveBeenCalledWith({
       where: { isActive: true, workerPartition: 'worker-1' },

@@ -1,4 +1,5 @@
 import { Worker, Job } from 'bullmq';
+import type { QueueOptions } from 'bullmq';
 import Redis from 'ioredis';
 import { meilisearch } from '@/lib/search/meilisearch';
 import { prisma } from '@/lib/db/prisma';
@@ -63,7 +64,7 @@ export const searchWorker = new Worker<SearchIndexPayload>(
     console.log(`Indexed email ${emailId} in Meilisearch.`);
   },
   {
-    connection: workerRedis as any,
+    connection: workerRedis as unknown as QueueOptions['connection'],
     concurrency: 15, // Allow up to 15 parallel indexing jobs
   }
 );

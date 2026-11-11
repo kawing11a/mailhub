@@ -54,7 +54,7 @@ export async function GET(
             : undefined,
       },
     });
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to fetch summary run status', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to fetch summary run status', 500);
   }
 }

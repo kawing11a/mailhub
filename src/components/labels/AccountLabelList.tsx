@@ -22,6 +22,8 @@ interface AccountLabelListProps {
   readOnly?: boolean;
 }
 
+const EMPTY_ACCOUNT_LABELS: AccountLabel[] = [];
+
 export function AccountLabelList({ accountId, readOnly = false }: AccountLabelListProps) {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
@@ -31,8 +33,6 @@ export function AccountLabelList({ accountId, readOnly = false }: AccountLabelLi
 
   useEffect(() => {
     if (isOpen) {
-      setSearch('');
-      setHighlightedIndex(0);
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
   }, [isOpen]);
@@ -46,7 +46,7 @@ export function AccountLabelList({ accountId, readOnly = false }: AccountLabelLi
     },
   });
 
-  const allLabels = labelsData?.labels || [];
+  const allLabels = labelsData?.labels ?? EMPTY_ACCOUNT_LABELS;
 
   const accountLabels = useMemo(
     () => allLabels.filter((label) => label.accountIds?.includes(accountId)),
@@ -186,7 +186,13 @@ export function AccountLabelList({ accountId, readOnly = false }: AccountLabelLi
         <div className="relative inline-block">
           <button
             type="button"
-            onClick={() => setIsOpen(!isOpen)}
+            onClick={() => {
+              if (!isOpen) {
+                setSearch('');
+                setHighlightedIndex(0);
+              }
+              setIsOpen(!isOpen);
+            }}
             className={clsx(
               'inline-flex items-center gap-1 rounded-full text-xs transition-colors focus:outline-none focus:ring-1 focus:ring-accent-500',
               accountLabels.length === 0

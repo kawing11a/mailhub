@@ -7,11 +7,20 @@ import { useUIStore } from '@/stores/uiStore';
 import { useMemo } from 'react';
 import { LabelBadge } from '@/components/labels/LabelBadge';
 import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
+import type { Email, EmailAccount, Label } from '@prisma/client';
+
+export type EmailRowData = Pick<Email,
+  'id' | 'accountId' | 'folder' | 'fromAddress' | 'fromName' | 'hasAttachments' | 'isHighRisk' | 'isDraft' |
+  'isRead' | 'isStarred' | 'riskReason' | 'snippet' | 'subject' | 'sentAt' | 'receivedAt' | 'createdAt'
+> & {
+  account?: Pick<EmailAccount, 'label' | 'emailAddress' | 'color'> | null;
+  emailLabels: Array<{ label: Pick<Label, 'id' | 'name' | 'color'> }>;
+};
 
 interface EmailRowProps {
-  email: any;
+  email: EmailRowData;
   onClick: (id: string) => void;
-  onContextMenu?: (e: React.MouseEvent, email: any) => void;
+  onContextMenu?: (e: React.MouseEvent, email: EmailRowData) => void;
   isSelected?: boolean;
   /** Render a multi-select checkbox zone at the left edge of the row. */
   selectable?: boolean;
@@ -50,7 +59,7 @@ export function EmailRow({
       return format(date, timeFormat === '24h' ? 'HH:mm' : 'h:mm a');
     }
     return format(date, timeFormat === '24h' ? 'MMM d, HH:mm' : 'MMM d, h:mm a');
-  }, [email.folder, email.sentAt, email.receivedAt, email.createdAt, timeFormat]);
+  }, [email, timeFormat]);
 
   return (
     <div
@@ -148,7 +157,7 @@ export function EmailRow({
           </span>
           {email.emailLabels?.length > 0 && (
             <span className="hidden sm:flex items-center gap-1 ml-2 flex-shrink-0">
-              {email.emailLabels.slice(0, 2).map((el: any) => (
+              {email.emailLabels.slice(0, 2).map((el) => (
                 <LabelBadge key={el.label.id} label={el.label} />
               ))}
               {email.emailLabels.length > 2 && (

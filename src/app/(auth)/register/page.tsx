@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Loader2, Mail } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -44,8 +45,8 @@ export default function RegisterPage() {
 
       router.push('/inbox');
       router.refresh();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to create account.');
       setIsLoading(false);
     }
   };
@@ -53,7 +54,7 @@ export default function RegisterPage() {
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="lg:hidden flex items-center gap-2 mb-8">
-          <img src="/logo.png" alt="MailHub Logo" className="h-10 w-auto rounded-lg shadow-sm" />
+          <Image src="/logo.png" alt="MailHub Logo" width={40} height={40} className="h-10 w-auto rounded-lg shadow-sm" />
           <span className="text-2xl font-bold tracking-tight text-gray-900">MailHub</span>
         </div>
 

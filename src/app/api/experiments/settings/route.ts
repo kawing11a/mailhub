@@ -120,7 +120,7 @@ export async function PUT(req: NextRequest) {
       hasApiKey: Boolean(aiApiKey),
       systemAiEnabled: systemPreferences.isAiEnabled,
     });
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to update experiment settings', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to update experiment settings', 500);
   }
 }

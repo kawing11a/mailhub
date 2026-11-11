@@ -12,7 +12,10 @@
 ## Screenshots & Demo
 
 <div align="center">
-  <img src="public/screenshots/demo.gif" alt="MailHub Animated Demo" width="850" />
+  <img src="public/screenshots/demo.gif" alt="MailHub running locally with synthetic inbox data and compact email actions" width="850" />
+  <br />
+  <img src="public/screenshots/demo-inbox.png" alt="Real MailHub email viewer showing a long subject and synthetic development message" width="1100" />
+  <p><em>Captured from the local development app using fictional demo data. No live mail accounts are connected.</em></p>
 </div>
 
 <br />
@@ -126,6 +129,8 @@ cp .env.example .env
 
 Edit `.env` with your values. Required variables:
 
+For a local synthetic demo, copy `.env.example` to `.env.local` instead and point its service URLs at your own loopback services. Leave the root `.env` absent; when `.env` exists, the app and Prisma use that real configuration and the demo seed refuses to run.
+
 | Variable | Description |
 |---|---|
 | `DATABASE_URL` | PostgreSQL connection string |
@@ -178,11 +183,15 @@ npm run create-admin
 npm run create-admin admin@example.com "Admin User" "Password123!" "My Organization"
 ```
 
-To seed test data (optional):
+To seed synthetic demo data into a local development database (optional):
 
 ```bash
 npm run db:seed
 ```
+
+The demo seed is repeatable and only targets a loopback database from `.env.local`. It refuses to run in production, against a non-local database, or while a root `.env` file exists. For demo development, start only the local dependencies with `docker compose up -d postgres redis meilisearch`; do not start the bundled web and worker containers.
+
+Demo login: `admin@demo.mailhub.test` / `DemoPass123!`. The seeded mail accounts are inactive and have no server credentials, so they cannot connect to external mail servers.
 
 ### 5. Run the App
 
@@ -302,7 +311,7 @@ npm test
 
 - **System Installation Check**: Utilizes `navigator.getInstalledRelatedApps()` and display mode media queries (`standalone`, `window-controls-overlay`) to detect if MailHub is installed on the user's OS.
 - **Smart Install UI**: Displays an **Install MailHub App** button in the sidebar for browser tabs; automatically hides when accessed inside the installed PWA app or system.
-- **Icon Generation**: Generated app icon suite available via `node scripts/generate-pwa-icons.js`.
+- **Icon Generation**: Generated app icon suite available via `node scripts/generate-pwa-icons.mjs`.
 
 ## Docker
 

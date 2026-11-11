@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyToken, verifyRefreshToken, createToken, ACCESS_TOKEN_MAX_AGE } from './jwt';
+import { verifyToken, verifyRefreshToken } from './jwt';
 import type { JWTPayload } from './types';
 
 export async function authenticate(
@@ -23,10 +23,8 @@ export async function authenticate(
   if (refreshToken) {
     try {
       const payload = await verifyRefreshToken(refreshToken);
-      // Auto-issue a new access token (valid 7 days)
-      const newToken = await createToken(payload);
-
-      // Store new token info on payload for response header setting if needed
+      // Continue with the verified refresh-token identity. Route handlers own
+      // response cookies, so token rotation must happen in the refresh endpoint.
       return {
         ...payload,
       };

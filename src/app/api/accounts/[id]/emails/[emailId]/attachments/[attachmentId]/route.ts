@@ -21,7 +21,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId, emailId, attachmentId } = await params;
 
-  let where: Record<string, unknown> = { id: emailId };
+  const where: Record<string, unknown> = { id: emailId };
 
   // Check account access
   if (accountId !== 'all' && accountId !== 'new-emails') {

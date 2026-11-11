@@ -7,6 +7,7 @@ import { Tag, Mail, Search, Check, Loader2, Plus, Pencil, Trash2, ListFilter } f
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 import { RuleModal } from '@/components/rules/RuleModal';
+import type { ComponentProps } from 'react';
 
 // Palette offered when creating a label inline.
 const LABEL_COLORS = [
@@ -57,7 +58,7 @@ export default function LabelAssignmentPage() {
   const editInputRef = useRef<HTMLInputElement>(null);
 
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
-  const [initialRuleData, setInitialRuleData] = useState<any | null>(null);
+  const [initialRuleData, setInitialRuleData] = useState<ComponentProps<typeof RuleModal>['initialRule']>(null);
 
   useEffect(() => {
     if (editingLabelId) editInputRef.current?.focus();

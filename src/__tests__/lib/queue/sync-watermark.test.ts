@@ -50,7 +50,9 @@ import { imapManager } from '@/lib/imap/connection-manager';
 import { redis } from '@/lib/redis';
 import '@/lib/queue/workers/sync';
 
-const syncProcessor = (Worker as unknown as jest.Mock).mock.calls[0][1] as (job: any) => Promise<void>;
+const syncProcessor = (Worker as unknown as jest.Mock).mock.calls[0][1] as (
+  job: { name: string; data: { accountId: string; folder: string } }
+) => Promise<void>;
 
 const gmailAccount = {
   id: 'account-1',

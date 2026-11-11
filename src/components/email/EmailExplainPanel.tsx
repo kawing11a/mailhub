@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Sparkles, Loader2, AlertCircle, CheckCircle2, FileText, Info, HelpCircle, Tag, X } from 'lucide-react';
 
 export interface ExplanationData {
@@ -20,20 +21,16 @@ interface EmailExplainPanelProps {
 }
 
 export function EmailExplainPanel({ emailId, subject, bodyText, isOpen, onClose }: EmailExplainPanelProps) {
-  const [data, setData] = useState<ExplanationData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isOpen && !data && !isLoading) {
-      fetchExplanation();
-    }
-  }, [isOpen]);
-
-  const fetchExplanation = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const {
+    data,
+    isLoading,
+    error,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ['email-explanation', emailId],
+    enabled: isOpen,
+    queryFn: async () => {
       const res = await fetch('/api/ai/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -45,18 +42,14 @@ export function EmailExplainPanel({ emailId, subject, bodyText, isOpen, onClose 
         throw new Error(resData.error || 'Failed to explain email');
       }
 
-      setData(resData.explanation);
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      return resData.explanation as ExplanationData;
+    },
+  });
 
   if (!isOpen) return null;
 
   return (
-    <div className="w-80 lg:w-96 bg-white dark:bg-gray-900 border-l border-purple-100 dark:border-purple-900/40 h-full flex flex-col shadow-xl z-20 transition-all duration-200">
+    <div className="flex h-auto max-h-[50%] w-full max-w-full shrink-0 flex-col border-t border-purple-100 bg-white shadow-xl transition-all duration-200 dark:border-purple-900/40 dark:bg-gray-900 @3xl:h-full @3xl:max-h-none @3xl:w-96 @3xl:max-w-[40%] @3xl:border-l @3xl:border-t-0">
       {/* Header */}
       <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-purple-50/50 dark:bg-purple-950/20">
         <div className="flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-300 text-sm">
@@ -80,14 +73,14 @@ export function EmailExplainPanel({ emailId, subject, bodyText, isOpen, onClose 
           </div>
         )}
 
-        {error && (
+        {isError && (
           <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 rounded-lg text-red-700 dark:text-red-300 flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <div>
               <p className="font-semibold">Analysis Failed</p>
-              <p className="text-xs">{error}</p>
+              <p className="text-xs">{error instanceof Error ? error.message : 'Something went wrong'}</p>
               <button
-                onClick={fetchExplanation}
+                onClick={() => void refetch()}
                 className="mt-2 px-2 py-1 bg-red-600 text-white rounded text-xs hover:bg-red-700"
               >
                 Retry

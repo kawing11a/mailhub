@@ -1,4 +1,5 @@
 import { redis } from '@/lib/redis';
+import type { WebhookDispatchResult } from '@/lib/notifications/types';
 import { createUniqueId } from '@/lib/identifiers';
 
 export interface AgentLogEntry {
@@ -38,7 +39,7 @@ export interface AgentRunState {
   logs: AgentLogEntry[];
   startedAt: string;
   completedAt?: string;
-  webhookLogs?: any[];
+  webhookLogs?: WebhookDispatchResult[];
 }
 
 const REDIS_KEY_PREFIX = 'summary_run:';
@@ -171,7 +172,7 @@ export async function completeAgentRun(
   runId: string,
   summaryText: string,
   emailCount: number,
-  webhookLogs?: any[]
+  webhookLogs?: WebhookDispatchResult[]
 ): Promise<AgentRunState | null> {
   const now = new Date().toISOString();
   return updateAgentStep(

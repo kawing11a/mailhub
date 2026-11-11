@@ -52,6 +52,15 @@ import { GmailSyncManager } from '@/lib/gmail/sync-manager';
 import { IncompleteSyncError } from '@/lib/sync-result';
 import { searchQueue } from '@/lib/queue/client';
 
+type GmailSyncTestAccess = {
+  pollNewEmails: (...args: unknown[]) => Promise<{ processed: number; failed: number }>;
+  fetchAndPersist: (...args: unknown[]) => Promise<boolean>;
+};
+
+function getTestAccess(manager: GmailSyncManager): GmailSyncTestAccess {
+  return manager as unknown as GmailSyncTestAccess;
+}
+
 const activeAccount = {
   id: 'account-1',
   organizationId: 'org-1',
@@ -82,10 +91,10 @@ describe('Gmail polling concurrency', () => {
       return pendingFetch;
     });
 
-    const firstPoll = (manager as any).pollNewEmails('account-1', 'org-1');
+    const firstPoll = getTestAccess(manager).pollNewEmails('account-1', 'org-1');
     await firstFetchHasStarted;
 
-    const secondPoll = (manager as any).pollNewEmails('account-1', 'org-1');
+    const secondPoll = getTestAccess(manager).pollNewEmails('account-1', 'org-1');
     await new Promise((resolve) => setImmediate(resolve));
 
     try {
@@ -110,9 +119,9 @@ describe('Gmail polling concurrency', () => {
         messages: secondPage,
         resultSizeEstimate: 51,
       });
-    jest.spyOn(manager as any, 'fetchAndPersist').mockResolvedValue(true);
+    jest.spyOn(getTestAccess(manager), 'fetchAndPersist').mockResolvedValue(true);
 
-    await expect((manager as any).pollNewEmails('account-1', 'org-1')).resolves.toEqual({
+    await expect(getTestAccess(manager).pollNewEmails('account-1', 'org-1')).resolves.toEqual({
       processed: 51,
       failed: 0,
     });
@@ -139,11 +148,11 @@ describe('Gmail polling concurrency', () => {
         resultSizeEstimate: 2,
       });
     jest
-      .spyOn(manager as any, 'fetchAndPersist')
+      .spyOn(getTestAccess(manager), 'fetchAndPersist')
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
 
-    await expect((manager as any).pollNewEmails('account-1', 'org-1')).rejects.toBeInstanceOf(
+    await expect(getTestAccess(manager).pollNewEmails('account-1', 'org-1')).rejects.toBeInstanceOf(
       IncompleteSyncError
     );
 
@@ -170,7 +179,7 @@ describe('Gmail polling concurrency', () => {
 
     let activePersistences = 0;
     let maxConcurrentPersistences = 0;
-    jest.spyOn(manager as any, 'fetchAndPersist').mockImplementation(async () => {
+    jest.spyOn(getTestAccess(manager), 'fetchAndPersist').mockImplementation(async () => {
       activePersistences += 1;
       maxConcurrentPersistences = Math.max(maxConcurrentPersistences, activePersistences);
       await new Promise((resolve) => setImmediate(resolve));
@@ -194,7 +203,7 @@ describe('Gmail polling concurrency', () => {
     });
 
     await expect(
-      (manager as any).fetchAndPersist(
+      getTestAccess(manager).fetchAndPersist(
         'access-token',
         'account-1',
         'org-1',

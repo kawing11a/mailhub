@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import {
-  Wrench,
   Sparkles,
   ListTodo,
   SmilePlus,
@@ -10,18 +9,19 @@ import {
   ShieldAlert,
   Loader2,
   X,
-  CheckCircle2,
+  Wrench,
 } from 'lucide-react';
+import { EmailActionMenu, type EmailActionMenuItem } from './EmailActionMenu';
 
 interface EmailToolboxProps {
   accountId?: string;
   emailText?: string;
   emailSubject?: string;
   selectedEmailCount?: number;
+  explanation?: { isOpen: boolean; onToggle: () => void };
 }
 
-export function EmailToolbox({ accountId, emailText, emailSubject, selectedEmailCount = 0 }: EmailToolboxProps) {
-  const [isOpen, setIsOpen] = useState(false);
+export function EmailToolbox({ accountId, emailText, emailSubject, selectedEmailCount = 0, explanation }: EmailToolboxProps) {
   const [activeModalTool, setActiveModalTool] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [resultText, setResultText] = useState<string | null>(null);
@@ -53,8 +53,8 @@ export function EmailToolbox({ accountId, emailText, emailSubject, selectedEmail
       }
 
       setResultText(data.result);
-    } catch (err: any) {
-      setError(err.message || 'Error running AI tool');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Error running AI tool');
     } finally {
       setIsLoading(false);
     }
@@ -75,76 +75,53 @@ export function EmailToolbox({ accountId, emailText, emailSubject, selectedEmail
     }
   };
 
+  const actions: EmailActionMenuItem[] = [
+    ...(explanation ? [{
+      id: 'explain',
+      label: explanation.isOpen ? 'Close explanation' : 'Explain email',
+      icon: <Sparkles className="h-4 w-4 text-purple-500" />,
+      onSelect: explanation.onToggle,
+    }] : []),
+    {
+      id: 'extract_tasks',
+      label: 'Extract action items',
+      icon: <ListTodo className="h-4 w-4 text-blue-500" />,
+      disabled: isLoading,
+      onSelect: () => runTool('extract_tasks'),
+    },
+    {
+      id: 'tone_check',
+      label: 'Analyze tone and sentiment',
+      icon: <SmilePlus className="h-4 w-4 text-emerald-500" />,
+      disabled: isLoading,
+      onSelect: () => runTool('tone_check'),
+    },
+    {
+      id: 'translate',
+      label: 'Translate email',
+      icon: <Languages className="h-4 w-4 text-purple-500" />,
+      disabled: isLoading,
+      onSelect: () => runTool('translate'),
+    },
+    {
+      id: 'spam_check',
+      label: 'Security and phishing check',
+      icon: <ShieldAlert className="h-4 w-4 text-amber-500" />,
+      disabled: isLoading,
+      onSelect: () => runTool('spam_check'),
+    },
+  ];
+
   return (
     <div className="relative inline-block">
-      {/* Toolbox Trigger Button */}
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md border border-purple-200 transition-colors shadow-xs"
-        title="Email AI Toolbox"
-      >
-        <Wrench className="w-3.5 h-3.5 text-purple-600" />
-        <span>AI Toolbox</span>
-      </button>
-
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-900 rounded-xl shadow-xl border border-purple-100 dark:border-purple-900/40 py-2 z-50 animate-in fade-in slide-in-from-top-1">
-          <div className="px-3 py-1.5 border-b border-gray-100 dark:border-gray-800 text-[11px] font-semibold text-purple-900 dark:text-purple-300 uppercase tracking-wider flex items-center justify-between">
-            <span>Email AI Quick Tools</span>
-            <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600">
-              ✕
-            </button>
-          </div>
-
-          <div className="py-1 text-xs text-gray-700 dark:text-gray-200">
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                runTool('extract_tasks');
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center gap-2 transition-colors"
-            >
-              <ListTodo className="w-4 h-4 text-blue-500" />
-              <span>Extract Action Items</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                runTool('tone_check');
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center gap-2 transition-colors"
-            >
-              <SmilePlus className="w-4 h-4 text-emerald-500" />
-              <span>Analyze Tone & Sentiment</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                runTool('translate');
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center gap-2 transition-colors"
-            >
-              <Languages className="w-4 h-4 text-purple-500" />
-              <span>Translate Email</span>
-            </button>
-
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                runTool('spam_check');
-              }}
-              className="w-full px-3 py-2 text-left hover:bg-purple-50 dark:hover:bg-purple-950/40 flex items-center gap-2 transition-colors text-amber-700 dark:text-amber-400"
-            >
-              <ShieldAlert className="w-4 h-4 text-amber-500" />
-              <span>Security & Phishing Check</span>
-            </button>
-          </div>
-        </div>
-      )}
+      <EmailActionMenu
+        label="Email AI Toolbox"
+        title={selectedEmailCount > 1 ? `AI tools for ${selectedEmailCount} selected emails` : 'Email AI Toolbox'}
+        heading="Email AI quick tools"
+        icon={<><Wrench className="h-3.5 w-3.5 text-purple-600" /><span>AI Toolbox</span></>}
+        triggerClassName="flex items-center gap-1.5 rounded-md border border-purple-200 bg-purple-50 px-3 py-1.5 text-xs font-medium text-purple-700 shadow-xs transition-colors hover:bg-purple-100"
+        items={actions}
+      />
 
       {/* Tool Output Modal */}
       {activeModalTool && (

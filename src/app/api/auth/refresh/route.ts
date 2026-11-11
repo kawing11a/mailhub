@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (err: any) {
+  } catch {
     return apiError('Invalid or expired refresh token. Please log in again.', 401);
   }
 }

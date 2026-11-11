@@ -1,5 +1,24 @@
 import { create } from 'zustand';
 
+interface ComposeDraft {
+  id?: string;
+  accountId?: string;
+  to: string;
+  cc?: string;
+  bcc?: string;
+  subject: string;
+  bodyHtml: string;
+  replyToSubject?: string;
+  replyToBody?: string;
+  attachments?: Array<{
+    id?: string;
+    filename: string;
+    contentType: string;
+    sizeBytes?: number;
+    content: string;
+  }>;
+}
+
 interface AccountState {
   selectedAccountId: string | null;
   setSelectedAccountId: (id: string | null) => void;
@@ -7,25 +26,8 @@ interface AccountState {
   isComposeModalOpen: boolean;
   setComposeModalOpen: (isOpen: boolean) => void;
   
-  composeDraft: {
-    id?: string;
-    accountId?: string;
-    to: string;
-    cc?: string;
-    bcc?: string;
-    subject: string;
-    bodyHtml: string;
-    replyToSubject?: string;
-    replyToBody?: string;
-    attachments?: Array<{
-      id?: string;
-      filename: string;
-      contentType: string;
-      sizeBytes?: number;
-      content: string;
-    }>;
-  } | null;
-  setComposeDraft: (draft: any) => void;
+  composeDraft: ComposeDraft | null;
+  setComposeDraft: (draft: ComposeDraft | null) => void;
   selectedFolder: string;
   setSelectedFolder: (folder: string) => void;
 }

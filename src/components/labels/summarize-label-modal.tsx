@@ -39,6 +39,8 @@ interface LabelItem {
   color: string;
 }
 
+const EMPTY_LABELS: LabelItem[] = [];
+
 interface WebhookItem {
   id: string;
   name: string;
@@ -134,14 +136,16 @@ export function SummarizeLabelModal({
   const activeRunId = store.activeRunId;
 
   // Sync initial label ID
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (targetLabelId) {
       setSelectedLabelId(targetLabelId);
     }
-  }, [targetLabelId]);
+  }, [targetLabelId])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   // Fetch Labels
-  const { data: labelsData } = useQuery({
+  const { data: labelsData } = useQuery<{ labels: LabelItem[] }>({
     queryKey: ['labels'],
     queryFn: async () => {
       const res = await fetch('/api/labels');
@@ -151,14 +155,16 @@ export function SummarizeLabelModal({
     enabled: isOpen,
   });
 
-  const labels: LabelItem[] = labelsData?.labels || [];
+  const labels = labelsData?.labels ?? EMPTY_LABELS;
 
   // Auto-select first label if none selected
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (labels.length > 0 && !selectedLabelId) {
       setSelectedLabelId(labels[0].id);
     }
-  }, [labels, selectedLabelId]);
+  }, [labels, selectedLabelId])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   // Fetch Webhooks
   const { data: webhooksData } = useQuery({
@@ -191,8 +197,9 @@ export function SummarizeLabelModal({
   });
 
   // Elapsed Timer
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
-    let timer: any;
+  let timer: ReturnType<typeof setTimeout>;
     const isRunning =
       activeRunId &&
       runStatus?.status !== 'COMPLETED' &&
@@ -212,7 +219,8 @@ export function SummarizeLabelModal({
       setElapsedMs(Math.max(0, end - start));
     }
     return () => clearInterval(timer);
-  }, [activeRunId, runStatus?.status, runStatus?.agentState?.startedAt, runStatus?.agentState?.completedAt]);
+  }, [activeRunId, runStatus?.status, runStatus?.agentState?.startedAt, runStatus?.agentState?.completedAt])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   // Auto scroll agent logs to bottom
   useEffect(() => {
@@ -287,8 +295,8 @@ export function SummarizeLabelModal({
 
       store.setActiveRun(runId, selectedLabelId, currentLabel?.name);
       setShowLogs(true);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to trigger summary');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Failed to trigger summary');
     }
   };
 

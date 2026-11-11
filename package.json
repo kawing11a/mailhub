@@ -7,7 +7,7 @@
     "dev": "next dev --experimental-https",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "services:up": "docker-compose up -d",
     "services:down": "docker-compose down",
     "test": "jest",

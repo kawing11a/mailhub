@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
       priority: rule.priority || 0,
       accountId: rule.accountId || null,
       accountLabelId: rule.accountLabelId || null,
-      conditions: rule.conditions as any,
-      actions: rule.actions as any,
+        conditions: rule.conditions as unknown as EmailRuleDefinition['conditions'],
+        actions: rule.actions as unknown as EmailRuleDefinition['actions'],
     };
 
     const evaluationInput: EmailEvaluationInput = {

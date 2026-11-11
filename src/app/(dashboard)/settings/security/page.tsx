@@ -50,8 +50,8 @@ export default function SecurityPage() {
 
       setSuccess(true);
       reset(); // clear form
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to update password');
     }
   };
 

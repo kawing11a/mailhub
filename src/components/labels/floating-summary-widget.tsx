@@ -5,13 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useSummaryStore } from '@/stores/summaryStore';
 import {
   Bot,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   X,
   Maximize2,
-  Loader2,
-  ChevronRight,
 } from 'lucide-react';
 
 interface SummaryRunStatus {
@@ -54,8 +51,9 @@ export function FloatingSummaryWidget() {
   });
 
   // Elapsed Timer
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
-    let timer: any;
+  let timer: ReturnType<typeof setTimeout>;
     const isRunning =
       activeRunId &&
       !isModalOpen &&
@@ -76,7 +74,8 @@ export function FloatingSummaryWidget() {
       setElapsedMs(Math.max(0, end - start));
     }
     return () => clearInterval(timer);
-  }, [activeRunId, isModalOpen, runStatus?.status, runStatus?.agentState?.startedAt, runStatus?.agentState?.completedAt]);
+  }, [activeRunId, isModalOpen, runStatus?.status, runStatus?.agentState?.startedAt, runStatus?.agentState?.completedAt])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   if (isModalOpen || !activeRunId) {
     return null;

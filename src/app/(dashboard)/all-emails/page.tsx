@@ -46,10 +46,10 @@ function AllEmailsContent() {
 
   if (readingPane === 'off') {
     return (
-      <div className="flex flex-1 h-full overflow-hidden relative">
+      <div className="flex min-w-0 flex-1 h-full overflow-hidden relative">
         {selectedEmailId ? (
-          <div className="absolute inset-0 z-10 bg-white flex flex-col">
-            <EmailViewer emailId={selectedEmailId} onBack={() => handleSelectEmail(null)} />
+          <div className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-white">
+            <EmailViewer key={selectedEmailId} emailId={selectedEmailId} onBack={() => handleSelectEmail(null)} />
           </div>
         ) : (
           <div className="w-full h-full flex flex-col">
@@ -63,13 +63,13 @@ function AllEmailsContent() {
   const isBottomPane = readingPane === 'bottom';
 
   return (
-    <div className={clsx("flex flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
+    <div className={clsx("flex min-w-0 flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
       <div className={clsx("flex flex-col", isBottomPane ? (selectedEmailId ? "h-[45%] min-h-[300px]" : "h-full") : (selectedEmailId ? "w-1/3 min-w-[320px] max-w-[480px] h-full" : "w-full h-full"))}>
         <EmailList selectedEmailId={selectedEmailId} onSelectEmail={handleSelectEmail} />
       </div>
       {selectedEmailId && (
-        <div className={clsx("bg-white relative", isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200")}>
-          <EmailViewer emailId={selectedEmailId} onBack={() => handleSelectEmail(null)} />
+        <div className={clsx("relative min-h-0 min-w-0 bg-white", isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200")}>
+          <EmailViewer key={selectedEmailId} emailId={selectedEmailId} onBack={() => handleSelectEmail(null)} />
         </div>
       )}
     </div>

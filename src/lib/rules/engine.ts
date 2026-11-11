@@ -6,6 +6,7 @@ import {
 } from './types';
 import { getReceivedAttachment } from '@/lib/email/attachment-retrieval';
 import { orderAttachmentsByOrdinal } from '@/lib/email/attachment-storage';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 /**
  * Converts Prisma JSON address fields into the shape accepted by the rule engine.
@@ -256,9 +257,9 @@ export function evaluateRulesAgainstEmail(
 export async function applyRuleActions(
   emailId: string,
   actions: RuleActions,
-  prisma: any
+  prisma: PrismaClient
 ): Promise<void> {
-  const emailUpdateData: Record<string, any> = {};
+  const emailUpdateData: Prisma.EmailUpdateInput = {};
 
   if (actions.markAsRead !== undefined) {
     emailUpdateData.isRead = actions.markAsRead;
@@ -306,7 +307,7 @@ export async function processRulesForNewEmail(
   emailId: string,
   accountId: string,
   organizationId: string,
-  prismaClient?: any
+  prismaClient?: PrismaClient
 ): Promise<void> {
   const db = prismaClient || (await import('@/lib/db/prisma')).prisma;
 
@@ -371,11 +372,11 @@ export async function processRulesForNewEmail(
       isRead: email.isRead,
       isStarred: email.isStarred,
       isHighRisk: email.isHighRisk,
-      accountLabelIds: email.account?.accountLabels.map((accountLabel: any) => accountLabel.labelId) || [],
-      labelIds: email.emailLabels.map((el: any) => el.labelId),
+      accountLabelIds: email.account?.accountLabels.map((accountLabel) => accountLabel.labelId) || [],
+      labelIds: email.emailLabels.map((el) => el.labelId),
     };
 
-    const rulesDefs: EmailRuleDefinition[] = rulesRecords.map((r: any) => ({
+    const rulesDefs: EmailRuleDefinition[] = rulesRecords.map((r) => ({
       id: r.id,
       name: r.name,
       description: r.description,
@@ -384,8 +385,8 @@ export async function processRulesForNewEmail(
       stopProcessing: r.stopProcessing,
       accountId: r.accountId,
       accountLabelId: r.accountLabelId,
-      conditions: r.conditions as any,
-      actions: r.actions as any,
+      conditions: r.conditions as unknown as EmailRuleDefinition['conditions'],
+      actions: r.actions as unknown as EmailRuleDefinition['actions'],
     }));
 
     const { matchedRules, combinedActions } = evaluateRulesAgainstEmail(emailInput, rulesDefs);
@@ -418,7 +419,7 @@ export async function processRulesForNewEmail(
         const forwardedAttachments =
           email.attachments && email.attachments.length > 0
             ? await Promise.all(
-                orderAttachmentsByOrdinal(email.attachments).map(async (attachment: any) => {
+                orderAttachmentsByOrdinal(email.attachments).map(async (attachment) => {
                   const retrieved = await getReceivedAttachment(email.id, attachment.id);
 
                   return {

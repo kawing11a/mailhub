@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db/prisma';
 import { encrypt, decrypt } from '@/lib/crypto';
 import type { CreateAccountInput, UpdateAccountInput } from '@/lib/validation';
-import type { EmailAccount } from '@prisma/client';
+import type { EmailAccount, Prisma } from '@prisma/client';
 import { accountAccessWhere, type AccountAuth } from '@/lib/accounts/access';
 import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
 
@@ -165,10 +165,10 @@ export async function updateAccount(
       .map((host) => resolveSafeOutboundHost(host))
   );
 
-  const data: any = { ...input };
-  if (input.password) {
-    data.passwordEncrypted = encrypt(input.password);
-    delete data.password;
+  const { password, ...accountUpdates } = input;
+  const data: Prisma.EmailAccountUpdateInput = { ...accountUpdates };
+  if (password) {
+    data.passwordEncrypted = encrypt(password);
   }
   
   // If we are updating connection settings, re-activate the account to trigger a sync

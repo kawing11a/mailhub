@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ tool, result, status: 'success' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof AiUnavailableError) {
       return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
     }
@@ -73,6 +73,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
     console.error('AI Toolbox Route Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to execute AI tool' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to execute AI tool' }, { status: 500 });
   }
 }

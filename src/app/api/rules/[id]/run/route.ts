@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db/prisma';
 import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { evaluateRule, applyRuleActions, normalizeEmailAddressField } from '@/lib/rules/engine';
 import { EmailEvaluationInput, EmailRuleDefinition } from '@/lib/rules/types';
+import type { Prisma } from '@prisma/client';
 
 export async function POST(
   req: NextRequest,
@@ -31,12 +32,12 @@ export async function POST(
       priority: ruleRecord.priority,
       accountId: ruleRecord.accountId,
       accountLabelId: ruleRecord.accountLabelId,
-      conditions: ruleRecord.conditions as any,
-      actions: ruleRecord.actions as any,
+      conditions: ruleRecord.conditions as unknown as EmailRuleDefinition['conditions'],
+      actions: ruleRecord.actions as unknown as EmailRuleDefinition['actions'],
     };
 
     // Find accounts matching scope
-    const accountFilter: Record<string, any> = {
+    const accountFilter: Prisma.EmailAccountWhereInput = {
       organizationId: session.organizationId,
     };
     if (ruleRecord.accountId) {

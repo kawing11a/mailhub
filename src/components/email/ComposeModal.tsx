@@ -8,8 +8,6 @@ import {
   Trash2,
   Maximize2,
   Minimize2,
-  FileText,
-  Settings,
   Bold,
   Italic,
   Strikethrough,
@@ -17,7 +15,6 @@ import {
   ListOrdered,
   Quote,
   Link as LinkIcon,
-  Unlink,
   Image as ImageIcon,
   Upload,
   Undo,
@@ -85,17 +82,7 @@ export function ComposeModal() {
   const [modalSize, setModalSize] = useState({ w: DEFAULT_WIDTH, h: DEFAULT_HEIGHT });
   // Refs for drag-to-move
   const modalRef = useRef<HTMLDivElement>(null);
-  const dragState = useRef<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   // Refs for resize
-  const resizeState = useRef<{
-    edge: string;
-    startX: number;
-    startY: number;
-    origX: number;
-    origY: number;
-    origW: number;
-    origH: number;
-  } | null>(null);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -278,7 +265,7 @@ export function ComposeModal() {
   const autoInsertedAccountIdRef = useRef<string | null>(null);
 
   // Swaps or removes the signature HTML block in TipTap editor cleanly
-  const applySignature = (signatureHtml: string | null, sigId: string | null = null) => {
+  const applySignature = useCallback((signatureHtml: string | null, sigId: string | null = null) => {
     if (!editor) return;
     const currentHtml = editor.getHTML();
 
@@ -299,7 +286,7 @@ export function ComposeModal() {
 
     editor.commands.setContent(newHtml);
     setBodyVersion((v) => v + 1);
-  };
+  }, [editor]);
 
   // Reset tracking when compose modal closes
   useEffect(() => {
@@ -321,7 +308,7 @@ export function ComposeModal() {
         autoInsertedAccountIdRef.current = fromAccount?.id || null;
       }
     }
-  }, [isComposeModalOpen, editor, defaultSignature, fromAccount?.id, composeDraft]);
+  }, [isComposeModalOpen, editor, defaultSignature, fromAccount?.id, composeDraft, applySignature]);
 
   // Snapshot the live editor on every bodyVersion render. The autosave hook
   // debounces and serializes these snapshots without rehydrating TipTap.
@@ -349,6 +336,7 @@ export function ComposeModal() {
     changeVersion: bodyVersion,
   });
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (isComposeModalOpen) {
       setTo(composeDraft?.to || '');
@@ -380,7 +368,8 @@ export function ComposeModal() {
     }
     // Callers set composeDraft before opening; later saves must not rehydrate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isComposeModalOpen]);
+  }, [isComposeModalOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   useEffect(() => {
     if (isComposeModalOpen && editor && !hasHydratedRef.current) {

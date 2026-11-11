@@ -234,7 +234,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(
       new URL(`/settings/accounts?success=true&accountId=${account.id}&share=1`, baseUrl)
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Microsoft OAuth error:', error);
     return NextResponse.redirect(new URL('/settings/accounts?error=internal_error', baseUrl));
   }

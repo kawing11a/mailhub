@@ -12,12 +12,11 @@ import {
   Star,
   MailCheck,
   ShieldAlert,
-  HelpCircle,
   Forward,
 } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
-import { ConditionField, ConditionOperator, MatchType, RuleCriterion } from '@/lib/rules/types';
+import { ConditionField, ConditionOperator, MatchType, RuleCriterion, type EmailRuleDefinition, type RuleActions, type RuleConditions } from '@/lib/rules/types';
 import {
   buildRuleScopePayload,
   getRuleScopeMode,
@@ -41,8 +40,8 @@ interface AccountItem {
 interface RuleModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSaved: (rule: any) => void;
-  initialRule?: any | null;
+  onSaved: (rule: EmailRuleDefinition) => void;
+  initialRule?: (Omit<Partial<EmailRuleDefinition>, 'conditions'> & { conditions?: Partial<RuleConditions> }) | null;
   accounts: AccountItem[];
   labels: LabelItem[];
 }
@@ -67,7 +66,7 @@ const OPERATOR_OPTIONS: Array<{ value: ConditionOperator; label: string }> = [
   { value: 'matches_regex', label: 'matches regex' },
 ];
 
-export function getRuleCriteriaForEdit(initialRule: any): RuleCriterion[] {
+export function getRuleCriteriaForEdit(initialRule: (Omit<Partial<EmailRuleDefinition>, 'conditions'> & { conditions?: Partial<RuleConditions> }) | null | undefined): RuleCriterion[] {
   const initialCriteria = initialRule?.conditions?.criteria;
   return Array.isArray(initialCriteria)
     ? initialCriteria
@@ -125,6 +124,7 @@ export function RuleModal({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (initialRule) {
       setName(initialRule.name || '');
@@ -172,7 +172,8 @@ export function RuleModal({
       setMarkAsHighRisk(false);
       setForwardToInput('');
     }
-  }, [initialRule, isOpen]);
+  }, [initialRule, isOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   if (!isOpen) return null;
 
@@ -211,15 +212,6 @@ export function RuleModal({
     }
   };
 
-  const handleToggleRemoveLabel = (labelId: string) => {
-    if (removeLabelIds.includes(labelId)) {
-      setRemoveLabelIds(removeLabelIds.filter((id) => id !== labelId));
-    } else {
-      setRemoveLabelIds([...removeLabelIds, labelId]);
-      setAddLabelIds(addLabelIds.filter((id) => id !== labelId));
-    }
-  };
-
   const handleScopeModeChange = (mode: RuleScopeMode) => {
     setScopeMode(mode);
 
@@ -242,7 +234,7 @@ export function RuleModal({
 
     const cleanedCriteria = cleanRuleCriteria(criteria);
 
-    const actionsPayload: Record<string, any> = {};
+    const actionsPayload: RuleActions = {};
     if (addLabelIds.length > 0) actionsPayload.addLabelIds = addLabelIds;
     if (removeLabelIds.length > 0) actionsPayload.removeLabelIds = removeLabelIds;
     if (markAsRead) actionsPayload.markAsRead = true;
@@ -291,7 +283,7 @@ export function RuleModal({
       };
 
       const isEdit = Boolean(initialRule?.id);
-      const url = isEdit ? `/api/rules/${initialRule.id}` : '/api/rules';
+      const url = isEdit ? `/api/rules/${initialRule?.id}` : '/api/rules';
       const method = isEdit ? 'PUT' : 'POST';
 
       const res = await fetch(url, {
@@ -308,8 +300,8 @@ export function RuleModal({
       toast.success(isEdit ? 'Rule updated' : 'Rule created');
       onSaved(json.rule);
       onClose();
-    } catch (err: any) {
-      toast.error(err.message || 'Error saving rule');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error saving rule');
     } finally {
       setIsSubmitting(false);
     }

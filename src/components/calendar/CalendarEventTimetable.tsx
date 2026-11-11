@@ -1,7 +1,7 @@
 'use client';
 
 import { IcsEvent } from '@/lib/calendar/ics-parser';
-import { Clock, MapPin, ChevronDown, ChevronUp, Video, Calendar, User } from 'lucide-react';
+import { Clock, MapPin, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 const TORONTO_TIME_ZONE = 'America/Toronto';

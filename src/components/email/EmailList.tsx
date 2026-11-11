@@ -7,7 +7,7 @@ import { extractCleanEmailText } from '@/lib/email/clean-text';
 import { executeBulkEmailAction, type BulkEmailAction } from '@/lib/email/bulk-actions';
 import { sortEmailsWithStarredFirst } from '@/lib/email/list-sorting';
 import { useAccountStore } from '@/stores/accountStore';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
@@ -15,11 +15,27 @@ import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import { EmailRow } from './EmailRow';
 import { EmailToolbox } from './EmailToolbox';
+import type { EmailRowData } from './EmailRow';
+import type { SidebarAccount } from '@/hooks/useFavouriteMutations';
+import type { UpdateEmailInput } from '@/lib/validation';
+
+type EmailListItem = EmailRowData & {
+  accountId: string;
+  toAddresses?: Array<{ address?: string | null }> | null;
+  ccAddresses?: Array<{ address?: string | null }> | null;
+  bccAddresses?: Array<{ address?: string | null }> | null;
+  body?: { bodyHtml?: string | null } | null;
+  bodyText?: string | null;
+};
+type EmailListPage = { emails: EmailListItem[]; pagination: { page: number; totalPages: number; total: number } };
+type SearchCacheData = { hits: EmailListItem[] };
+type AccountStatsCache = { unreadCount: number };
+type NewEmailsCache = { emails?: EmailListItem[]; countsByAccount?: Record<string, number> };
 
 interface ContextMenuState {
   x: number;
   y: number;
-  email: any;
+  email: EmailListItem;
 }
 
 interface EmailListProps {
@@ -73,10 +89,12 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   }, [contextMenu, selectedIds.size]);
 
   // Selection is transient: reset when the viewed list changes
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     setSelectedIds(new Set());
     setBulkAction(null);
-  }, [selectedAccountId, selectedFolder, isSearching]);
+  }, [selectedAccountId, selectedFolder, isSearching])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const toggleSelect = useCallback((id: string) => {
     setSelectedIds((prev) => {
@@ -90,7 +108,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     });
   }, []);
 
-  const handleContextMenu = (e: React.MouseEvent, email: any) => {
+  const handleContextMenu = (e: React.MouseEvent, email: EmailListItem) => {
     e.preventDefault();
     // Reset so the menu is re-measured and re-clamped for this new position.
     setMenuPos(null);
@@ -111,11 +129,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     const left = Math.max(8, Math.min(contextMenu.x, window.innerWidth - width - 8));
     const top = Math.max(8, Math.min(contextMenu.y, window.innerHeight - height - 8));
     setMenuPos({ top, left });
-    // eslint-disable-next-line react-hooks/set-state-in-effect
   }, [contextMenu]);
 
   const updateEmailMutation = useMutation({
-    mutationFn: async ({ emailId, accountId, data }: { emailId: string; accountId: string; data: any }) => {
+    mutationFn: async ({ emailId, accountId, data }: { emailId: string; accountId: string; data: UpdateEmailInput }) => {
       const res = await fetch(`/api/accounts/${accountId}/emails/${emailId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -124,7 +141,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       if (!res.ok) throw new Error('Failed to update email');
       return res.json();
     },
-    onSuccess: (updatedEmail) => {
+    onSuccess: () => {
       // Prefix key, not the exact triple: with the global 60s staleTime, the
       // other folder/account lists would otherwise serve stale cached data.
       queryClient.invalidateQueries({ queryKey: ['emails'] });
@@ -146,7 +163,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
   };
 
-  const handleToggleStar = (email: any) => {
+  const handleToggleStar = (email: EmailListItem) => {
     const accountId = email.accountId || selectedAccountId;
     if (!accountId || accountId === 'all' || accountId === 'new-emails') return;
 
@@ -227,7 +244,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   const handleContextAction = async (action: string) => {
     if (!contextMenu) return;
     const { email } = contextMenu;
-    const accountId = (selectedAccountId === 'all' || selectedAccountId === 'new-emails') ? email.accountId : selectedAccountId;
+    const accountId = (selectedAccountId === 'all' || selectedAccountId === 'new-emails') ? email.accountId : selectedAccountId ?? email.accountId;
 
     setContextMenu(null);
 
@@ -300,14 +317,14 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
             replyToBody: cleanBody,
           });
           setComposeModalOpen(true);
-        } catch (error) {
+        } catch {
           toast.error('Failed to load email for compose');
         }
         break;
     }
   };
 
-  const handleEmailClick = async (email: any) => {
+  const handleEmailClick = async (email: EmailListItem) => {
     if (email.isDraft) {
       let draft = email;
       try {
@@ -321,9 +338,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         id: draft.id,
         accountId: draft.accountId
           || (selectedAccountId !== 'all' ? selectedAccountId ?? undefined : undefined),
-        to: draft.toAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
-        cc: draft.ccAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
-        bcc: draft.bccAddresses?.map((address: any) => address.address).filter(Boolean).join(', ') || '',
+        to: draft.toAddresses?.map((address) => address.address).filter(Boolean).join(', ') || '',
+        cc: draft.ccAddresses?.map((address) => address.address).filter(Boolean).join(', ') || '',
+        bcc: draft.bccAddresses?.map((address) => address.address).filter(Boolean).join(', ') || '',
         subject: draft.subject || '',
         bodyHtml: draft.body?.bodyHtml || draft.snippet || '',
       });
@@ -334,15 +351,15 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       // Update the infinite query cache – the key must include ALL query key fields
       // that were used to register it, otherwise setQueryData targets the wrong entry
       // and the list continues to show the email as unread.
-      queryClient.setQueryData(
+      queryClient.setQueryData<InfiniteData<EmailListPage>>(
         ['emails', selectedAccountId, selectedFolder, readStatus, accountScope, isFavouriteEmailsOnly],
-        (oldData: any) => {
+        (oldData) => {
           if (!oldData) return oldData;
           return {
             ...oldData,
-            pages: oldData.pages.map((page: any) => ({
+            pages: oldData.pages.map((page) => ({
               ...page,
-              emails: page.emails.map((e: any) =>
+              emails: page.emails.map((e) =>
                 e.id === email.id ? { ...e, isRead: true } : e
               ),
             })),
@@ -351,13 +368,13 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       );
 
       if (searchQuery) {
-        queryClient.setQueriesData(
+        queryClient.setQueriesData<SearchCacheData>(
           { queryKey: ['search'] },
-          (oldData: any) => {
+          (oldData) => {
             if (!oldData) return oldData;
             return {
               ...oldData,
-              hits: oldData.hits?.map((e: any) =>
+              hits: oldData.hits?.map((e) =>
                 e.id === email.id ? { ...e, isRead: true } : e
               )
             };
@@ -374,13 +391,13 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
           : selectedAccountId;
 
       if (readAccountId && email.folder === 'INBOX') {
-        queryClient.setQueryData(['accountStats', readAccountId], (oldData: any) =>
+        queryClient.setQueryData<AccountStatsCache>(['accountStats', readAccountId], (oldData) =>
           oldData
             ? { ...oldData, unreadCount: Math.max(0, (oldData.unreadCount || 0) - 1) }
             : oldData
         );
       }
-      queryClient.setQueryData(['new-emails-count'], (oldData: any) => {
+      queryClient.setQueryData<NewEmailsCache>(['new-emails-count'], (oldData) => {
         if (!oldData) return oldData;
 
         const next = { ...oldData };
@@ -388,7 +405,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         // Always filter the emails array so the Sidebar badge (which reads
         // emails.length) immediately reflects the read email being dismissed.
         if (next.emails) {
-          next.emails = next.emails.filter((e: any) => e.id !== email.id);
+          next.emails = next.emails.filter((e) => e.id !== email.id);
         }
 
         // The sidebar account badge reads countsByAccount first and only falls back
@@ -441,7 +458,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   // the server re-fetches and drops them (because they're now read). The Map
   // resets naturally on component unmount (page navigation), so on the next
   // visit only genuinely unread emails from the fresh server response are shown.
-  const [retainedEmailsMap, setRetainedEmailsMap] = useState<Map<string, any> | null>(null);
+  const [retainedEmailsMap, setRetainedEmailsMap] = useState<Map<string, EmailListItem> | null>(null);
 
   const updateQueryParam = useCallback((updates: Record<string, string | null>) => {
     const params = new URLSearchParams(window.location.search);
@@ -485,6 +502,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     }
   }, [urlQ, searchQuery, setSearchQuery]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (urlReadStatus) {
       if (urlReadStatus !== readStatus) {
@@ -498,13 +516,15 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         setReadStatusState(defaultStatus);
       }
     }
-  }, [urlReadStatus, readStatus, selectedAccountId, pathname, searchParams]);
+  }, [urlReadStatus, readStatus, selectedAccountId, pathname, searchParams])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const isUnifiedInbox = selectedAccountId === 'all' || selectedAccountId === 'new-emails';
   const effectiveAccountScope = isUnifiedInbox ? accountScope : 'all';
   const effectiveReadStatus = isUnifiedInbox ? readStatus : 'all';
   const effectiveFavouriteEmailsOnly = isUnifiedInbox ? isFavouriteEmailsOnly : false;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     const activeAccount = searchParams.get('accountId') || selectedAccountId;
     const isUnified = activeAccount === 'all' || activeAccount === 'new-emails';
@@ -515,8 +535,10 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     } else if (urlAccountScope && urlAccountScope !== accountScope) {
       setAccountScopeState(urlAccountScope);
     }
-  }, [urlAccountScope, accountScope, selectedAccountId, searchParams]);
+  }, [urlAccountScope, accountScope, selectedAccountId, searchParams])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (urlStarred !== null) {
       const isStarred = urlStarred === 'true';
@@ -524,14 +546,17 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         setIsFavouriteEmailsOnlyState(isStarred);
       }
     }
-  }, [urlStarred, isFavouriteEmailsOnly]);
+  }, [urlStarred, isFavouriteEmailsOnly])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   // Reset the retention map whenever filter settings change (new filter = fresh session)
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     setRetainedEmailsMap(null);
-  }, [effectiveReadStatus, effectiveAccountScope, effectiveFavouriteEmailsOnly, selectedAccountId, selectedFolder]);
+  }, [effectiveReadStatus, effectiveAccountScope, effectiveFavouriteEmailsOnly, selectedAccountId, selectedFolder])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
-  const { data: accounts } = useQuery({
+  const { data: accounts } = useQuery<SidebarAccount[]>({
     queryKey: ['accounts'],
     queryFn: async () => {
       const res = await fetch('/api/accounts');
@@ -541,7 +566,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   });
 
   const activeAccount = selectedAccountId
-    ? accounts?.find((a: any) => a.id === selectedAccountId)
+    ? accounts?.find((a) => a.id === selectedAccountId)
     : null;
 
   const {
@@ -550,7 +575,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage
-  } = useInfiniteQuery({
+  } = useInfiniteQuery<EmailListPage>({
     queryKey: ['emails', selectedAccountId, selectedFolder, effectiveReadStatus, effectiveAccountScope, effectiveFavouriteEmailsOnly],
     queryFn: async ({ pageParam = 1 }) => {
       let url = `/api/accounts/${selectedAccountId}/emails?folder=${selectedFolder}&page=${pageParam}&limit=20`;
@@ -602,6 +627,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
   //   update) so the row renders correctly (bold/un-bold, etc.).
   // - Emails that left the server list (read + filtered out) are kept in the map
   //   so they stay visible until the user navigates away.
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (effectiveReadStatus !== 'unread' || flatEmails.length === 0) return;
 
@@ -622,17 +648,13 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       }
       return next;
     });
-  }, [effectiveReadStatus, flatEmails]);
+  }, [effectiveReadStatus, flatEmails])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
-  const displayableFlatEmails = useMemo(() => {
-    if (effectiveReadStatus === 'unread' && retainedEmailsMap) {
-      // Return all retained email objects, sorted newest-first.
-      // This preserves emails that have been read (and thus dropped by the server
-      // unread filter) until the user navigates away from the page.
-      return sortEmailsWithStarredFirst(Array.from(retainedEmailsMap.values()));
-    }
-    return flatEmails;
-  }, [flatEmails, effectiveReadStatus, retainedEmailsMap]);
+  const displayableFlatEmails =
+    effectiveReadStatus === 'unread' && retainedEmailsMap
+      ? sortEmailsWithStarredFirst(Array.from(retainedEmailsMap.values()))
+      : flatEmails;
 
   const emailsToDisplay = searchQuery ? searchResults : displayableFlatEmails;
   const loading = isLoading || isSearchLoading;
@@ -650,7 +672,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
   // Derive the live selection from the list so removed emails drop out automatically
   const selectedEmails = useMemo(
-    () => flatEmails.filter((e: any) => selectedIds.has(e.id)),
+    () => flatEmails.filter((e) => selectedIds.has(e.id)),
     [flatEmails, selectedIds]
   );
 
@@ -659,7 +681,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
     if (action === 'delete') {
       const isPermanent = selectedEmails.some(
-        (email: any) => email.folder === 'TRASH' || email.isDraft
+        (email) => email.folder === 'TRASH' || email.isDraft
       );
       const confirmed = window.confirm(
         isPermanent
@@ -671,7 +693,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
 
     setBulkAction(action);
     const result = await executeBulkEmailAction(
-      selectedEmails.map((email: any) => ({ id: email.id, accountId: email.accountId })),
+      selectedEmails.map((email) => ({ id: email.id, accountId: email.accountId })),
       action
     );
 
@@ -936,7 +958,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         ) : (
           <>
             <div className="divide-y divide-gray-100">
-              {emailsToDisplay?.map((email: any) => (
+              {emailsToDisplay?.map((email) => (
                 <EmailRow
                   key={email.id}
                   email={email}

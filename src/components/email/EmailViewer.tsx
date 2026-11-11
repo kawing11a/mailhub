@@ -11,12 +11,58 @@ import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, Paperclip, Reply, ReplyAll, Sparkles, Trash2, ShieldAlert, ShieldCheck, ListFilter } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, MoreHorizontal, Paperclip, Reply, ReplyAll, Trash2, ShieldAlert, ShieldCheck, ListFilter } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { EmailExplainPanel } from './EmailExplainPanel';
 import { EmailToolbox } from './EmailToolbox';
 import { RuleModal } from '@/components/rules/RuleModal';
+import { EmailActionMenu, type EmailActionMenuItem } from './EmailActionMenu';
+import type { Prisma } from '@prisma/client';
+import type { EmailRuleDefinition } from '@/lib/rules/types';
+
+type EmailViewerData = Prisma.EmailGetPayload<{
+  include: {
+    account: { select: { id: true; emailAddress: true; label: true; color: true } };
+    body: true;
+    attachments: { select: { id: true; filename: true; contentType: true; sizeBytes: true; cid: true } };
+    emailLabels: { include: { label: { select: { id: true; name: true; color: true } } } };
+  };
+}>;
+
+const emailContentStyles = `
+  html { max-width: 100%; overflow-x: auto; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; max-width: 100%; overflow-wrap: anywhere; }
+  h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
+  h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
+  h3 { font-size: 1.125rem !important; font-weight: 600 !important; margin: 0.75rem 0 0.375rem 0 !important; }
+  ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
+  ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
+  li { margin: 0.25rem 0 !important; display: list-item !important; }
+  blockquote { border-left: 3px solid #cbd5e1 !important; padding-left: 1rem !important; margin: 0.75rem 0 !important; color: #4b5563 !important; font-style: italic !important; }
+  code { background: #f3f4f6 !important; color: #111827 !important; padding: 2px 5px !important; border-radius: 4px !important; font-family: monospace !important; }
+  pre { max-width: 100% !important; background: #1f2937 !important; color: #f9fafb !important; padding: 10px 14px !important; border-radius: 6px !important; overflow-x: auto !important; }
+  a { color: #2563eb !important; text-decoration: underline !important; overflow-wrap: anywhere; }
+  s, del, strike { text-decoration: line-through !important; color: #6b7280 !important; }
+  strong, b { font-weight: 700 !important; }
+  em, i { font-style: italic !important; }
+  img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
+  hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
+`;
+
+function createEmailDocument(html: string) {
+  const style = `<style>${emailContentStyles}</style>`;
+  if (/<head\b[^>]*>/i.test(html)) {
+    const afterExistingStyles = html.replace(/<\/head\s*>/i, `${style}</head>`);
+    return afterExistingStyles === html
+      ? html.replace(/<head\b[^>]*>/i, (head) => `${head}${style}`)
+      : afterExistingStyles;
+  }
+  if (/<html\b[^>]*>/i.test(html)) {
+    return html.replace(/<html\b[^>]*>/i, (documentTag) => `${documentTag}<head>${style}</head>`);
+  }
+  return `<!DOCTYPE html><html><head>${style}</head><body>${html}</body></html>`;
+}
 
 interface EmailViewerProps {
   emailId: string;
@@ -31,10 +77,10 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
   const [pendingDownloadUrl, setPendingDownloadUrl] = useState<string | null>(null);
   const [isExplainOpen, setIsExplainOpen] = useState(false);
   const [isRuleModalOpen, setIsRuleModalOpen] = useState(false);
-  const [initialRuleData, setInitialRuleData] = useState<any | null>(null);
+  const [initialRuleData, setInitialRuleData] = useState<Partial<EmailRuleDefinition> | null>(null);
 
   const queryClient = useQueryClient();
-  const { data: email, isLoading } = useQuery({
+  const { data: email, isLoading } = useQuery<EmailViewerData>({
     queryKey: ['email', emailId],
     queryFn: async () => {
       const res = await fetch(`/api/accounts/${selectedAccountId}/emails/${emailId}`);
@@ -102,7 +148,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       return data;
     },
     onSuccess: (data, label) => {
-      queryClient.setQueryData(['email', emailId], (old: any) => {
+      queryClient.setQueryData<EmailViewerData>(['email', emailId], (old) => {
         if (!old) return old;
         return {
           ...old,
@@ -118,7 +164,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           : '🛡️ Marked as Safe. Model updated!'
       );
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || 'Failed to update spam label');
     },
   });
@@ -133,19 +179,16 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       if (!res.ok) throw new Error('Failed to update email');
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData<EmailViewerData>(['email', emailId], (old) => old ? { ...old, isRead: variables.isRead } : old);
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['search'] });
       queryClient.invalidateQueries({ queryKey: ['accountStats'] });
       queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
-      if (onBack) onBack();
+      if (!variables.isRead && onBack) onBack();
     },
   });
-
-  const handleMarkUnread = () => {
-    updateEmailMutation.mutate({ isRead: false });
-  };
 
   const deleteEmailMutation = useMutation({
     mutationFn: async () => {
@@ -183,23 +226,15 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     deleteEmailMutation.mutate();
   };
 
-  const labelCounts = useMemo(
-    () =>
-      new Map<string, number>(
-        (email?.emailLabels || []).map((el: any) => [el.label.id, 1] as [string, number])
-      ),
-    [email?.emailLabels]
-  );
-
   const regularAttachments = useMemo(() => {
     if (!email?.attachments) return [];
-    return email.attachments.filter((att: any) => !isCalendarAttachment(att));
-  }, [email?.attachments]);
+    return email.attachments.filter((att) => !isCalendarAttachment(att));
+  }, [email]);
 
   const calendarAttachments = useMemo(() => {
     if (!email?.attachments) return [];
-    return email.attachments.filter((att: any) => isCalendarAttachment(att));
-  }, [email?.attachments]);
+    return email.attachments.filter((att) => isCalendarAttachment(att));
+  }, [email]);
 
   const inlineIcsContent = useMemo(() => {
     if (calendarAttachments.length > 0) return null;
@@ -263,10 +298,10 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     const cleanBody = email.body?.bodyText || extractCleanEmailText(email.body?.bodyHtml);
     setComposeDraft({
       accountId: email.accountId,
-      to: email.fromAddress,
+      to: email.fromAddress ?? '',
       subject: email.subject?.startsWith('Re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml,
-      replyToSubject: email.subject,
+      replyToSubject: email.subject ?? undefined,
       replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
@@ -301,7 +336,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       cc: recipients.cc.join(', '),
       subject: email.subject?.toLowerCase().startsWith('re:') ? email.subject : `Re: ${email.subject || ''}`,
       bodyHtml: quoteHtml,
-      replyToSubject: email.subject,
+      replyToSubject: email.subject ?? undefined,
       replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
@@ -318,7 +353,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
         From: ${fromStr}<br/>
         Date: ${dateStr}<br/>
         Subject: ${email.subject || ''}<br/>
-        To: ${email.toAddresses?.map((t: any) => t.address).join(', ') || ''}<br/>
+        To: ${formatStoredAddresses(email.toAddresses)}<br/>
         <br/>
         ${email.body?.bodyHtml || email.body?.bodyText || ''}
       </div>
@@ -329,7 +364,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       to: '',
       subject: email.subject?.startsWith('Fwd:') ? email.subject : `Fwd: ${email.subject || ''}`,
       bodyHtml: quoteHtml,
-      replyToSubject: email.subject,
+      replyToSubject: email.subject ?? undefined,
       replyToBody: cleanBody,
     });
     setComposeModalOpen(true);
@@ -351,39 +386,63 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
     );
   }
 
+  const mailActions: EmailActionMenuItem[] = [
+    {
+      id: 'create-rule',
+      label: 'Create rule from this email',
+      icon: <ListFilter className="h-4 w-4" />,
+      onSelect: handleCreateRuleFromEmail,
+    },
+    {
+      id: 'spam',
+      label: email.isHighRisk ? 'Mark as safe' : 'Report spam',
+      icon: email.isHighRisk ? <ShieldCheck className="h-4 w-4" /> : <ShieldAlert className="h-4 w-4" />,
+      disabled: labelSpamMutation.isPending,
+      onSelect: () => labelSpamMutation.mutate(email.isHighRisk ? 'ham' : 'spam'),
+    },
+    ...(email.folder === 'INBOX' || !email.isRead
+      ? [{
+          id: 'read-status',
+          label: email.isRead ? 'Mark as unread' : 'Mark as read',
+          icon: <Mail className="h-4 w-4" />,
+          disabled: updateEmailMutation.isPending,
+          onSelect: () => updateEmailMutation.mutate({ isRead: !email.isRead }),
+        }]
+      : []),
+    {
+      id: 'delete',
+      label: email.folder === 'TRASH' ? 'Delete permanently' : 'Delete',
+      icon: deleteEmailMutation.isPending
+        ? <Loader2 className="h-4 w-4 animate-spin" />
+        : <Trash2 className="h-4 w-4" />,
+      disabled: deleteEmailMutation.isPending,
+      tone: 'danger',
+      onSelect: handleDelete,
+    },
+  ];
+
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-white">
       {/* Action Bar */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <div className="flex items-center space-x-2">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-gray-200 p-4">
+        <div className="flex min-w-0 items-start gap-2">
           {onBack && (
-            <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-md sm:hidden">
+            <button onClick={onBack} className="shrink-0 rounded-md p-2 hover:bg-gray-100 sm:hidden">
               <ArrowLeft className="w-5 h-5 text-gray-600" />
             </button>
           )}
-          <h2 className="text-xl font-semibold text-gray-900 truncate">
+          <h2 className="max-h-24 min-w-0 flex-1 overflow-y-auto break-words pr-1 text-xl font-semibold leading-snug text-gray-900 [overflow-wrap:anywhere]">
             {email.subject || '(No Subject)'}
           </h2>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
           <EmailToolbox
             accountId={email.accountId || selectedAccountId || undefined}
             emailSubject={email.subject || ''}
             emailText={email.body?.bodyText || email.snippet || ''}
+            explanation={{ isOpen: isExplainOpen, onToggle: () => setIsExplainOpen((open) => !open) }}
           />
-          <button
-            onClick={() => setIsExplainOpen(!isExplainOpen)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border transition-colors shadow-xs ${
-              isExplainOpen
-                ? 'bg-purple-600 text-white border-purple-600'
-                : 'text-purple-700 bg-purple-50 hover:bg-purple-100 border-purple-200'
-            }`}
-            title="AI Explain Email"
-          >
-            <Sparkles className="w-3.5 h-3.5 animate-pulse" />
-            <span>AI Explain</span>
-          </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
           <button onClick={handleReply} className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors" title="Reply">
             <Reply className="w-5 h-5" />
@@ -395,67 +454,27 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <Forward className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
-          <button
-            onClick={handleCreateRuleFromEmail}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
-            title="Create rule from this email"
-          >
-            <ListFilter className="w-5 h-5" />
-          </button>
-          <div className="w-px h-6 bg-gray-200 mx-1" />
-          <button
-            onClick={() => labelSpamMutation.mutate(email.isHighRisk ? 'ham' : 'spam')}
-            disabled={labelSpamMutation.isPending}
-            className={`p-2 rounded-md transition-colors ${
-              email.isHighRisk
-                ? 'text-green-600 hover:bg-green-50'
-                : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
-            }`}
-            title={email.isHighRisk ? "Mark & Train as Safe (Not Spam)" : "Report & Train as Definite Spam"}
-          >
-            {email.isHighRisk ? <ShieldCheck className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
-          </button>
-          <div className="w-px h-6 bg-gray-200 mx-1" />
-          {email.folder === 'INBOX' && (
-            <>
-              <button
-                onClick={handleMarkUnread}
-                disabled={updateEmailMutation.isPending}
-                className="p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors disabled:opacity-50"
-                title="Mark as unread"
-              >
-                {updateEmailMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
-              </button>
-              <div className="w-px h-6 bg-gray-200 mx-1" />
-            </>
-          )}
-          <button
-            onClick={handleDelete}
-            disabled={deleteEmailMutation.isPending}
-            className="p-2 text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
-            title={email?.folder === 'TRASH' ? 'Delete permanently' : 'Delete'}
-          >
-            {deleteEmailMutation.isPending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Trash2 className="w-5 h-5" />
-            )}
-          </button>
+          <EmailActionMenu
+            label="More email actions"
+            title="More email actions"
+            icon={<MoreHorizontal className="h-5 w-5" />}
+            items={mailActions}
+          />
         </div>
       </div>
 
       {/* Header Info */}
-      <div className="p-6 border-b border-gray-100 flex items-start justify-between">
-        <div className="flex items-center space-x-3">
+      <div className="flex min-w-0 shrink-0 flex-col items-start justify-between gap-2 border-b border-gray-100 p-6 sm:flex-row">
+        <div className="flex min-w-0 items-center space-x-3">
           {showAvatars && (
             <div className="w-10 h-10 rounded-full bg-accent-100 flex flex-shrink-0 items-center justify-center text-accent-700 font-medium">
               {email.fromName ? email.fromName.charAt(0).toUpperCase() : '?'}
             </div>
           )}
-          <div>
+          <div className="min-w-0 flex-1">
             <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
-              <span>{email.fromName}</span>
-              <span className="text-gray-500 text-sm font-normal">&lt;{email.fromAddress}&gt;</span>
+              <span className="break-words [overflow-wrap:anywhere]">{email.fromName}</span>
+              <span className="break-words text-sm font-normal text-gray-500 [overflow-wrap:anywhere]">&lt;{email.fromAddress}&gt;</span>
               {email.account && (
                 <span
                   className="inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-300"
@@ -465,12 +484,12 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
                     className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: email.account.color || '#3B82F6' }}
                   />
-                  <span>{email.account.label || email.account.emailAddress}</span>
+                  <span className="min-w-0 break-words [overflow-wrap:anywhere]">{email.account.label || email.account.emailAddress}</span>
                 </span>
               )}
             </div>
             <div className="text-sm text-gray-500 mt-0.5">
-              To: {toRecipients}
+              To: <span className="break-words [overflow-wrap:anywhere]">{toRecipients}</span>
             </div>
             {ccRecipients && (
               <div className="text-sm text-gray-500 mt-0.5 break-words">
@@ -484,14 +503,14 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             )}
             {email.emailLabels?.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">
-                {email.emailLabels.map((el: any) => (
+                {email.emailLabels.map((el) => (
                   <LabelBadge key={el.label.id} label={el.label} />
                 ))}
               </div>
             )}
           </div>
         </div>
-        <div className="text-sm text-gray-500 whitespace-nowrap">
+        <div className="max-w-full break-words text-sm text-gray-500 [overflow-wrap:anywhere] sm:whitespace-nowrap">
           {getFormattedDate(displayTimestamp)}
         </div>
       </div>
@@ -503,18 +522,18 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             Attachments ({regularAttachments.length})
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {regularAttachments.map((att: any) => {
+            {regularAttachments.map((att) => {
               const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
               const isSpam = email.folder === 'SPAM' || email.folder === 'JUNK';
 
               return (
                 <div key={att.id} className="flex items-center p-3 border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
                   <div className="flex-1 min-w-0 mr-3">
-                    <p className="text-sm font-medium text-gray-900 truncate" title={att.filename}>
+                    <p className="text-sm font-medium text-gray-900 truncate" title={att.filename ?? undefined}>
                       {att.filename || 'Unnamed attachment'}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {formatSize(att.sizeBytes)}
+                      {formatSize(att.sizeBytes ?? undefined)}
                     </p>
                   </div>
                   <a
@@ -564,104 +583,44 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
 
       {/* Security Warning Banner if High Risk */}
       {email.isHighRisk && (
-        <div className="mx-6 mt-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start justify-between gap-4 text-amber-900 shadow-sm">
+        <div className="mx-6 mt-4 flex min-w-0 flex-wrap items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-sm">
           <div className="flex items-start space-x-3 flex-1 min-w-0">
             <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
+            <div className="min-w-0 flex-1 text-sm [overflow-wrap:anywhere]">
               <span className="font-semibold">Security Warning:</span> This message was flagged as high risk by automated spam check.
               {email.riskReason && (
-                <p className="mt-1 text-xs text-amber-800 bg-amber-100/60 p-2 rounded border border-amber-200 font-mono">
+                <p className="mt-1 break-words rounded border border-amber-200 bg-amber-100/60 p-2 font-mono text-xs [overflow-wrap:anywhere]">
                   <span className="font-semibold font-sans">Reason:</span> {email.riskReason}
                 </p>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => labelSpamMutation.mutate('spam')}
-              disabled={labelSpamMutation.isPending}
-              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
-              title="Confirm this is definite spam and train detection model"
-            >
-              <ShieldAlert className="w-3.5 h-3.5" />
-              <span>Definite Spam</span>
-            </button>
-            <button
-              onClick={() => labelSpamMutation.mutate('ham')}
-              disabled={labelSpamMutation.isPending}
-              className="px-3 py-1.5 bg-white border border-green-600 text-green-700 hover:bg-green-50 rounded-md text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
-              title="Mark as safe (false positive) and train model"
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>It&apos;s Safe</span>
-            </button>
-          </div>
         </div>
       )}
 
       {/* Body Content & Side Explanation Panel Layout */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-6">
+      <div className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @3xl:flex-row">
+        <div className="min-h-0 min-w-0 flex-1 overflow-auto p-6">
           {email.body?.bodyHtml ? (
             <iframe
               title="Email Content"
-              className="w-full h-full min-h-[400px] border-none"
-              srcDoc={
-                email.body.bodyHtml.includes('<head>')
-                  ? email.body.bodyHtml.replace(
-                      '<head>',
-                      `<head><style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; }
-                        h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
-                        h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
-                        h3 { font-size: 1.125rem !important; font-weight: 600 !important; margin: 0.75rem 0 0.375rem 0 !important; }
-                        ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                        ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                        li { margin: 0.25rem 0 !important; display: list-item !important; }
-                        blockquote { border-left: 3px solid #cbd5e1 !important; padding-left: 1rem !important; margin: 0.75rem 0 !important; color: #4b5563 !important; font-style: italic !important; }
-                        code { background: #f3f4f6 !important; color: #111827 !important; padding: 2px 5px !important; border-radius: 4px !important; font-family: monospace !important; }
-                        pre { background: #1f2937 !important; color: #f9fafb !important; padding: 10px 14px !important; border-radius: 6px !important; overflow-x: auto !important; }
-                        a { color: #2563eb !important; text-decoration: underline !important; }
-                        s, del, strike { text-decoration: line-through !important; color: #6b7280 !important; }
-                        strong, b { font-weight: 700 !important; }
-                        em, i { font-style: italic !important; }
-                        img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
-                        hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
-                      </style>`
-                    )
-                  : `<!DOCTYPE html><html><head><style>
-                      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #111827; margin: 0; padding: 12px; line-height: 1.5; font-size: 14px; }
-                      h1 { font-size: 1.5rem !important; font-weight: 700 !important; margin: 1rem 0 0.5rem 0 !important; }
-                      h2 { font-size: 1.25rem !important; font-weight: 600 !important; margin: 0.875rem 0 0.5rem 0 !important; }
-                      h3 { font-size: 1.125rem !important; font-weight: 600 !important; margin: 0.75rem 0 0.375rem 0 !important; }
-                      ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                      ol { list-style-type: decimal !important; padding-left: 1.5rem !important; margin: 0.5rem 0 !important; }
-                      li { margin: 0.25rem 0 !important; display: list-item !important; }
-                      blockquote { border-left: 3px solid #cbd5e1 !important; padding-left: 1rem !important; margin: 0.75rem 0 !important; color: #4b5563 !important; font-style: italic !important; }
-                      code { background: #f3f4f6 !important; color: #111827 !important; padding: 2px 5px !important; border-radius: 4px !important; font-family: monospace !important; }
-                      pre { background: #1f2937 !important; color: #f9fafb !important; padding: 10px 14px !important; border-radius: 6px !important; overflow-x: auto !important; }
-                      a { color: #2563eb !important; text-decoration: underline !important; }
-                      s, del, strike { text-decoration: line-through !important; color: #6b7280 !important; }
-                      strong, b { font-weight: 700 !important; }
-                      em, i { font-style: italic !important; }
-                      img { max-width: 100% !important; height: auto !important; display: inline-block !important; }
-                      hr { border: 0 !important; border-top: 1px solid #e5e7eb !important; margin: 1rem 0 !important; }
-                    </style></head><body>${email.body.bodyHtml}</body></html>`
-              }
+              className="block h-full w-full min-w-0 max-w-full border-none"
+              srcDoc={createEmailDocument(email.body.bodyHtml)}
               sandbox="allow-popups allow-same-origin"
               translate="yes"
             />
           ) : (
-            <div className="whitespace-pre-wrap font-sans text-gray-800">
+            <div className="whitespace-pre-wrap break-words font-sans text-gray-800 [overflow-wrap:anywhere]">
               {email.body?.bodyText || 'Empty message.'}
             </div>
           )}
         </div>
 
         <EmailExplainPanel
+          key={email.id}
           emailId={email.id}
-          subject={email.subject}
-          bodyText={email.body?.bodyText || email.snippet}
+          subject={email.subject ?? undefined}
+          bodyText={email.body?.bodyText || email.snippet || undefined}
           isOpen={isExplainOpen}
           onClose={() => setIsExplainOpen(false)}
         />
@@ -706,7 +665,7 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
                 }}
                 className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium transition-colors"
               >
-                Nevermind, I'm scared 🏃‍♂️
+                 Nevermind, I&apos;m scared 🏃‍♂️
               </button>
               <button
                 onClick={() => {

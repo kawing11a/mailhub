@@ -4,7 +4,6 @@ import {
   authenticate,
   requireAdmin,
   apiResponse,
-  apiError,
 } from '@/lib/auth/middleware';
 
 export async function GET(req: NextRequest) {

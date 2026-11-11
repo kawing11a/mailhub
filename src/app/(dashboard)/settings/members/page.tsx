@@ -8,9 +8,11 @@ import { CreateUserModal } from '@/components/settings/CreateUserModal';
 import { ManageAccountAccessModal } from '@/components/settings/ManageAccountAccessModal';
 import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
 
+type OrganizationMember = { userId: string; name: string; email: string; role: string; joinedAt: string };
+
 export default function MembersPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [accessModalMember, setAccessModalMember] = useState<any | null>(null);
+  const [accessModalMember, setAccessModalMember] = useState<Pick<OrganizationMember, 'userId' | 'name'> | null>(null);
   const queryClient = useQueryClient();
 
   const { data: authData, isLoading: isLoadingAuth } = useQuery({
@@ -24,7 +26,7 @@ export default function MembersPage() {
 
   const isAdmin = authData?.role === 'admin';
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<OrganizationMember[]>({
     queryKey: ['members'],
     enabled: isAdmin,
     queryFn: async () => {
@@ -50,12 +52,12 @@ export default function MembersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['members'] });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       alert(error.message);
     }
   });
 
-  const members = Array.isArray(data) ? data : [];
+  const members = data ?? [];
   const currentUserId = authData?.user?.id;
 
   if (isLoadingAuth) {
@@ -77,7 +79,7 @@ export default function MembersPage() {
         <div>
           <h1 className="app-title text-2xl font-semibold">Members</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage who has access to your organization's inbox.
+             Manage who has access to your organization&apos;s inbox.
           </p>
         </div>
         <button
@@ -113,7 +115,7 @@ export default function MembersPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {members.map((member: any) => {
+              {members.map((member) => {
                 const isCurrentUser = member.userId === currentUserId;
                 return (
                   <tr key={member.userId} className="hover:bg-gray-50 transition-colors">

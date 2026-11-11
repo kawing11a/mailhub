@@ -4,6 +4,7 @@ import { authenticate, apiResponse, apiError } from '@/lib/auth/middleware';
 import { getValidAccessToken, fetchMessagesList, fetchMessageRaw } from '@/lib/gmail/api';
 import { decrypt } from '@/lib/crypto';
 import { ImapFlow } from 'imapflow';
+import type { ImapFlowOptions } from 'imapflow';
 import { parseEmail } from '@/lib/imap/email-parser';
 import { accountAccessWhere } from '@/lib/accounts/access';
 import { resolveSafeOutboundHost } from '@/lib/network/outbound-host';
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
       const password = account.passwordEncrypted ? decrypt(account.passwordEncrypted) : null;
       const accessToken = account.oauthAccessToken ? decrypt(account.oauthAccessToken) : null;
 
-      const authOptions: any = { user: account.username || account.emailAddress };
+      const authOptions: NonNullable<ImapFlowOptions['auth']> = { user: account.username || account.emailAddress || '' };
       if (accessToken) {
         authOptions.accessToken = accessToken;
       } else if (password) {
@@ -115,8 +116,8 @@ export async function POST(req: NextRequest) {
         } : null
       });
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Test connection error:', err);
-    return apiError(`Connection failed: ${err.message}`, 500);
+    return apiError(`Connection failed: ${err instanceof Error ? err.message : 'Unknown error'}`, 500);
   }
 }

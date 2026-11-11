@@ -108,7 +108,7 @@ export function useSSE() {
             };
           }
         }
-      } catch (e) { }
+      } catch { }
 
       // Invalidate emails, accounts (unread counts), and labels lists
       queryClient.invalidateQueries({ queryKey: ['emails'] });

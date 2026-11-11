@@ -5,7 +5,7 @@ import { getGmailRequestKey, withGmailRateLimit } from './rate-limit';
 
 
 export class GmailApiError extends Error {
-  constructor(message: string, public status?: number, public response?: any) {
+  constructor(message: string, public status?: number, public response?: unknown) {
     super(message);
     this.name = 'GmailApiError';
   }
