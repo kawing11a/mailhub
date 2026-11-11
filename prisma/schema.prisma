@@ -114,6 +114,7 @@ model Email {
   uid              BigInt?
   threadId         String?   @map("thread_id") @db.VarChar(512)
   folder           String    @db.VarChar(100)
+  previousFolder   String?   @map("previous_folder") @db.VarChar(100)
   subject          String?
   snippet          String?   @db.VarChar(300)
   fromAddress      String?   @map("from_address") @db.VarChar(512)

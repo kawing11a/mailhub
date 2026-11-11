@@ -11,7 +11,7 @@ import { useAccountStore } from '@/stores/accountStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { ArrowLeft, AlertTriangle, Download, Forward, Loader2, Mail, MoreHorizontal, Paperclip, Reply, ReplyAll, Trash2, ShieldAlert, ShieldCheck, ListFilter } from 'lucide-react';
+import { ArrowLeft, AlertTriangle, Download, Forward, Inbox, Loader2, Mail, MoreHorizontal, Paperclip, Reply, ReplyAll, RotateCcw, Trash2, ShieldAlert, ShieldCheck, ListFilter } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { EmailExplainPanel } from './EmailExplainPanel';
@@ -188,6 +188,56 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
       queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
       if (!variables.isRead && onBack) onBack();
     },
+  });
+
+  const moveEmailMutation = useMutation({
+    mutationFn: async (toFolder: 'INBOX' | 'SPAM') => {
+      if (!email) throw new Error('Email is not loaded');
+      const res = await fetch(`/api/accounts/${email.accountId}/emails/${emailId}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toFolder }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to move email');
+      return { ...data, toFolder };
+    },
+    onSuccess: ({ serverSynced, toFolder }) => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+      queryClient.invalidateQueries({ queryKey: ['email', emailId] });
+      const name = toFolder === 'SPAM' ? 'spam' : 'inbox';
+      if (serverSynced === false) toast.error(`Moved to ${name} locally, but the mail server could not be updated`);
+      else toast.success(`Email moved to ${name}`);
+      onBack?.();
+    },
+    onError: (error: Error) => toast.error(error.message || 'Failed to move email'),
+  });
+
+  const restoreEmailMutation = useMutation({
+    mutationFn: async () => {
+      if (!email) throw new Error('Email is not loaded');
+      const res = await fetch(`/api/accounts/${email.accountId}/emails/${emailId}/restore`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to restore email');
+      return data;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['emails'] });
+      queryClient.invalidateQueries({ queryKey: ['search'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['accountStats'] });
+      queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+      queryClient.invalidateQueries({ queryKey: ['email', emailId] });
+      const name = result.folder === 'SENT' ? 'Sent' : result.folder === 'SPAM' ? 'Spam' : 'Inbox';
+      if (result.serverSynced === false) toast.error(`Restored to ${name} locally, but the mail server could not be updated`);
+      else toast.success(`Email restored to ${name}`);
+      onBack?.();
+    },
+    onError: (error: Error) => toast.error(error.message || 'Failed to restore email'),
   });
 
   const deleteEmailMutation = useMutation({
@@ -409,13 +459,31 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
           onSelect: () => updateEmailMutation.mutate({ isRead: !email.isRead }),
         }]
       : []),
+    ...(email.folder === 'INBOX' || email.folder === 'TRASH'
+      ? [{
+          id: 'move-spam',
+          label: 'Move to spam',
+          icon: <ShieldAlert className="h-4 w-4" />,
+          disabled: moveEmailMutation.isPending || restoreEmailMutation.isPending,
+          onSelect: () => moveEmailMutation.mutate('SPAM'),
+        }]
+      : []),
+    ...(email.folder === 'SPAM' || email.folder === 'JUNK' || email.folder === 'TRASH'
+      ? [{
+          id: 'move-inbox',
+          label: 'Move to inbox',
+          icon: <Inbox className="h-4 w-4" />,
+          disabled: moveEmailMutation.isPending || restoreEmailMutation.isPending,
+          onSelect: () => moveEmailMutation.mutate('INBOX'),
+        }]
+      : []),
     {
       id: 'delete',
       label: email.folder === 'TRASH' ? 'Delete permanently' : 'Delete',
       icon: deleteEmailMutation.isPending
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : <Trash2 className="h-4 w-4" />,
-      disabled: deleteEmailMutation.isPending,
+      disabled: deleteEmailMutation.isPending || moveEmailMutation.isPending || restoreEmailMutation.isPending,
       tone: 'danger',
       onSelect: handleDelete,
     },
@@ -454,6 +522,20 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
             <Forward className="w-5 h-5" />
           </button>
           <div className="w-px h-6 bg-gray-200 mx-1" />
+          {email.folder === 'TRASH' && (
+            <button
+              type="button"
+              onClick={() => restoreEmailMutation.mutate()}
+              disabled={restoreEmailMutation.isPending || moveEmailMutation.isPending}
+              className="rounded-md p-2 text-gray-600 transition-colors hover:bg-gray-100 disabled:opacity-50"
+              title="Restore to original folder"
+              aria-label="Restore to original folder"
+            >
+              {restoreEmailMutation.isPending
+                ? <Loader2 className="h-5 w-5 animate-spin" />
+                : <RotateCcw className="h-5 w-5" />}
+            </button>
+          )}
           <EmailActionMenu
             label="More email actions"
             title="More email actions"
@@ -607,6 +689,12 @@ export function EmailViewer({ emailId, onBack }: EmailViewerProps) {
               className="block h-full w-full min-w-0 max-w-full border-none"
               srcDoc={createEmailDocument(email.body.bodyHtml)}
               sandbox="allow-popups allow-same-origin"
+              onLoad={(event) => {
+                event.currentTarget.contentDocument?.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+                  link.target = '_blank';
+                  link.rel = 'noopener noreferrer';
+                });
+              }}
               translate="yes"
             />
           ) : (

@@ -10,11 +10,8 @@ interface RouteParams {
 }
 
 /**
- * Recover an email from TRASH back to the folder it most likely came from.
- *
- * The original folder isn't recorded anywhere, so it is inferred from the
- * sender: mail from the account's own address was sent by us, anything else was
- * received. This cannot distinguish INBOX from an archive or a user folder.
+ * Recover an email from TRASH to its recorded source folder. Older trash rows
+ * without source metadata fall back to inferring SENT or INBOX from the sender.
  */
 export async function POST(req: NextRequest, { params }: RouteParams) {
   const auth = await authenticate(req);
@@ -51,7 +48,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
   const sentByAccount =
     !!email.fromAddress &&
     email.fromAddress.trim().toLowerCase() === account.emailAddress.trim().toLowerCase();
-  const destination = sentByAccount ? 'SENT' : 'INBOX';
+  const destination = email.previousFolder || (sentByAccount ? 'SENT' : 'INBOX');
 
   const sync = await restoreOnServer(account, email, destination);
 
@@ -59,6 +56,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     where: { id: emailId },
     data: {
       folder: destination,
+      previousFolder: null,
       // An IMAP MOVE reassigns the UID in the destination mailbox.
       ...(sync.uidChanged ? { uid: sync.newUid ?? null } : {}),
     },
