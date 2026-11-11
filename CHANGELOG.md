@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0] - 2026-11-11
+
+### Added
+
+- add opt-in outbound host allowlist
+
+### Changed
+
+- document outbound host allowlist configuration
+- Merge pull request #32 from xfdzcoder/feat/outbound-allowlist
+
+
 ## [0.2.0] - 2026-11-11
 
 ### Added
