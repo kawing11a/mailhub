@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0] - 2026-11-11
+
+### Added
+
+- add cross-folder message moves (#34)
+
+
 ## [0.3.1] - 2026-11-11
 
 ### Fixed
