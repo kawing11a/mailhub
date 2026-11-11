@@ -157,6 +157,7 @@ export async function DELETE(req: NextRequest, { params }: RouteParams) {
       where: { id: emailId },
       data: {
         folder: 'TRASH',
+        previousFolder: email.folder,
         // An IMAP MOVE reassigns the UID; keeping the old one would make a later
         // permanent delete target a different message in the trash mailbox.
         ...(sync.uidChanged ? { uid: sync.newUid ?? null } : {}),

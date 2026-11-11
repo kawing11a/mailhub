@@ -1,5 +1,5 @@
 /**
- * Propagates folder mutations (trash / permanent delete / restore) to the mail
+ * Propagates folder mutations (move / trash / permanent delete / restore) to the mail
  * server, so local state doesn't silently diverge — and so a permanently deleted
  * message isn't resurrected by the next sync.
  *
@@ -52,6 +52,7 @@ const GMAIL_LABEL_BY_FOLDER: Record<string, string> = {
   SENT: 'SENT',
   TRASH: 'TRASH',
   SPAM: 'SPAM',
+  JUNK: 'SPAM',
   DRAFTS: 'DRAFT',
 };
 
@@ -104,6 +105,38 @@ export async function moveToTrashOnServer(
     return { attempted: true, ok: result.ok, newUid: result.newUid, uidChanged: result.ok };
   } catch (error) {
     console.error(`Failed to trash message on server for account ${account.id}:`, error);
+    return { attempted: true, ok: false };
+  }
+}
+
+/** Move a message between the supported user mail folders. */
+export async function moveEmailOnServer(
+  account: Pick<EmailAccount, 'id' | 'provider'>,
+  email: EmailRef,
+  toFolder: string
+): Promise<ServerSyncResult> {
+  const copy = classifyServerCopy(account, email);
+  if (copy === 'local') return LOCAL_ONLY;
+
+  try {
+    if (copy === 'gmail') {
+      const messageId = gmailMessageId(email);
+      const label = GMAIL_LABEL_BY_FOLDER[toFolder];
+      const sourceLabel = GMAIL_LABEL_BY_FOLDER[email.folder];
+      if (!messageId || !label || !sourceLabel) return { attempted: true, ok: false };
+      const token = await getValidAccessToken(account.id);
+      await modifyMessageLabels(token, messageId, [label], [sourceLabel]);
+      return { attempted: true, ok: true };
+    }
+
+    const result = await withImapConnection(account.id, (client) =>
+      moveMessageOn(client, email.uid!, email.folder, toFolder, email.messageId)
+    );
+    if (!result) return { attempted: true, ok: false };
+    if (result.notFound) return { attempted: true, ok: true, newUid: null, uidChanged: true };
+    return { attempted: true, ok: result.ok, newUid: result.newUid, uidChanged: result.ok };
+  } catch (error) {
+    console.error(`Failed to move message on server for account ${account.id}:`, error);
     return { attempted: true, ok: false };
   }
 }

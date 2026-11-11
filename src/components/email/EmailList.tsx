@@ -8,7 +8,7 @@ import { executeBulkEmailAction, type BulkEmailAction } from '@/lib/email/bulk-a
 import { sortEmailsWithStarredFirst } from '@/lib/email/list-sorting';
 import { useAccountStore } from '@/stores/accountStore';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, Star, StarOff, Trash2, X } from 'lucide-react';
+import { Forward, Inbox, Loader2, Mail, MailOpen, Reply, ReplyAll, RotateCcw, Search, ShieldAlert, Star, StarOff, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, usePathname } from 'next/navigation';
 import toast from 'react-hot-toast';
@@ -161,6 +161,9 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['accountStats'] });
     queryClient.invalidateQueries({ queryKey: ['new-emails-count'] });
+    queryClient.invalidateQueries({ queryKey: ['email'] });
+    setSelectedIds(new Set());
+    setBulkAction(null);
   };
 
   const handleToggleStar = (email: EmailListItem) => {
@@ -209,7 +212,7 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
     },
     onSuccess: (result) => {
       invalidateAfterMailboxChange();
-      const folderName = result?.folder === 'SENT' ? 'Sent' : 'Inbox';
+      const folderName = result?.folder === 'SENT' ? 'Sent' : result?.folder === 'SPAM' ? 'Spam' : 'Inbox';
       if (result?.serverSynced === false) {
         toast.error(`Restored to ${folderName} locally, but the mail server could not be updated`);
         return;
@@ -217,6 +220,37 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
       toast.success(`Email restored to ${folderName}`);
     },
     onError: () => toast.error('Failed to restore email'),
+  });
+
+  const moveEmailMutation = useMutation({
+    mutationFn: async ({
+      emailId,
+      accountId,
+      toFolder,
+    }: {
+      emailId: string;
+      accountId: string;
+      toFolder: 'INBOX' | 'SPAM';
+    }) => {
+      const res = await fetch(`/api/accounts/${accountId}/emails/${emailId}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toFolder }),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to move email');
+      return { ...result, toFolder };
+    },
+    onSuccess: ({ serverSynced, toFolder }) => {
+      invalidateAfterMailboxChange();
+      const name = toFolder === 'SPAM' ? 'Spam' : 'Inbox';
+      if (serverSynced === false) {
+        toast.error(`Moved to ${name.toLowerCase()} locally, but the mail server could not be updated`);
+      } else {
+        toast.success(`Email moved to ${name.toLowerCase()}`);
+      }
+    },
+    onError: (error: Error) => toast.error(error.message || 'Failed to move email'),
   });
 
   const emptyTrashMutation = useMutation({
@@ -270,6 +304,14 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
         break;
       case 'restore':
         restoreEmailMutation.mutate({ emailId: email.id, accountId });
+        break;
+      case 'moveInbox':
+      case 'moveSpam':
+        moveEmailMutation.mutate({
+          emailId: email.id,
+          accountId,
+          toFolder: action === 'moveInbox' ? 'INBOX' : 'SPAM',
+        });
         break;
       case 'reply':
       case 'replyAll':
@@ -1064,13 +1106,31 @@ export function EmailList({ onSelectEmail, selectedEmailId }: EmailListProps) {
               )}
             </button>
             <div className="border-t border-gray-100 my-1"></div>
+            {(contextMenu.email.folder === 'INBOX' || contextMenu.email.folder === 'TRASH') && (
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
+                onClick={() => handleContextAction('moveSpam')}
+              >
+                <ShieldAlert className="w-4 h-4 text-amber-600" />
+                <span>Move to spam</span>
+              </button>
+            )}
+            {(contextMenu.email.folder === 'SPAM' || contextMenu.email.folder === 'JUNK' || contextMenu.email.folder === 'TRASH') && (
+              <button
+                className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
+                onClick={() => handleContextAction('moveInbox')}
+              >
+                <Inbox className="w-4 h-4 text-gray-500" />
+                <span>Move to inbox</span>
+              </button>
+            )}
             {contextMenu.email.folder === 'TRASH' && (
               <button
                 className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center space-x-2"
                 onClick={() => handleContextAction('restore')}
               >
                 <RotateCcw className="w-4 h-4 text-gray-500" />
-                <span>Restore to folder</span>
+                <span>Restore to original folder</span>
               </button>
             )}
             <button

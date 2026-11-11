@@ -152,6 +152,10 @@ export const updateLabelAccountsSchema = z.object({
   accountIds: z.array(z.string().uuid()).max(200),
 });
 
+export const moveEmailSchema = z.object({
+  toFolder: z.enum(['INBOX', 'TRASH', 'SPAM']),
+});
+
 export const bulkEmailLabelsSchema = z
   .object({
     emailIds: z.array(z.string().uuid()).min(1).max(100),
