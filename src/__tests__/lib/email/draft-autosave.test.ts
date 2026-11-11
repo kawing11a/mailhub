@@ -47,8 +47,10 @@ describe('DraftAutosaveController', () => {
   it('flushes immediately and preserves ordered account changes', async () => {
     const resolvers: Array<(identity: DraftIdentity) => void> = [];
     const save: jest.MockedFunction<DraftSaveFunction> = jest.fn(
-      (_draft: DraftSnapshot, _identity: DraftIdentity | null) =>
+      (_snapshot, _identity) =>
         new Promise<DraftIdentity>((resolve) => {
+          void _snapshot;
+          void _identity;
           resolvers.push((identity) => resolve(identity));
         })
     );

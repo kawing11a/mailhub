@@ -266,7 +266,7 @@ export class GmailSyncManager {
       let uid: bigint | null = null;
       try {
         uid = BigInt('0x' + gmailMessageId);
-      } catch (e) {
+      } catch {
         uid = null;
       }
 
@@ -277,7 +277,7 @@ export class GmailSyncManager {
         organizationId
       );
 
-      let finalFolder = folder;
+      const finalFolder = folder;
       let isHighRisk = false;
       let riskReason: string | null = null;
 
@@ -506,7 +506,7 @@ export class GmailSyncManager {
 
   async shutdown(): Promise<void> {
     console.log(`Shutting down Gmail Sync Manager (${this.pollingIntervals.size} connections)`);
-    for (const [accountId, interval] of this.pollingIntervals.entries()) {
+    for (const interval of this.pollingIntervals.values()) {
       clearInterval(interval);
     }
     this.pollingIntervals.clear();

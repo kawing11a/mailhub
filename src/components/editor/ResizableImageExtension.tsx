@@ -1,7 +1,9 @@
 import { NodeViewWrapper, ReactNodeViewRenderer, NodeViewProps } from '@tiptap/react';
 import Image from '@tiptap/extension-image';
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import clsx from 'clsx';
+import type { EditorView } from 'prosemirror-view';
+import type { Slice } from 'prosemirror-model';
 
 function ResizableImageComponent(props: NodeViewProps) {
   const { node, updateAttributes, selected } = props;
@@ -53,6 +55,8 @@ function ResizableImageComponent(props: NodeViewProps) {
         )}
         style={{ width: currentWidth, maxWidth: '100%' }}
       >
+        {/* Arbitrary email images can be data URLs or unconfigured remote URLs. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           ref={imageRef}
           src={src}
@@ -163,7 +167,7 @@ export const ResizableImage = Image.extend({
 
 /** Helper to handle drag-and-drop and paste of image files onto the TipTap editor */
 export const imageDropAndPasteProps = {
-  handleDrop: (view: any, event: DragEvent, slice: any, moved: boolean) => {
+  handleDrop: (view: EditorView, event: DragEvent, _slice: Slice, moved: boolean): boolean => {
     if (moved || !event.dataTransfer?.files?.length) return false;
     const files = Array.from(event.dataTransfer.files).filter((file) =>
       file.type.startsWith('image/')
@@ -183,7 +187,7 @@ export const imageDropAndPasteProps = {
     });
     return true;
   },
-  handlePaste: (view: any, event: ClipboardEvent) => {
+  handlePaste: (view: EditorView, event: ClipboardEvent): boolean => {
     const items = Array.from(event.clipboardData?.items || []).filter((item) =>
       item.type.startsWith('image/')
     );

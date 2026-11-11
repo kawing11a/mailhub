@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Loader2, Mail, ArrowLeft, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
@@ -40,7 +40,7 @@ export function AddAccountModal({
     register: registerImap,
     handleSubmit: handleImapSubmit,
     reset: resetImap,
-    watch: watchImap,
+    control: imapControl,
     getValues: getImapValues,
     formState: { errors: imapErrors },
   } = useForm<CreateAccountInput>({
@@ -55,22 +55,28 @@ export function AddAccountModal({
     },
   });
 
-  const watchedConnectionFields = watchImap([
-    'emailAddress',
-    'username',
-    'password',
-    'imapHost',
-    'imapPort',
-    'smtpHost',
-    'smtpPort',
-    'imapSecure',
-    'smtpSecure',
-  ]);
+  const watchedConnectionFields = useWatch({
+    control: imapControl,
+    name: [
+      'emailAddress',
+      'username',
+      'password',
+      'imapHost',
+      'imapPort',
+      'smtpHost',
+      'smtpPort',
+      'imapSecure',
+      'smtpSecure',
+    ],
+  });
+  const watchedConnectionFieldsKey = JSON.stringify(watchedConnectionFields);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     setTestStatus('idle');
     setTestResult(null);
-  }, [JSON.stringify(watchedConnectionFields)]);
+  }, [watchedConnectionFieldsKey])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const testMutation = useMutation({
     mutationFn: async () => {

@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     });
 
     const uniqueWebhookIds = Array.isArray(webhookIds)
-      ? Array.from(new Set(webhookIds.filter((id: any) => typeof id === 'string' && id.trim().length > 0)))
+      ? Array.from(new Set(webhookIds.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)))
       : [];
 
     const payload = {
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
       },
       201
     );
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to trigger summary job', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to trigger summary job', 500);
   }
 }

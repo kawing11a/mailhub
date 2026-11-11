@@ -87,11 +87,12 @@ export async function sendEmail(
 
   if (account.provider === 'gmail') {
     // For Gmail accounts, construct raw email with keepBcc so Gmail API parses BCC recipients
-    const MailComposer = require('nodemailer/lib/mail-composer');
-    const composer = new MailComposer({
+    const { default: MailComposer } = await import('nodemailer/lib/mail-composer');
+    const composerOptions = {
       ...mailOptions,
       keepBcc: true,
-    });
+    };
+    const composer = new MailComposer(composerOptions);
     const message = composer.compile();
     message.keepBcc = true;
     const rawBuffer = await message.build();
@@ -131,11 +132,12 @@ export async function sendEmail(
     // If IMAP settings are available, attempt to append sent message to IMAP Sent folder
     if (account.imapHost && account.passwordEncrypted) {
       try {
-        const MailComposer = require('nodemailer/lib/mail-composer');
-        const composer = new MailComposer({
+        const { default: MailComposer } = await import('nodemailer/lib/mail-composer');
+        const composerOptions = {
           ...mailOptions,
           keepBcc: true,
-        });
+        };
+        const composer = new MailComposer(composerOptions);
         const rawBuffer = await composer.compile().build();
 
         const { ImapFlow } = await import('imapflow');

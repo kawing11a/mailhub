@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     });
 
     return apiResponse(webhook, 201);
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to create notification webhook', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to create notification webhook', 500);
   }
 }

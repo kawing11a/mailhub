@@ -190,6 +190,7 @@ export function AllAccountsModal() {
   // Regrouping happens on the next open.
   const [frozenFavouriteIds, setFrozenFavouriteIds] = useState<string[]>([]);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (!isOpen) return;
     setFrozenFavouriteIds(sortedFavourites(accounts).map((a) => a.id));
@@ -199,7 +200,8 @@ export function AllAccountsModal() {
     return () => clearTimeout(t);
     // Intentionally keyed on isOpen only — we want the snapshot taken at open time.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
+  }, [isOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   useEffect(() => {
     if (!isOpen) return;

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db/prisma';
 import { encrypt, decrypt } from '@/lib/crypto';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Retrieves a valid OAuth access token for a given account ID (Gmail or Outlook/Microsoft).
@@ -67,7 +68,7 @@ export async function getValidOAuthAccessToken(accountId: string, scope?: string
   const newAccessToken = data.access_token;
   const newExpiry = new Date(Date.now() + (data.expires_in * 1000));
 
-  const updateData: any = {
+  const updateData: Prisma.EmailAccountUpdateInput = {
     oauthAccessToken: encrypt(newAccessToken),
     oauthTokenExpiry: newExpiry,
   };

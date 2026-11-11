@@ -15,13 +15,13 @@ jest.mock('@/lib/gmail/api', () => ({
   getValidAccessToken: jest.fn(),
   fetchGmailAttachment: jest.fn(),
   fetchMessageFull: jest.fn(),
-  extractGmailAttachmentParts: (payload: any) => {
-    const parts: any[] = [];
-    const visit = (part: any) => {
+  extractGmailAttachmentParts: (payload: import('@/lib/gmail/api').GmailMessagePart | null | undefined) => {
+    const parts: import('@/lib/gmail/api').GmailMessagePart[] = [];
+    const visit = (part: import('@/lib/gmail/api').GmailMessagePart) => {
       if (
         !part.mimeType?.toLowerCase().startsWith('text/') &&
         ((part.filename && part.body?.attachmentId) ||
-          (part.body?.data && part.headers?.some((header: any) =>
+          (part.body?.data && part.headers?.some((header) =>
             header.name?.toLowerCase() === 'content-id' && header.value)))
       ) {
         parts.push(part);
@@ -213,7 +213,7 @@ describe('getReceivedAttachment', () => {
   });
 
   it('propagates IMAP mailbox-list failures as provider errors', async () => {
-    const { mockGetMailboxLock } = mockEmailWithImapReference();
+    mockEmailWithImapReference();
     const mailboxListError = new Error('mailbox list unavailable');
     mockResolveMailboxPathOn.mockRejectedValue(mailboxListError);
 

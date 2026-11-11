@@ -27,6 +27,18 @@ jest.mock('@/lib/runtime-config', () => ({
 import { IMAPConnectionManager } from '@/lib/imap/connection-manager';
 import { IncompleteSyncError } from '@/lib/sync-result';
 
+type HistoricalSyncTestAccess = {
+  connections: Map<string, unknown>;
+  startIDLE: (...args: unknown[]) => Promise<void>;
+  persistEmail: (...args: unknown[]) => Promise<boolean>;
+  fetchNewEmails: (...args: unknown[]) => Promise<unknown>;
+  fetchNewEmailsForAccount: (...args: unknown[]) => Promise<{ processed: number; failed: number }>;
+};
+
+function getTestAccess(manager: IMAPConnectionManager): HistoricalSyncTestAccess {
+  return manager as unknown as HistoricalSyncTestAccess;
+}
+
 describe('IMAP historical sync failure aggregation', () => {
   it('lets an EXISTS fetch run between historical mailbox batches', async () => {
     const manager = new IMAPConnectionManager();
@@ -51,19 +63,19 @@ describe('IMAP historical sync failure aggregation', () => {
       }),
     };
 
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'org-1',
       client,
       isConnected: true,
       reconnectAttempts: 0,
     });
-    jest.spyOn(manager as any, 'startIDLE').mockResolvedValue(undefined);
-    jest.spyOn(manager as any, 'persistEmail').mockResolvedValue(true);
+    jest.spyOn(getTestAccess(manager), 'startIDLE').mockResolvedValue(undefined);
+    jest.spyOn(getTestAccess(manager), 'persistEmail').mockResolvedValue(true);
 
     const historicalSync = manager.syncHistoricalEmails('account-1');
     await historicalMailboxSelected;
-    const existsFetch = (manager as any).fetchNewEmails('account-1', 1, 1);
+    const existsFetch = getTestAccess(manager).fetchNewEmails('account-1', 1, 1);
     await new Promise((resolve) => setImmediate(resolve));
 
     expect(client.fetch).not.toHaveBeenCalled();
@@ -91,7 +103,7 @@ describe('IMAP historical sync failure aggregation', () => {
       on: jest.fn(),
     };
 
-    (manager as any).connections.set('account-1', {
+    getTestAccess(manager).connections.set('account-1', {
       accountId: 'account-1',
       organizationId: 'org-1',
       client,
@@ -100,7 +112,7 @@ describe('IMAP historical sync failure aggregation', () => {
     });
 
     const fetchNewEmails = jest
-      .spyOn(manager as any, 'fetchNewEmailsForAccount')
+      .spyOn(getTestAccess(manager), 'fetchNewEmailsForAccount')
       .mockRejectedValueOnce(
         new IncompleteSyncError('account-1', { processed: 9, failed: 1 })
       )

@@ -25,9 +25,17 @@ type Account = {
   label: string;
 };
 
+type AccountTestResult = {
+  message?: string;
+  provider: string;
+  totalMessagesInQuery?: number;
+  mailboxSize?: number;
+  sampleEmail?: { subject?: string; from?: string; snippet?: string };
+};
+
 type AccountTestState = {
   status: 'idle' | 'testing' | 'success' | 'error';
-  result?: any;
+  result?: AccountTestResult;
   error?: string;
   testedAt?: Date;
 };
@@ -85,12 +93,12 @@ export default function TestingSuitePage() {
         }
       }));
       return true;
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestStates(prev => ({
         ...prev,
         [accountId]: {
           status: 'error',
-          error: err.message || 'Connection test failed',
+          error: err instanceof Error ? err.message : 'Connection test failed',
           testedAt: new Date()
         }
       }));
@@ -143,10 +151,11 @@ export default function TestingSuitePage() {
 
       setPushResult(data.message);
       toast.success('Test notification triggered!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      setPushResult(error.message);
-      toast.error(error.message);
+      const message = error instanceof Error ? error.message : 'Push test failed';
+      setPushResult(message);
+      toast.error(message);
     } finally {
       setIsSendingPush(false);
     }
@@ -454,7 +463,7 @@ export default function TestingSuitePage() {
                                     </div>
                                     {state.result.sampleEmail.snippet && (
                                       <div className="text-gray-500 italic truncate font-mono text-[11px] mt-1">
-                                        "{state.result.sampleEmail.snippet}"
+                                         &quot;{state.result.sampleEmail.snippet}&quot;
                                       </div>
                                     )}
                                   </div>

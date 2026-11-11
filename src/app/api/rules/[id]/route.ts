@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 
 const ruleCriterionSchema = z.object({
   field: z.enum(['from', 'to', 'cc', 'subject', 'body', 'hasAttachment', 'hasLabelId']),
@@ -158,7 +159,7 @@ export async function PUT(
       }
     }
 
-    const updateData: Record<string, any> = {};
+    const updateData: Prisma.EmailRuleUncheckedUpdateInput = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
     if (isActive !== undefined) updateData.isActive = isActive;
@@ -166,8 +167,8 @@ export async function PUT(
     if (stopProcessing !== undefined) updateData.stopProcessing = stopProcessing;
     if (accountId !== undefined) updateData.accountId = accountId;
     if (accountLabelId !== undefined) updateData.accountLabelId = accountLabelId;
-    if (conditions !== undefined) updateData.conditions = conditions;
-    if (actions !== undefined) updateData.actions = actions;
+    if (conditions !== undefined) updateData.conditions = conditions as Prisma.InputJsonValue;
+    if (actions !== undefined) updateData.actions = actions as Prisma.InputJsonValue;
 
     const rule = await prisma.emailRule.update({
       where: { id },

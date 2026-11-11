@@ -67,8 +67,8 @@ export async function GET(req: NextRequest) {
         'Connection': 'keep-alive',
       },
     });
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
       return new Response('Unauthorized', { status: 401 });
     }
     console.error('SSE setup error:', error);

@@ -231,7 +231,7 @@ export function parseIcsDate(val: string, params: Record<string, string> = {}): 
   // Format: YYYYMMDD (Date only)
   const mDate = clean.match(/^(\d{4})(\d{2})(\d{2})$/);
   if (mDate) {
-    const [_, y, mon, d] = mDate;
+    const [, y, mon, d] = mDate;
     return dateFromWallClockInZone(+y, +mon, +d, 0, 0, 0, getIanaTimeZone(params.TZID));
   }
 
@@ -339,7 +339,7 @@ export function parseMeetingFromEmail(email: {
   const dateTimeMatch = combined.match(/(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+)?([A-Z][a-z]+\s+\d{1,2},\s+\d{4})\s+(\d{1,2}:\d{2}\s*(?:AM|PM))\s*(?:-\s*(\d{1,2}:\d{2}\s*(?:AM|PM)))?/i);
 
   if (dateTimeMatch) {
-    const [_, datePart, startTimePart, endTimePart] = dateTimeMatch;
+    const [, datePart, startTimePart, endTimePart] = dateTimeMatch;
     const parsedStart = parseEmailMeetingDateTime(datePart, startTimePart);
     if (!isNaN(parsedStart.getTime())) {
       startDate = parsedStart;

@@ -14,9 +14,9 @@ export async function GET(req: Request) {
   try {
     const dataset = exportGenericSpamDataset();
     return NextResponse.json({ success: true, dataset });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Export Spam Dataset Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to export spam dataset' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to export spam dataset' }, { status: 500 });
   }
 }
 
@@ -43,8 +43,8 @@ export async function POST(req: Request) {
       message: `Successfully imported dataset (${mode === 'replace' ? 'replaced' : 'merged'} model state)`,
       stats: result.stats,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Import Spam Dataset Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to import spam dataset' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to import spam dataset' }, { status: 500 });
   }
 }

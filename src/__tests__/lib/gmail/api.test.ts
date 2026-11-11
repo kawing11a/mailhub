@@ -12,7 +12,7 @@ jest.mock('@/lib/crypto', () => ({
   encrypt: jest.fn(),
 }));
 
-import { fetchGmailAttachment, GmailApiError } from '@/lib/gmail/api';
+import { fetchGmailAttachment } from '@/lib/gmail/api';
 
 describe('fetchGmailAttachment', () => {
   beforeEach(() => {

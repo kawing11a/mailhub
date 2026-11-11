@@ -1,8 +1,22 @@
+jest.mock('../../../lib/db/prisma', () => ({
+  prisma: {
+    systemPreference: { upsert: jest.fn() },
+    experimentSetting: { findUnique: jest.fn() },
+    organizationMember: { findUnique: jest.fn() },
+  },
+}));
+
 import { generateEmailBatchSummary } from '../../../lib/ai/summary-service';
+import { prisma } from '../../../lib/db/prisma';
 
 describe('AI LLM Email Summarization Service', () => {
   beforeEach(() => {
     global.fetch = jest.fn();
+    (prisma.systemPreference.upsert as jest.Mock).mockResolvedValue({
+      isAiEnabled: true,
+      semanticSearchEnabled: true,
+    });
+    (prisma.experimentSetting.findUnique as jest.Mock).mockResolvedValue(null);
   });
 
   afterEach(() => {

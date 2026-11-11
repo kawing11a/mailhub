@@ -11,7 +11,6 @@ import {
   Trash2,
   CheckCircle2,
   FileText,
-  Mail,
   Loader2,
   Search,
   ChevronDown,
@@ -289,7 +288,7 @@ export default function SignaturesSettingsPage() {
             </div>
           ) : signatureSearchQuery ? (
             <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
-              <p className="text-sm text-gray-500 mb-2">No signatures found matching "{signatureSearchQuery}".</p>
+               <p className="text-sm text-gray-500 mb-2">No signatures found matching &quot;{signatureSearchQuery}&quot;.</p>
               <button
                 type="button"
                 onClick={() => setSignatureSearchQuery('')}

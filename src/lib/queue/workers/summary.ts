@@ -1,4 +1,5 @@
 import { Worker, Job } from 'bullmq';
+import type { QueueOptions } from 'bullmq';
 import Redis from 'ioredis';
 import { prisma } from '@/lib/db/prisma';
 import { meilisearch } from '@/lib/search/meilisearch';
@@ -155,13 +156,13 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
         filterParts.push(`receivedAt >= ${minTimestamp}`);
       }
 
-      const searchRes = await meilisearch.index('emails').search('', {
+      const searchRes = await meilisearch.index<{ id: string }>('emails').search('', {
         filter: filterParts.join(' AND '),
         sort: ['receivedAt:desc'],
         limit: limit && limit > 0 ? limit : 100,
       });
 
-      emailIdsFromMeilisearch = (searchRes.hits || []).map((hit: any) => hit.id);
+      emailIdsFromMeilisearch = (searchRes.hits || []).map((hit) => hit.id);
     } catch (searchError) {
       console.warn('Meilisearch email query failed, falling back to PostgreSQL query:', searchError);
     }
@@ -362,7 +363,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
 
         for (const webhook of webhooks) {
           const dispatchRes = await dispatchWebhookNotification({
-            type: webhook.type as any,
+            type: webhook.type as import('@/lib/notifications/types').WebhookType,
             config: webhook.config,
             labelName,
             summaryText,
@@ -387,7 +388,7 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       where: { id: summaryRunId },
       data: {
         status: 'COMPLETED',
-        webhookLogs: webhookLogs as any,
+        webhookLogs: webhookLogs as unknown as import('@prisma/client').Prisma.InputJsonValue,
       },
     });
 
@@ -417,7 +418,7 @@ export const summaryWorker = new Worker<SummaryJobPayload>(
     await executeSummaryRun(job.data);
   },
   {
-    connection: workerRedis as any,
+    connection: workerRedis as unknown as QueueOptions['connection'],
     concurrency: 5,
   }
 );

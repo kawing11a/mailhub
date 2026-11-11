@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Failed to subscribe to notifications:', error);
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: error.flatten().fieldErrors }, { status: 400 });

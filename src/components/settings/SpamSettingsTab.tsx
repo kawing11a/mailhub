@@ -2,8 +2,17 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, ShieldAlert, ShieldCheck, Download, Upload, RefreshCw, Loader2, Sparkles, Check, AlertCircle } from 'lucide-react';
+import { Shield, ShieldAlert, ShieldCheck, Download, Upload, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+interface SpamModelStats {
+  totalSpam: number;
+  totalHam: number;
+  vocabularySize: number;
+  totalSamplesRecorded: number;
+  topSpamKeywords: Array<{ token: string; count: number }>;
+  topSafeKeywords: Array<{ token: string; count: number }>;
+}
 
 export function SpamSettingsTab() {
   const queryClient = useQueryClient();
@@ -12,7 +21,7 @@ export function SpamSettingsTab() {
   const [importMode, setImportMode] = useState<'replace' | 'merge'>('replace');
 
   // Fetch Stats
-  const { data: statsData, isLoading, isFetching, refetch } = useQuery({
+  const { data: statsData, isFetching, refetch } = useQuery<{ stats: SpamModelStats }>({
     queryKey: ['spam-stats'],
     queryFn: async () => {
       const res = await fetch('/api/ai/spam/stats');
@@ -47,8 +56,8 @@ export function SpamSettingsTab() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success('Spam dataset exported successfully!');
-    } catch (err: any) {
-      toast.error(err.message || 'Export failed');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Export failed');
     }
   };
 
@@ -78,7 +87,7 @@ export function SpamSettingsTab() {
       setIsImportModalOpen(false);
       setImportJsonText('');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || 'Failed to import dataset');
     },
   });
@@ -98,7 +107,7 @@ export function SpamSettingsTab() {
       queryClient.invalidateQueries({ queryKey: ['spam-stats'] });
       toast.success('Spam model reset to default initial seeds');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || 'Failed to reset model');
     },
   });
@@ -198,7 +207,7 @@ export function SpamSettingsTab() {
             </h4>
             <div className="flex flex-wrap gap-1.5">
               {stats.topSpamKeywords.length > 0 ? (
-                stats.topSpamKeywords.map((item: any) => (
+                stats.topSpamKeywords.map((item) => (
                   <span
                     key={item.token}
                     className="px-2.5 py-1 bg-red-100/70 border border-red-200 text-red-800 text-xs font-medium rounded-md flex items-center gap-1"
@@ -220,7 +229,7 @@ export function SpamSettingsTab() {
             </h4>
             <div className="flex flex-wrap gap-1.5">
               {stats.topSafeKeywords.length > 0 ? (
-                stats.topSafeKeywords.map((item: any) => (
+                stats.topSafeKeywords.map((item) => (
                   <span
                     key={item.token}
                     className="px-2.5 py-1 bg-green-100/70 border border-green-200 text-green-800 text-xs font-medium rounded-md flex items-center gap-1"

@@ -15,6 +15,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { Toaster, useToasterStore, toast } from 'react-hot-toast';
 
 import { ThemeProvider } from '@/components/providers/ThemeProvider';
+import Image from 'next/image';
 
 export default function DashboardLayout({
   children,
@@ -38,7 +39,7 @@ export default function DashboardLayout({
             <Menu className="h-6 w-6" />
           </button>
           <div className="ml-2 flex items-center">
-            <img src="/logo-transparent.png" alt="MailHub Logo" className="h-10 w-auto object-contain -ml-2" />
+            <Image src="/logo-transparent.png" alt="MailHub Logo" width={40} height={40} className="h-10 w-auto object-contain -ml-2" />
           </div>
         </div>
 

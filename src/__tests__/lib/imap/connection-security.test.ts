@@ -61,7 +61,11 @@ describe('IMAP worker connection SSRF guard', () => {
   });
 
   it('blocks pooled worker initialization before constructing ImapFlow', async () => {
-    await expect(imapManager.initializeAccount(unsafeAccount as any)).rejects.toThrow(
+    await expect(
+      imapManager.initializeAccount(
+        unsafeAccount as unknown as Parameters<typeof imapManager.initializeAccount>[0]
+      )
+    ).rejects.toThrow(
       'resolves to a non-public address'
     );
     expect(ImapFlow).not.toHaveBeenCalled();

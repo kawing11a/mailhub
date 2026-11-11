@@ -12,6 +12,7 @@ export function usePWAInstall() {
   const [isInstallable, setIsInstallable] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -90,7 +91,8 @@ export function usePWAInstall() {
         mediaQuery.removeListener?.(handleDisplayModeChange);
       }
     };
-  }, []);
+  }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const installPWA = async () => {
     if (!deferredPrompt) return false;

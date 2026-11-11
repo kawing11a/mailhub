@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Sparkles, Loader2, Check, RefreshCw, Wand2, ArrowRight } from 'lucide-react';
+import { Sparkles, Loader2, Check, Wand2 } from 'lucide-react';
 import { extractCleanEmailText } from '@/lib/email/clean-text';
 
 interface ComposeAiWriterProps {
@@ -51,8 +51,8 @@ export function ComposeAiWriter({ accountId, onApplyDraft, currentContent, reply
       }
 
       setGeneratedResult(data.result);
-    } catch (err: any) {
-      setError(err.message || 'Something went wrong');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setIsLoading(false);
     }

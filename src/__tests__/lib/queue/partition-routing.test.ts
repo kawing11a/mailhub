@@ -15,9 +15,15 @@ jest.mock('bullmq', () => ({
 import { Queue } from 'bullmq';
 import * as queueClient from '@/lib/queue/client';
 
+const enqueueInitialSync = (
+  queueClient as unknown as {
+    enqueueInitialSync: (account: { id: string; workerPartition: string }) => Promise<void>;
+  }
+).enqueueInitialSync;
+
 describe('partitioned initial-sync routing', () => {
   it('enqueues a deterministic job that BullMQ removes after terminal failure for reauthorization', async () => {
-    await (queueClient as any).enqueueInitialSync({
+    await enqueueInitialSync({
       id: 'account-1',
       workerPartition: 'worker-1',
     });
@@ -44,8 +50,8 @@ describe('partitioned initial-sync routing', () => {
   it('uses the same safe job identifier when an account is enqueued again', async () => {
     const account = { id: 'account-1', workerPartition: 'worker-1' };
 
-    await (queueClient as any).enqueueInitialSync(account);
-    await (queueClient as any).enqueueInitialSync(account);
+    await enqueueInitialSync(account);
+    await enqueueInitialSync(account);
 
     const workerOneQueue = (Queue as unknown as jest.Mock).mock.results
       .map((result) => result.value)

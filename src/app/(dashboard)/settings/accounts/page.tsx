@@ -5,22 +5,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Plus, Mail, RefreshCw, Trash2, Settings, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { AddAccountModal } from '@/components/settings/AddAccountModal';
-import { EditAccountModal } from '@/components/settings/EditAccountModal';
+import { EditAccountModal, type EditableAccount } from '@/components/settings/EditAccountModal';
 import { ManageAccountAccessModal } from '@/components/settings/ManageAccountAccessModal';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAccountStore } from '@/stores/accountStore';
 import toast from 'react-hot-toast';
+import type { EmailAccount } from '@prisma/client';
+
+type AccountWithPermissions = EmailAccount & { canManageAccess?: boolean };
 
 import { Suspense } from 'react';
 
 function EmailAccountsContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<any | null>(null);
+  const [editingAccount, setEditingAccount] = useState<EditableAccount | null>(null);
   const [activeTab, setActiveTab] = useState<string>('');
-  const [sharingAccountId, setSharingAccountId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const [sharingAccountId, setSharingAccountId] = useState<string | null>(() =>
+    searchParams.get('share') === '1' ? searchParams.get('accountId') : null
+  );
   const setSelectedAccountId = useAccountStore((s) => s.setSelectedAccountId);
 
   const handleAccountClick = (accountId: string) => {
@@ -28,6 +33,7 @@ function EmailAccountsContent() {
     router.push(`/inbox?accountId=${accountId}`);
   };
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve OAuth and direct-share callback behavior */
   useEffect(() => {
     const error = searchParams.get('error');
     const success = searchParams.get('success');
@@ -48,6 +54,7 @@ function EmailAccountsContent() {
       router.replace('/settings/accounts');
     }
   }, [searchParams, router]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const { data, isLoading: isLoadingAccounts } = useQuery({
     queryKey: ['accounts'],
@@ -80,9 +87,9 @@ function EmailAccountsContent() {
     },
   });
 
-  const accounts = Array.isArray(data) ? data : [];
+  const accounts: AccountWithPermissions[] = Array.isArray(data) ? data : [];
 
-  const groupedAccounts = accounts.reduce((acc: Record<string, any[]>, account: any) => {
+  const groupedAccounts = accounts.reduce<Record<string, AccountWithPermissions[]>>((acc, account) => {
     let provider = account.provider || 'Other';
     if (provider.toLowerCase() === 'google') provider = 'Google / Gmail';
     else if (provider.toLowerCase() === 'microsoft') provider = 'Microsoft / Outlook';
@@ -167,7 +174,7 @@ function EmailAccountsContent() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {providerAccounts.map((account: any) => (
+            {providerAccounts.map((account) => (
               <div 
                 key={account.id} 
                 className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-col transition-all duration-200 hover:border-accent-300 hover:shadow-md cursor-pointer group"

@@ -8,6 +8,7 @@ import {
 import { EmailEvaluationInput, EmailRuleDefinition, RuleCriterion } from '@/lib/rules/types';
 import { sendEmail } from '@/lib/smtp/sender';
 import { getReceivedAttachment } from '@/lib/email/attachment-retrieval';
+import type { PrismaClient } from '@prisma/client';
 
 jest.mock('@/lib/smtp/sender', () => ({
   sendEmail: jest.fn().mockResolvedValue({ messageId: 'message-1' }),
@@ -393,7 +394,7 @@ describe('Email Rules Engine', () => {
         markAsStarred: true,
       };
 
-      await applyRuleActions('email-123', actions, mockPrisma as any);
+      await applyRuleActions('email-123', actions, mockPrisma as unknown as PrismaClient);
 
       expect(mockPrisma.email.update).toHaveBeenCalledWith({
         where: { id: 'email-123' },
@@ -466,7 +467,7 @@ describe('Email Rules Engine', () => {
       };
 
       const { processRulesForNewEmail } = await import('@/lib/rules/engine');
-      await processRulesForNewEmail('email-new-1', 'acc-1', 'org-1', mockPrisma as any);
+      await processRulesForNewEmail('email-new-1', 'acc-1', 'org-1', mockPrisma as unknown as PrismaClient);
 
       expect(mockPrisma.emailRule.findMany).toHaveBeenCalled();
       expect(mockPrisma.email.findUnique).toHaveBeenCalledWith({
@@ -584,7 +585,7 @@ describe('Email Rules Engine', () => {
         });
 
       const { processRulesForNewEmail } = await import('@/lib/rules/engine');
-      await processRulesForNewEmail('email-1', 'acc-1', 'org-1', mockPrisma as any);
+      await processRulesForNewEmail('email-1', 'acc-1', 'org-1', mockPrisma as unknown as PrismaClient);
 
       expect(mockedSendEmail).toHaveBeenCalledWith(
         'acc-1',
@@ -668,7 +669,7 @@ describe('Email Rules Engine', () => {
       mockedGetReceivedAttachment.mockRejectedValue(new Error('provider unavailable'));
 
       const { processRulesForNewEmail } = await import('@/lib/rules/engine');
-      await processRulesForNewEmail('email-1', 'acc-1', 'org-1', mockPrisma as any);
+      await processRulesForNewEmail('email-1', 'acc-1', 'org-1', mockPrisma as unknown as PrismaClient);
 
       expect(mockedSendEmail).not.toHaveBeenCalled();
       consoleErrorSpy.mockRestore();
@@ -717,7 +718,7 @@ describe('Email Rules Engine', () => {
       };
 
       const { processRulesForNewEmail } = await import('@/lib/rules/engine');
-      await processRulesForNewEmail('email-vip-1', 'acc-1', 'org-1', mockPrisma as any);
+      await processRulesForNewEmail('email-vip-1', 'acc-1', 'org-1', mockPrisma as unknown as PrismaClient);
 
       expect(mockPrisma.emailRule.findMany).toHaveBeenCalledWith(
         expect.objectContaining({

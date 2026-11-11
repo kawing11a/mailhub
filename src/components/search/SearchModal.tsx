@@ -8,6 +8,7 @@ import { useAccountStore } from '@/stores/accountStore';
 import { Search, X, Mail, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
+import type { EmailAccount } from '@prisma/client';
 
 export function SearchModal() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export function SearchModal() {
   const { query, setQuery, results, isLoading } = useSearch('');
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const { data: accounts } = useQuery({
+  const { data: accounts } = useQuery<EmailAccount[]>({
     queryKey: ['accounts'],
     queryFn: async () => {
       const res = await fetch('/api/accounts');
@@ -27,6 +28,7 @@ export function SearchModal() {
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (isSearchOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -34,11 +36,14 @@ export function SearchModal() {
     } else {
       setQuery('');
     }
-  }, [isSearchOpen, setQuery]);
+  }, [isSearchOpen, setQuery])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     setSelectedIndex(0);
-  }, [query]);
+  }, [query])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -123,13 +128,13 @@ export function SearchModal() {
                 </div>
                 <h3 className="text-sm font-medium text-gray-900">No emails found</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  We couldn't find anything matching "<span className="font-medium text-gray-700">{query}</span>". Try adjusting your search terms.
+                   We couldn&apos;t find anything matching &quot;<span className="font-medium text-gray-700">{query}</span>&quot;. Try adjusting your search terms.
                 </p>
               </div>
             ) : (
               <ul className="space-y-1">
-                {results.map((email: any, index: number) => {
-                  const account = accounts?.find((a: any) => a.id === email.accountId);
+                {results.map((email, index) => {
+                  const account = accounts?.find((a) => a.id === email.accountId);
                   const accountName = account ? (account.label || account.emailAddress) : 'Unknown Account';
                   
                   return (

@@ -297,9 +297,7 @@ describe('Settings navigation and member guards', () => {
     expect(html).toContain('Admin access required');
     expect(html).toContain('Go to Email Accounts');
     expect(
-      queryOptions.find(
-        ({ queryKey }) => queryKey[0] === 'experiment-settings'
-      )?.enabled
+      queryOptions.some(({ queryKey }) => queryKey[0] === 'experiment-settings')
     ).toBe(false);
     expect(
       queryOptions.find(

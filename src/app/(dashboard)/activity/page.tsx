@@ -3,9 +3,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, Activity as ActivityIcon } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { Prisma } from '@prisma/client';
+
+type ActivityLogRow = Prisma.EmailActivityLogGetPayload<{
+  include: {
+    user: { select: { id: true; email: true; name: true } };
+    account: { select: { id: true; label: true; emailAddress: true; color: true } };
+  };
+}>;
 
 export default function ActivityLogPage() {
-  const { data, isLoading } = useQuery({
+  const { data, isLoading } = useQuery<{ logs: ActivityLogRow[] }>({
     queryKey: ['activity'],
     queryFn: async () => {
       const res = await fetch('/api/activity');
@@ -47,7 +55,7 @@ export default function ActivityLogPage() {
           ) : (
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
               <ul className="divide-y divide-gray-200">
-                {activities.map((activity: any) => (
+                {activities.map((activity) => (
                   <li key={activity.id} className="px-[var(--spacing-density-col)] py-[var(--spacing-density-row)] hover:bg-gray-50 transition-colors">
                     <div className="flex items-center space-x-4">
                       <div className="w-8 h-8 rounded-full bg-accent-50 flex items-center justify-center text-accent-700 text-sm font-medium flex-shrink-0">

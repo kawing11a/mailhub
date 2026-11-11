@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Loader2, Mail } from 'lucide-react';
+import Image from 'next/image';
+import { ArrowRight, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -32,8 +33,8 @@ export default function LoginPage() {
       // Success
       router.push('/inbox');
       router.refresh(); // Refresh to ensure layout gets updated state
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to sign in.');
       setIsLoading(false);
     }
   };
@@ -41,7 +42,7 @@ export default function LoginPage() {
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
         <div className="lg:hidden flex items-center gap-2 mb-8">
-          <img src="/logo.png" alt="MailHub Logo" className="h-10 w-auto rounded-lg shadow-sm" />
+          <Image src="/logo.png" alt="MailHub Logo" width={40} height={40} className="h-10 w-auto rounded-lg shadow-sm" />
           <span className="text-2xl font-bold tracking-tight text-gray-900">MailHub</span>
         </div>
 
@@ -98,7 +99,7 @@ export default function LoginPage() {
       </form>
 
       <div className="mt-8 text-center text-sm text-gray-500">
-        Don't have an account?{' '}
+        Don&apos;t have an account?{' '}
         <Link href="/register" className="font-medium text-accent-600 hover:text-accent-700 transition-colors">
           Create an account
         </Link>

@@ -82,8 +82,8 @@ export async function POST(req: NextRequest) {
 
     const ok = results.imap && results.smtp;
     return apiResponse({ ok, ...results });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Test credentials error:', error);
-    return apiError(error.message || 'Failed to test credentials', 500);
+    return apiError(error instanceof Error ? error.message : 'Failed to test credentials', 500);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/db/prisma';
 import { authenticate, requireAdmin } from '@/lib/auth/middleware';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 
 const ruleCriterionSchema = z.object({
   field: z.enum(['from', 'to', 'cc', 'subject', 'body', 'hasAttachment', 'hasLabelId']),
@@ -141,8 +142,8 @@ export async function POST(req: NextRequest) {
         stopProcessing: stopProcessing ?? false,
         accountId: accountId || null,
         accountLabelId: accountLabelId || null,
-        conditions: conditions as any,
-        actions: actions as any,
+        conditions: conditions as Prisma.InputJsonValue,
+        actions: actions as Prisma.InputJsonValue,
       },
       include: {
         account: {

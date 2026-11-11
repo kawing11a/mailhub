@@ -3,6 +3,8 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useState, useEffect, useMemo } from 'react';
 import { getEmailDisplayTimestamp } from '@/lib/email/timestamps';
+import type { EmailTimestamps } from '@/lib/email/timestamps';
+import type { EmailRowData } from '@/components/email/EmailRow';
 
 export function useSearch(initialQuery = '', accountId?: string, folder?: string) {
   const [query, setQuery] = useState(initialQuery);
@@ -15,7 +17,8 @@ export function useSearch(initialQuery = '', accountId?: string, folder?: string
     return () => clearTimeout(handler);
   }, [query]);
 
-  const { data, isLoading, error } = useQuery({
+  type SearchHit = EmailRowData & EmailTimestamps & { bodyText?: string | null };
+  const { data, isLoading, error } = useQuery<{ hits: SearchHit[]; estimatedTotalHits: number }>({
     queryKey: ['search', debouncedQuery, accountId, folder],
     queryFn: async () => {
       if (!debouncedQuery) return { hits: [], estimatedTotalHits: 0 };
@@ -38,7 +41,7 @@ export function useSearch(initialQuery = '', accountId?: string, folder?: string
     if (!hits || !Array.isArray(hits)) return [];
 
     // Attach original index as similarity rank (0 is most relevant)
-    const indexed = hits.map((hit: any, index: number) => ({ hit, index }));
+    const indexed = hits.map((hit, index) => ({ hit, index }));
 
     indexed.sort((a, b) => {
       const dateA = getEmailDisplayTimestamp(a.hit);

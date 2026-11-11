@@ -5,8 +5,6 @@ import {
   completeAgentRun,
   failAgentRun,
 } from '../../../lib/ai/agent-tracker';
-import { redis } from '../../../lib/redis';
-
 jest.mock('../../../lib/redis', () => {
   const store = new Map<string, string>();
   return {
@@ -74,7 +72,7 @@ describe('Agent Tracker Service', () => {
     await initAgentRun(runId, 'Billing');
 
     await completeAgentRun(runId, 'Generated executive summary...', 5, [
-      { type: 'telegram', success: true, deliveredAt: new Date().toISOString() },
+      { type: 'TELEGRAM', success: true, deliveredAt: new Date().toISOString() },
     ]);
 
     const state = await getAgentRunState(runId);

@@ -6,11 +6,12 @@ import { X, Loader2, Check, Search } from 'lucide-react';
 import { allowedAccountIdsForLabels, useLabels } from '@/components/accounts/LabelFilterMenu';
 import { LabelFilterChips } from '@/components/accounts/LabelFilterChips';
 import clsx from 'clsx';
+import type { SidebarAccount } from '@/hooks/useFavouriteMutations';
 
 type MemberAccessModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  member: any;
+  member: { userId: string; name: string } | null;
   accountId?: never;
 };
 
@@ -31,6 +32,8 @@ type AccountAccessMember = {
   email: string;
   hasAccess: boolean;
 };
+
+type AccountAccessTarget = SidebarAccount & { name?: string };
 
 type AccountAccessResponse = {
   account: {
@@ -65,7 +68,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
 
   const labels = useLabels(isOpen && !isAccountMode);
 
-  const { data: accountsData, isLoading: isLoadingAccounts } = useQuery({
+  const { data: accountsData, isLoading: isLoadingAccounts } = useQuery<AccountAccessTarget[]>({
     queryKey: ['accounts'],
     queryFn: async () => {
       const res = await fetch('/api/accounts');
@@ -97,13 +100,16 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
     enabled: isOpen && !!accountId,
   });
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (!isAccountMode && accessData && Array.isArray(accessData)) {
       setSelectedIds(new Set(accessData));
       setSubmitError(null);
     }
-  }, [accessData, isAccountMode]);
+  }, [accessData, isAccountMode])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (!isAccountMode || !accountAccessQuery.data) return;
 
@@ -114,8 +120,10 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
 
     setSelectedIds(new Set(nextSelected));
     setSubmitError(null);
-  }, [accountAccessQuery.data, isAccountMode]);
+  }, [accountAccessQuery.data, isAccountMode])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (isOpen) {
       setQuery('');
@@ -124,7 +132,8 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
       const t = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(t);
     }
-  }, [isOpen]);
+  }, [isOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const mutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -138,6 +147,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
         return res.json();
       }
 
+      if (!member) throw new Error('Member is required to update account access');
       const res = await fetch(`/api/org/members/${member.userId}/accounts`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -198,7 +208,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
       selectedLabelId ? new Set([selectedLabelId]) : new Set()
     );
 
-    return accounts.filter((a: any) => {
+    return accounts.filter((a) => {
       if (allowedIds && !allowedIds.has(a.id)) return false;
       if (!q) return true;
       const name = (a.label || a.name || '').toLowerCase();
@@ -221,7 +231,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
     if (isAccountMode) {
       filteredMembers.forEach((currentMember) => next.add(currentMember.userId));
     } else {
-      filtered.forEach((account: any) => next.add(account.id));
+      filtered.forEach((account) => next.add(account.id));
     }
     setSelectedIds(next);
   };
@@ -365,7 +375,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
           {/* Header */}
           <div className="flex flex-none items-center justify-between border-b border-gray-100 px-6 py-4">
             <h3 className="text-lg font-semibold leading-6 text-gray-900">
-              Manage Access: {member.name}
+              Manage Access: {member?.name}
             </h3>
             <button
               onClick={onClose}
@@ -433,7 +443,7 @@ export function ManageAccountAccessModal(props: ManageAccountAccessModalProps) {
                 {accounts.length === 0 ? 'No email accounts found.' : 'No accounts match your search or filter.'}
               </p>
             ) : (
-              filtered.map((account: any) => {
+              filtered.map((account) => {
                 const isSelected = selectedIds.has(account.id);
                 return (
                   <div

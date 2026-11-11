@@ -53,8 +53,8 @@ export async function POST(req: Request) {
       updatedStats,
       message: label === 'spam' ? 'Trained model: Marked as definite spam' : 'Trained model: Marked as safe (ham)',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Spam Label Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to record spam label' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to record spam label' }, { status: 500 });
   }
 }

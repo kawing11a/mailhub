@@ -43,7 +43,6 @@ jest.mock('@/lib/email/attachment-retrieval', () => ({
 import type { NextRequest } from 'next/server';
 import { GET as getRules, POST as createRule } from '@/app/api/rules/route';
 import {
-  GET as getRule,
   PUT as updateRule,
   DELETE as deleteRule,
 } from '@/app/api/rules/[id]/route';
@@ -53,10 +52,11 @@ import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 
 const mockAuthenticate = authenticate as jest.Mock;
-const mockPrismaRule = prisma.emailRule as any;
-const mockPrismaAccount = prisma.emailAccount as any;
-const mockPrismaLabel = prisma.label as any;
-const mockPrismaEmail = prisma.email as any;
+type MockPrismaDelegate = Record<string, jest.Mock>;
+const mockPrismaRule = prisma.emailRule as unknown as MockPrismaDelegate;
+const mockPrismaAccount = prisma.emailAccount as unknown as MockPrismaDelegate;
+const mockPrismaLabel = prisma.label as unknown as MockPrismaDelegate;
+const mockPrismaEmail = prisma.email as unknown as MockPrismaDelegate;
 
 const accountId = '11111111-1111-4111-8111-111111111111';
 const accountLabelId = '22222222-2222-4222-8222-222222222222';

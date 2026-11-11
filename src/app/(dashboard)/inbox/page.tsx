@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { Suspense } from 'react';
+import { useSearchParams, usePathname } from 'next/navigation';
 import { EmailList } from '@/components/email/EmailList';
 import { EmailViewer } from '@/components/email/EmailViewer';
 import { useUIStore } from '@/stores/uiStore';
@@ -9,7 +9,6 @@ import clsx from 'clsx';
 
 function InboxContent() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const pathname = usePathname();
   const selectedEmailId = searchParams.get('emailId');
   const { readingPane } = useUIStore();
@@ -28,10 +27,11 @@ function InboxContent() {
 
   if (readingPane === 'off') {
     return (
-      <div className="flex flex-1 h-full overflow-hidden relative">
+      <div className="flex min-w-0 flex-1 h-full overflow-hidden relative">
         {selectedEmailId ? (
-          <div className="absolute inset-0 z-10 bg-white flex flex-col">
+          <div className="absolute inset-0 z-10 flex min-h-0 min-w-0 flex-col bg-white">
             <EmailViewer 
+              key={selectedEmailId}
               emailId={selectedEmailId} 
               onBack={() => handleSelectEmail(null)}
             />
@@ -51,7 +51,7 @@ function InboxContent() {
   const isBottomPane = readingPane === 'bottom';
 
   return (
-    <div className={clsx("flex flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
+    <div className={clsx("flex min-w-0 flex-1 h-full overflow-hidden", isBottomPane ? "flex-col" : "")}>
       <div className={clsx(
         "flex flex-col",
         isBottomPane 
@@ -64,11 +64,12 @@ function InboxContent() {
         />
       </div>
       <div className={clsx(
-        "bg-white relative",
+        "relative min-h-0 min-w-0 bg-white",
         isBottomPane ? "flex-1 border-t border-gray-200" : "flex-1 h-full border-l border-gray-200"
       )}>
         {selectedEmailId ? (
           <EmailViewer 
+            key={selectedEmailId}
             emailId={selectedEmailId} 
             onBack={() => handleSelectEmail(null)}
           />

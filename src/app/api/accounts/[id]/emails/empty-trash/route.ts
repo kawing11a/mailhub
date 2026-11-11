@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id: accountId } = await params;
 
-  let where: Record<string, unknown> = { folder: 'TRASH' };
+  const where: Record<string, unknown> = { folder: 'TRASH' };
 
   if (accountId !== 'all' && accountId !== 'new-emails') {
     const account = await prisma.emailAccount.findFirst({

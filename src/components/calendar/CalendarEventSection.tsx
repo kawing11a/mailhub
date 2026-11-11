@@ -16,7 +16,7 @@ interface CalendarEventSectionProps {
   defaultSubject?: string | null;
   selectedAccountId: string | null;
   emailId: string;
-  email?: any;
+  email?: Parameters<typeof parseMeetingFromEmail>[0];
 }
 
 export function CalendarEventSection({

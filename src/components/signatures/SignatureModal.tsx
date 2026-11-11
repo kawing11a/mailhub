@@ -17,7 +17,6 @@ import {
   Redo,
   Loader2,
   Image as ImageIcon,
-  Link,
   Upload,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -53,10 +52,13 @@ export function SignatureModal({
 
   const { createSignature, updateSignature, isCreating, isUpdating } = useSignatures(selectedAccountId);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     setSelectedAccountId(initialAccountId);
-  }, [initialAccountId]);
+  }, [initialAccountId])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
+  /* eslint-disable react-hooks/set-state-in-effect -- preserve existing UI state synchronization behavior */
   useEffect(() => {
     if (signature) {
       setName(signature.name);
@@ -65,7 +67,8 @@ export function SignatureModal({
       setName('');
       setIsDefault(false);
     }
-  }, [signature, isOpen]);
+  }, [signature, isOpen])
+  /* eslint-enable react-hooks/set-state-in-effect */;
 
   const editor = useEditor({
     extensions: [
@@ -147,7 +150,7 @@ export function SignatureModal({
         if (res.signature && onSaved) onSaved(res.signature);
       }
       onClose();
-    } catch (err) {
+    } catch {
       // Toast error handled by hook
     }
   };

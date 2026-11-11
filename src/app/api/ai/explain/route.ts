@@ -55,7 +55,7 @@ Your output MUST be a valid JSON object with the following fields:
     }
 
     return NextResponse.json({ explanation, status: 'success' });
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof AiUnavailableError) {
       return NextResponse.json({ error: err.message, reason: err.reason }, { status: 503 });
     }
@@ -63,6 +63,6 @@ Your output MUST be a valid JSON object with the following fields:
       return NextResponse.json({ error: err.message }, { status: 403 });
     }
     console.error('AI Explain Route Error:', err);
-    return NextResponse.json({ error: err.message || 'Failed to explain email' }, { status: 500 });
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed to explain email' }, { status: 500 });
   }
 }

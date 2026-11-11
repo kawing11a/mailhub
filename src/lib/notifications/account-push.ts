@@ -32,7 +32,7 @@ export async function sendAccountPushNotification(
 
   if (subscriptions.length === 0) return;
 
-  const webpush = require('web-push');
+  const webpush = await import('web-push');
   webpush.setVapidDetails(
     process.env.VAPID_SUBJECT || 'mailto:support@mailhub.local',
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY as string,

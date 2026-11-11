@@ -84,10 +84,10 @@ describe('Gmail indexing retry', () => {
     const manager = new GmailSyncManager();
 
     await expect(
-      (manager as any).fetchAndPersist('access-token', 'account-1', 'org-1', 'message-1', 'INBOX', true)
+    (manager as unknown as { fetchAndPersist: (accessToken: string, accountId: string, organizationId: string, messageId: string, folder: string, skipNotifications: boolean) => Promise<boolean> }).fetchAndPersist('access-token', 'account-1', 'org-1', 'message-1', 'INBOX', true)
     ).resolves.toBe(false);
     await expect(
-      (manager as any).fetchAndPersist('access-token', 'account-1', 'org-1', 'message-1', 'INBOX', true)
+    (manager as unknown as { fetchAndPersist: (accessToken: string, accountId: string, organizationId: string, messageId: string, folder: string, skipNotifications: boolean) => Promise<boolean> }).fetchAndPersist('access-token', 'account-1', 'org-1', 'message-1', 'INBOX', true)
     ).resolves.toBe(true);
 
     expect(searchQueue.add).toHaveBeenCalledTimes(2);

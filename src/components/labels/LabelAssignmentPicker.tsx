@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Tag, Check, Minus, Search, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
+import type { Label } from '@prisma/client';
 
 interface LabelAssignmentPickerProps {
   /** Emails the picker acts on (one for the viewer, many for bulk selection). */
@@ -19,6 +20,8 @@ interface LabelAssignmentPickerProps {
   allowRemoval?: boolean;
 }
 
+const EMPTY_LABELS: never[] = [];
+
 export function LabelAssignmentPicker({
   emailIds,
   labelCounts,
@@ -31,26 +34,33 @@ export function LabelAssignmentPicker({
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightedIndex, setHighlightedIndex] = useState(0);
-  // Optimistic per-label count overrides, applied on top of labelCounts
-  const [overrides, setOverrides] = useState<Map<string, number>>(new Map());
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const emailIdsKey = emailIds.join(',');
-  useEffect(() => {
-    setOverrides(new Map());
-  }, [emailIdsKey]);
+  // Keep overrides scoped to the current email selection. Stale optimistic
+  // counts become invisible immediately when the selection changes.
+  const [overrideState, setOverrideState] = useState({
+    emailIdsKey,
+    values: new Map<string, number>(),
+  });
+  const overrides = overrideState.emailIdsKey === emailIdsKey
+    ? overrideState.values
+    : new Map<string, number>();
+  const updateOverrides = (update: (current: Map<string, number>) => Map<string, number>) => {
+    setOverrideState((current) => ({
+      emailIdsKey,
+      values: update(current.emailIdsKey === emailIdsKey ? current.values : new Map()),
+    }));
+  };
 
   useEffect(() => {
     if (isOpen) {
-      setSearch('');
-      setHighlightedIndex(0);
-      setOverrides(new Map());
       // Focus after the dropdown has rendered
       requestAnimationFrame(() => searchInputRef.current?.focus());
     }
   }, [isOpen]);
 
-  const { data: labelsData } = useQuery({
+  const { data: labelsData } = useQuery<{ labels: Label[] }>({
     queryKey: ['labels'],
     queryFn: async () => {
       const res = await fetch('/api/labels');
@@ -59,10 +69,10 @@ export function LabelAssignmentPicker({
     },
   });
 
-  const labels = labelsData?.labels || [];
+  const labels = labelsData?.labels ?? EMPTY_LABELS;
   const filteredLabels = useMemo(
     () =>
-      labels.filter((l: any) =>
+      labels.filter((l) =>
         l.name.toLowerCase().includes(search.toLowerCase())
       ),
     [labels, search]
@@ -88,12 +98,12 @@ export function LabelAssignmentPicker({
     },
     onMutate: ({ labelId, add }) => {
       const previous = overrides.has(labelId) ? overrides.get(labelId) : undefined;
-      setOverrides((m) => new Map(m).set(labelId, add ? emailIds.length : 0));
+      updateOverrides((current) => new Map(current).set(labelId, add ? emailIds.length : 0));
       return { previous };
     },
     onError: (_err, { labelId }, context) => {
-      setOverrides((m) => {
-        const next = new Map(m);
+      updateOverrides((current) => {
+        const next = new Map(current);
         if (context?.previous === undefined) {
           next.delete(labelId);
         } else {
@@ -121,7 +131,7 @@ export function LabelAssignmentPicker({
     },
   });
 
-  const handleToggle = (label: any) => {
+  const handleToggle = (label: Label) => {
     if (emailIds.length === 0) return;
     const isChecked = getCount(label.id) >= emailIds.length;
     if (isChecked && !allowRemoval) return;
@@ -149,7 +159,13 @@ export function LabelAssignmentPicker({
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (!isOpen) {
+            setSearch('');
+            setHighlightedIndex(0);
+          }
+          setIsOpen(!isOpen);
+        }}
         className={
           buttonClassName ||
           'p-2 text-gray-600 hover:bg-gray-100 rounded-md transition-colors flex items-center'
@@ -199,7 +215,7 @@ export function LabelAssignmentPicker({
               ) : filteredLabels.length === 0 ? (
                 <p className="px-3 py-3 text-sm text-gray-500">No labels found.</p>
               ) : (
-                filteredLabels.map((label: any, index: number) => {
+        filteredLabels.map((label, index) => {
                   const count = getCount(label.id);
                   const isChecked = count >= emailIds.length && emailIds.length > 0;
                   const isIndeterminate = !isChecked && count > 0;

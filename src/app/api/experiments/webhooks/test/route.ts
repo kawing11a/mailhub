@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     return apiResponse({ message: 'Test message sent successfully!', result });
-  } catch (err: any) {
-    return apiError(err.message || 'Failed to send test webhook notification', 500);
+  } catch (err: unknown) {
+    return apiError(err instanceof Error ? err.message : 'Failed to send test webhook notification', 500);
   }
 }

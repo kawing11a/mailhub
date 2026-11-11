@@ -1,5 +1,5 @@
-import { Mail } from 'lucide-react';
 import React from 'react';
+import Image from 'next/image';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -15,7 +15,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         {/* Content */}
         <div className="p-12 z-10 flex flex-col h-full justify-between">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="MailHub Logo" className="h-10 w-auto rounded-lg shadow-sm bg-white" />
+            <Image src="/logo.png" alt="MailHub Logo" width={40} height={40} className="h-10 w-auto rounded-lg shadow-sm bg-white" />
             <span className="text-white font-bold text-2xl tracking-tight">MailHub</span>
           </div>
           

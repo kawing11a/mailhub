@@ -15,7 +15,7 @@ const defaultOptions: QueueOptions = {
       console.warn(`Redis connection lost. Retrying in queue client (attempt ${times})...`);
       return Math.min(times * 100, 3000);
     }
-  }) as any,
+  }) as unknown as QueueOptions['connection'],
   defaultJobOptions: {
     attempts: 3,
     backoff: {

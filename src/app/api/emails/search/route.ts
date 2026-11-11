@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { meilisearch } from '@/lib/search/meilisearch';
+import type { SearchParams } from 'meilisearch';
 import { authenticate } from '@/lib/auth/middleware';
 import { prisma } from '@/lib/db/prisma';
 import { accountAccessWhere } from '@/lib/accounts/access';
@@ -81,7 +82,7 @@ export async function GET(req: NextRequest) {
       filter.push(filterEquals('folder', folder));
     }
 
-    const searchParams: any = {
+    const searchParams: SearchParams = {
       limit,
       offset,
       filter,
@@ -106,8 +107,8 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json(results);
-  } catch (error: any) {
-    if (error.message === 'Unauthorized') {
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
     console.error('Search error:', error);

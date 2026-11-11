@@ -9,13 +9,11 @@ import {
   Pencil,
   Trash2,
   Loader2,
-  CheckCircle2,
   Tag,
   Star,
   MailCheck,
   ShieldAlert,
   Sliders,
-  Sparkles,
   Forward,
 } from 'lucide-react';
 import clsx from 'clsx';
@@ -23,11 +21,18 @@ import toast from 'react-hot-toast';
 import { RuleModal } from '@/components/rules/RuleModal';
 import { EmailRuleDefinition } from '@/lib/rules/types';
 import { RestrictedSettingsNotice } from '@/components/settings/RestrictedSettingsNotice';
+import type { EmailAccount, Label } from '@prisma/client';
+
+type RuleListItem = EmailRuleDefinition & {
+  id: string;
+  account?: Pick<EmailAccount, 'id' | 'label' | 'color'> | null;
+  accountLabel?: Pick<Label, 'id' | 'name' | 'color'> | null;
+};
 
 export default function RulesSettingsPage() {
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<any | null>(null);
+  const [editingRule, setEditingRule] = useState<RuleListItem | null>(null);
   const [runningRuleId, setRunningRuleId] = useState<string | null>(null);
 
   const { data: authData, isLoading: isLoadingAuth } = useQuery({
@@ -42,7 +47,7 @@ export default function RulesSettingsPage() {
   const isAdmin = authData?.role === 'admin';
 
   // Fetch Rules
-  const { data: rulesData, isLoading: isLoadingRules } = useQuery({
+  const { data: rulesData, isLoading: isLoadingRules } = useQuery<{ rules: RuleListItem[] }>({
     queryKey: ['rules'],
     enabled: isAdmin,
     queryFn: async () => {
@@ -53,7 +58,7 @@ export default function RulesSettingsPage() {
   });
 
   // Fetch Labels
-  const { data: labelsData } = useQuery({
+  const { data: labelsData } = useQuery<{ labels: Label[] }>({
     queryKey: ['labels'],
     enabled: isAdmin,
     queryFn: async () => {
@@ -64,7 +69,7 @@ export default function RulesSettingsPage() {
   });
 
   // Fetch Accounts
-  const { data: accountsData } = useQuery({
+  const { data: accountsData } = useQuery<EmailAccount[]>({
     queryKey: ['accounts'],
     enabled: isAdmin,
     queryFn: async () => {
@@ -74,9 +79,9 @@ export default function RulesSettingsPage() {
     },
   });
 
-  const rules: any[] = rulesData?.rules || [];
-  const labels: any[] = labelsData?.labels || [];
-  const accounts: any[] = Array.isArray(accountsData) ? accountsData : [];
+  const rules = rulesData?.rules ?? [];
+  const labels = labelsData?.labels ?? [];
+  const accounts = accountsData ?? [];
 
   // Toggle active mutation
   const toggleActiveMutation = useMutation({
@@ -93,7 +98,7 @@ export default function RulesSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['rules'] });
       toast.success('Rule status updated');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || 'Error updating status');
     },
   });
@@ -109,7 +114,7 @@ export default function RulesSettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['rules'] });
       toast.success('Rule deleted');
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(err.message || 'Error deleting rule');
     },
   });
@@ -142,8 +147,8 @@ export default function RulesSettingsPage() {
       );
       queryClient.invalidateQueries({ queryKey: ['emails'] });
       queryClient.invalidateQueries({ queryKey: ['labels'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Error executing rule');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Error executing rule');
     } finally {
       setRunningRuleId(null);
     }
@@ -189,7 +194,7 @@ export default function RulesSettingsPage() {
           </div>
           <h3 className="text-base font-semibold text-gray-900">No email rules created yet</h3>
           <p className="text-sm text-gray-500 max-w-md mx-auto mt-1 mb-6">
-            Rules let you automatically organize your inboxes. For example, automatically assign the "Invoices" label to all emails from Stripe.
+             Rules let you automatically organize your inboxes. For example, automatically assign the &quot;Invoices&quot; label to all emails from Stripe.
           </p>
           <button
             onClick={() => {

@@ -366,8 +366,8 @@ export function AccountsSection() {
           queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
           toast.success('All emails marked as read', { id: 'read-all-toast' });
-        } catch (err: any) {
-          toast.error(err.message || 'Failed to mark all as read', { id: 'read-all-toast' });
+        } catch (err: unknown) {
+          toast.error(err instanceof Error ? err.message : 'Failed to mark all as read', { id: 'read-all-toast' });
         }
         break;
       case 'reindex':
@@ -377,8 +377,8 @@ export function AccountsSection() {
           const data = await res.json();
           if (!res.ok) throw new Error(data.error || 'Failed to trigger reindex');
           toast.success(data.message || 'Sync queued successfully', { id: 'reindex-toast' });
-        } catch (err: any) {
-          toast.error(err.message || 'Failed to trigger reindex', { id: 'reindex-toast' });
+        } catch (err: unknown) {
+          toast.error(err instanceof Error ? err.message : 'Failed to trigger reindex', { id: 'reindex-toast' });
         }
         break;
       case 'copyEmail':
@@ -406,16 +406,9 @@ export function AccountsSection() {
   const folderParam = searchParams.get('folder');
   const labelIdParam = searchParams.get('labelId');
 
-  const [selectedLabelId, setSelectedLabelIdState] = useState<string | null>(labelIdParam);
-
-  useLayoutEffect(() => {
-    if (labelIdParam !== selectedLabelId) {
-      setSelectedLabelIdState(labelIdParam);
-    }
-  }, [labelIdParam]);
+  const selectedLabelId = labelIdParam;
 
   const handleLabelSelect = (id: string | null) => {
-    setSelectedLabelIdState(id);
     const params = new URLSearchParams(window.location.search);
     if (id) {
       params.set('labelId', id);
@@ -424,11 +417,7 @@ export function AccountsSection() {
     }
     const queryString = params.toString();
     const targetPath = pathname.startsWith('/inbox') || pathname.startsWith('/all-emails') || pathname.startsWith('/labels') ? pathname : '/inbox';
-    if (pathname !== targetPath) {
-      router.push(`${targetPath}?${queryString}`);
-    } else {
-      window.history.pushState(null, '', `${targetPath}?${queryString}`);
-    }
+    router.push(`${targetPath}${queryString ? `?${queryString}` : ''}`);
   };
 
   const sensors = useSensors(
