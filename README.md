@@ -154,6 +154,7 @@ Optional worker and database controls use conservative defaults from `.env.examp
 | `GMAIL_REQUEST_INTERVAL_MS` | `1000` | Minimum local spacing between Gmail API requests for one identity |
 | `IMAP_REQUEST_INTERVAL_MS` | `250` | Minimum local spacing between Outlook/IMAP requests for one account |
 | `IMAP_RECONCILE_INTERVAL_MS` | `300000` | IMAP recovery reconciliation interval |
+| `OUTBOUND_HOST_ALLOWLIST` | empty | Exact `host=cidr` allowlist for reserved/non-public IMAP/SMTP destinations |
 
 ### 3. Start Services
 
@@ -205,6 +206,24 @@ npm run worker
 An email account keeps the `workerPartition` stored with the account. Its initial-sync job is routed to that partition's queue, so existing accounts assigned to `worker-1` remain handled by a worker deployed with `WORKER_PARTITION=worker-1`. Adding workers does not automatically rebalance existing accounts; keep every partition that owns accounts deployed until you deliberately reassign those accounts.
 
 For a ten-worker deployment, start conservatively with `SYNC_WORKER_CONCURRENCY=1` and `EMAIL_PERSIST_CONCURRENCY=3`. `DB_POOL_MAX` is per Node.js process, so budget it across every worker and the web process rather than per email account. The defaults in `.env.example` limit the database pool to five connections per process and use a ten-second pool checkout timeout.
+
+### Outbound host allowlist
+
+By default, MailHub rejects IMAP/SMTP hosts that resolve to non-public addresses (SSRF protection). For self-hosted deployments that intentionally connect to a LAN mail server, or through a transparent proxy that returns fake-IP DNS answers, one opt-in setting is available:
+
+```env
+# Exact hostname -> reserved CIDR. Repeat the host for multiple address ranges.
+OUTBOUND_HOST_ALLOWLIST=mail.example.com=192.168.1.10/32,imap.example.com=198.18.0.0/15
+```
+
+Rules:
+
+- Exact hostname match only; wildcards and IP literals are not supported.
+- Every resolved address must be inside one of the configured CIDRs.
+- CIDRs must be inside a reserved/non-public range; `0.0.0.0/0` and other public ranges are ignored.
+- Malformed entries are ignored; the host remains blocked.
+- Only set the ranges your deployment actually uses; avoid broad link-local or metadata ranges.
+- This exception applies to IMAP/SMTP host resolution only, not OAuth/HTTP requests.
 
 ### 7. Run Tests
 

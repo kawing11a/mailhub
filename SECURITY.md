@@ -41,6 +41,11 @@ MailHub includes several defense-in-depth security measures out of the box:
 - 🔒 **Credential Encryption at Rest**: IMAP/SMTP passwords and OAuth refresh tokens are encrypted in PostgreSQL using AES-256-GCM encryption (`lib/crypto.ts`).
 - 🔑 **Stateless JWT Session Management**: Authentication tokens are signed using strong cryptographic algorithms (`jose`) with HTTP-only cookies.
 - 🛡️ **Multi-Tenant Isolation**: Database queries enforce organization ID workspace boundaries across all user data.
+- 🌐 **SSRF Protection**: IMAP/SMTP destinations must resolve to public addresses. The opt-in outbound allowlist only accepts exact hostnames and reserved CIDRs; IP literals stay blocked.
 - 🐳 **Isolated Container Deployment**: Worker processes run as unprivileged services inside Docker containers.
+
+### Outbound host allowlist
+
+`OUTBOUND_HOST_ALLOWLIST` is an opt-in deployment setting for LAN mail servers and transparent proxies. It applies only to exact hostnames, requires every resolved address to match a reserved CIDR, and never allows IP literals. Leave it empty unless needed.
 
 Thank you for helping keep MailHub and its community secure!
