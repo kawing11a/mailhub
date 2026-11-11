@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-main
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      release_required: ${{ steps.prepare.outputs.release_required }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag: ${{ steps.prepare.outputs.tag }}
+      release_commit: ${{ steps.prepare.outputs.release_commit }}
+      source_sha: ${{ steps.prepare.outputs.source_sha }}
+      update_latest: ${{ steps.prepare.outputs.update_latest }}
+      notes_file: ${{ steps.prepare.outputs.notes_file }}
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+
+      - name: Prepare version, changelog, and Git tag
+        id: prepare
+        run: node scripts/prepare-release.mjs
+
+      - name: Upload release notes
+        if: steps.prepare.outputs.release_required == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: release-notes
+          path: ${{ steps.prepare.outputs.notes_file }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-image:
+    needs: prepare
+    if: needs.prepare.outputs.release_required == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.release_commit }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Check Docker Hub credentials
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -z "${DOCKERHUB_USERNAME}" || -z "${DOCKERHUB_TOKEN}" ]]; then
+            echo '::error::Add DOCKERHUB_USERNAME and DOCKERHUB_TOKEN repository secrets before publishing.'
+            exit 1
+          fi
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set image tags
+        id: tags
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          UPDATE_LATEST: ${{ needs.prepare.outputs.update_latest }}
+        shell: bash
+        run: |
+          {
+            echo 'tags<<EOF'
+            echo "kawing11a/mailhub:${VERSION}"
+            if [[ "${UPDATE_LATEST}" == "true" ]]; then
+              echo 'kawing11a/mailhub:latest'
+            fi
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push multi-platform image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.source_sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  create-release:
+    needs:
+      - prepare
+      - publish-image
+    if: needs.prepare.outputs.release_required == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.release_commit }}
+
+      - name: Download release notes
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub Release ${RELEASE_TAG} already exists."
+          else
+            gh release create "$RELEASE_TAG" \
+              --verify-tag \
+              --title "$RELEASE_TAG" \
+              --notes-file "${RUNNER_TEMP}/release-notes/release-notes.md"
+          fi
