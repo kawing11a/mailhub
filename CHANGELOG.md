@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.1] - 2026-11-11
+
+### Fixed
+
+- stabilize email viewer and project checks
+
+### Changed
+
+- Merge branch 'codex/email-viewer-layout-fix'
+
+
 ## [0.3.0] - 2026-11-11
 
 ### Added
