@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1] - 2026-11-16
+
+### Fixed
+
+- retry received attachments and hide failed calendar previews
+
+
 ## [0.4.0] - 2026-11-11
 
 ### Added
