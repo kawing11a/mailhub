@@ -36,6 +36,7 @@ export function CalendarEventSection({
     async function loadCalendarEvents() {
       setIsLoading(true);
       const parsedEvents: IcsEvent[] = [];
+      let attachmentRetrievalFailed = false;
 
       try {
         // 1. Process inline ICS content if present
@@ -49,16 +50,19 @@ export function CalendarEventSection({
           for (const att of attachments) {
             const downloadUrl = `/api/accounts/${selectedAccountId}/emails/${emailId}/attachments/${att.id}`;
             const res = await fetch(downloadUrl);
-            if (res.ok) {
-              const icsText = await res.text();
-              const parsed = parseIcs(icsText);
-              parsedEvents.push(...parsed);
+            if (!res.ok) {
+              attachmentRetrievalFailed = true;
+              break;
             }
+
+            const icsText = await res.text();
+            const parsed = parseIcs(icsText);
+            parsedEvents.push(...parsed);
           }
         }
 
         // 3. Fallback: Parse meeting details from email body/headers if no ICS events loaded
-        if (parsedEvents.length === 0 && email) {
+        if (!attachmentRetrievalFailed && parsedEvents.length === 0 && email) {
           const fallbackEvent = parseMeetingFromEmail(email);
           if (fallbackEvent) {
             parsedEvents.push(fallbackEvent);
@@ -66,9 +70,18 @@ export function CalendarEventSection({
         }
       } catch (err) {
         console.error('Failed to load calendar events:', err);
+        if (attachments && attachments.length > 0) {
+          attachmentRetrievalFailed = true;
+        }
       }
 
       if (!isCancelled) {
+        if (attachmentRetrievalFailed) {
+          setEvents([]);
+          setIsLoading(false);
+          return;
+        }
+
         // Apply default subject if summary is generic or untitled
         const finalEvents = parsedEvents.map(ev => {
           if ((!ev.summary || ev.summary === 'Untitled Event') && defaultSubject) {

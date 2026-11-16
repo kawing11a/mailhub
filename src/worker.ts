@@ -9,6 +9,7 @@ import { getSystemPreferences } from '@/lib/settings/system-preferences';
 import { closeSyncWorkers, ensureSyncWorkersForPartitions } from '@/lib/queue/workers/sync';
 import { searchWorker } from '@/lib/queue/workers/search';
 import { summaryWorker } from '@/lib/queue/workers/summary';
+import { attachmentDownloadWorker } from '@/lib/queue/workers/attachment-download';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
 import type { EmailAccount } from '@prisma/client';
 
@@ -95,6 +96,7 @@ async function bootstrap() {
     await closeSyncWorkers();
     await searchWorker.close();
     await summaryWorker.close();
+    await attachmentDownloadWorker.close();
     await imapManager.shutdown();
     await gmailSyncManager.shutdown();
     await prisma.$disconnect();

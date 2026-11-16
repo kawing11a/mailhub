@@ -10,7 +10,7 @@ import {
 import { resolveThreadId } from './threading';
 import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
-import { searchQueue } from '@/lib/queue/client';
+import { enqueueAttachmentDownload, searchQueue } from '@/lib/queue/client';
 import { checkIsHighRisk } from '@/lib/ai/spam-checker';
 import { processRulesForNewEmail } from '@/lib/rules/engine';
 import type { EmailAccount } from '@prisma/client';
@@ -1201,6 +1201,14 @@ export class IMAPConnectionManager {
         return email;
       }, { maxWait: 10_000, timeout: 30_000 }));
       const persistedAt = new Date();
+
+      if (folder !== 'SENT' && folder !== 'DRAFTS') {
+        await Promise.all(
+          reconciledAttachments
+            .filter((attachment) => attachment.storagePath === null)
+            .map((attachment) => enqueueAttachmentDownload(attachment.id))
+        );
+      }
 
       // Add to search indexing queue
       await searchQueue.add('index-email', { emailId: email.id });

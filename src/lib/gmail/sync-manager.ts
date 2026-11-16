@@ -3,7 +3,7 @@ import { parseEmail } from '@/lib/imap/email-parser';
 import { resolveThreadId } from '@/lib/imap/threading';
 import { buildReceivedAttachmentMetadata } from '@/lib/email/attachment-storage';
 import { redis } from '@/lib/redis';
-import { searchQueue } from '@/lib/queue/client';
+import { enqueueAttachmentDownload, searchQueue } from '@/lib/queue/client';
 import {
   type GmailMessagePart,
   extractGmailAttachmentParts,
@@ -440,6 +440,14 @@ export class GmailSyncManager {
 
         return email;
       }, { maxWait: 10_000, timeout: 30_000 }));
+
+      if (folder !== 'SENT' && folder !== 'DRAFTS') {
+        await Promise.all(
+          reconciledAttachments
+            .filter((attachment) => attachment.storagePath === null)
+            .map((attachment) => enqueueAttachmentDownload(attachment.id))
+        );
+      }
 
       // Search indexing is idempotent, and needs to be retried even if an earlier
       // persistence attempt committed the email before queueing failed.

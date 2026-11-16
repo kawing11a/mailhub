@@ -33,6 +33,24 @@ export const searchQueue = new Queue('search-index', defaultOptions);
 export const emailSendQueue = new Queue('email-send', defaultOptions);
 export const workerHealthQueue = new Queue('worker-health', defaultOptions);
 export const summaryQueue = new Queue('email-summary', defaultOptions);
+export const attachmentDownloadQueue = new Queue('attachment-download', {
+  ...defaultOptions,
+  defaultJobOptions: {
+    ...defaultOptions.defaultJobOptions,
+    attempts: 10,
+    backoff: { type: 'exponential', delay: 2000 },
+    removeOnComplete: 1000,
+    removeOnFail: 5000,
+  },
+});
+
+export async function enqueueAttachmentDownload(attachmentId: string): Promise<void> {
+  await attachmentDownloadQueue.add(
+    'download-attachment',
+    { attachmentId },
+    { jobId: `attachment-${attachmentId}` }
+  );
+}
 
 const partitionSyncQueues = new Map<string, Queue>();
 
@@ -74,6 +92,7 @@ export async function closeQueues() {
     emailSendQueue.close(),
     workerHealthQueue.close(),
     summaryQueue.close(),
+    attachmentDownloadQueue.close(),
     ...Array.from(partitionSyncQueues.values()).map((queue) => queue.close()),
   ]);
 }
