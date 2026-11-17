@@ -14,6 +14,7 @@
 - Preserve the existing download order: write the file, then update `storagePath` and `sizeBytes`.
 - Exclude `SENT` and `DRAFTS` local uploads and skip rows without provider references supported by `getReceivedAttachment`.
 - Reconcile both failed and completed jobs, resetting attempt counters before retrying terminal jobs.
+- Serialize per-attachment cooldown checks across workers with a Redis lease, compare-token release, and expiry equal to the scan interval.
 - Do not add a schema migration or a new queue job type.
 - Do not add or run tests unless the user asks for tests or verification.
 
@@ -33,6 +34,7 @@
 - [ ] Include all accounts and folders except `SENT` and `DRAFTS`. Match retrieval precedence: if `imapPart` exists, require a usable IMAP UID; otherwise require Gmail message identity and an attachment ID or ordinal.
 - [ ] For each ID, enqueue the existing job when no job exists, do nothing for waiting or active states, and retry completed or failed jobs only after the terminal cooldown. Reset `attemptsMade` and `attemptsStarted` when retrying.
 - [ ] Re-read job state after a retry race. Ignore the race only when the job disappeared or changed out of the terminal state. Propagate Redis and unexpected errors so the pass logs its failure.
+- [ ] Hold a short per-attachment Redis lease across job inspection and terminal retry. Release it with a compare-token operation; skip the row when another process holds it.
 - [ ] Keep only one pass active per process. Schedule the next pass after the current pass settles, and stop pagination when shutdown begins.
 - [ ] Read the design spec and ensure this task covers each recovery state, eligibility rule, pagination requirement, and accepted tradeoff.
 
