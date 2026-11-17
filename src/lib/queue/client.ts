@@ -44,11 +44,15 @@ export const attachmentDownloadQueue = new Queue('attachment-download', {
   },
 });
 
+export function getAttachmentDownloadJobId(attachmentId: string): string {
+  return `attachment-${attachmentId}`;
+}
+
 export async function enqueueAttachmentDownload(attachmentId: string): Promise<void> {
   await attachmentDownloadQueue.add(
     'download-attachment',
     { attachmentId },
-    { jobId: `attachment-${attachmentId}` }
+    { jobId: getAttachmentDownloadJobId(attachmentId) }
   );
 }
 
