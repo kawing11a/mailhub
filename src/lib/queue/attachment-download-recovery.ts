@@ -1,12 +1,20 @@
+import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db/prisma';
 import {
   attachmentDownloadQueue,
   enqueueAttachmentDownload,
   getAttachmentDownloadJobId,
 } from '@/lib/queue/client';
+import { redis } from '@/lib/redis';
 
 const PAGE_SIZE = 100;
 const DEFAULT_RECOVERY_INTERVAL_MS = 5 * 60 * 1000;
+const RELEASE_RECOVERY_LEASE = `
+  if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('DEL', KEYS[1])
+  end
+  return 0
+`;
 
 let stopCurrentRecovery: (() => Promise<void>) | undefined;
 
@@ -66,6 +74,18 @@ async function reconcileAttachmentDownload(attachmentId: string, intervalMs: num
   }
 }
 
+async function reconcileWithLease(attachmentId: string, intervalMs: number) {
+  const leaseKey = attachmentDownloadQueue.toKey(`recovery-lease:${attachmentId}`);
+  const ownerToken = randomUUID();
+  if (await redis.set(leaseKey, ownerToken, 'PX', intervalMs, 'NX') !== 'OK') return;
+
+  try {
+    return await reconcileAttachmentDownload(attachmentId, intervalMs);
+  } finally {
+    await redis.eval(RELEASE_RECOVERY_LEASE, 1, leaseKey, ownerToken);
+  }
+}
+
 export function startAttachmentDownloadRecovery(): () => Promise<void> {
   if (stopCurrentRecovery) return stopCurrentRecovery;
 
@@ -86,7 +106,7 @@ export function startAttachmentDownloadRecovery(): () => Promise<void> {
 
           lastSeenId = id;
           counts.scanned++;
-          const action = await reconcileAttachmentDownload(id, intervalMs);
+          const action = await reconcileWithLease(id, intervalMs);
           if (action) counts[action]++;
         }
 
