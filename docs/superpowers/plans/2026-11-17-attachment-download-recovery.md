@@ -30,7 +30,7 @@
 
 **Interfaces:**
 - Consumes: Prisma `Attachment` and `Email` relations; the shared `attachmentDownloadQueue`.
-- Produces: `startAttachmentDownloadRecovery(): () => Promise<void>` which begins an immediate pass, schedules the next pass after completion, and stops future passes on shutdown.
+- Produces: `startAttachmentDownloadRecovery(intervalMs?: number): () => Promise<void>` which begins an immediate pass, schedules the next pass after completion, and stops future passes on shutdown. The caller passes a validated positive integer or omits it to use the five-minute default.
 
 - [ ] Add a bounded page query for eligible null-path attachment IDs, ordered by UUID and continued with `id > lastSeenId`.
 - [ ] Include all accounts and folders except `SENT` and `DRAFTS`. Match retrieval precedence: if `imapPart` exists, require a usable IMAP UID; otherwise require Gmail message identity and an attachment ID or ordinal.
@@ -49,7 +49,7 @@
 - Modify: `src/lib/queue/attachment-download-recovery.ts`
 
 **Interfaces:**
-- Consumes: `startAttachmentDownloadRecovery(): () => Promise<void>` from Task 1.
+- Consumes: `startAttachmentDownloadRecovery(intervalMs?: number): () => Promise<void>` from Task 1.
 - Produces: Startup recovery on every worker partition and an awaited stop before Prisma disconnect.
 
 - [ ] Parse `ATTACHMENT_RECOVERY_INTERVAL_MS` as a positive integer, defaulting to `300000` milliseconds.
