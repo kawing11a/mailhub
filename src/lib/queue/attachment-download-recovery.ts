@@ -17,6 +17,38 @@ const RELEASE_RECOVERY_LEASE = `
   return 0
 `;
 
+// Matches BullMQ 5.81.4's reprocessJob-8.lua for standalone attachment jobs.
+// Recheck the hash fields, queue keys, and event/marker rules when upgrading BullMQ.
+const RETRY_TERMINAL_ATTACHMENT = `
+  local leaseKey, jobKey, terminalKey, waitKey, pausedKey, activeKey, markerKey, metaKey, eventsKey = unpack(KEYS)
+  local ownerToken, finishedOn, jobId, previousState, pushCommand = unpack(ARGV)
+
+  if redis.call('GET', leaseKey) ~= ownerToken or redis.call('HGET', jobKey, 'finishedOn') ~= finishedOn then
+    return 0
+  end
+  if redis.call('ZREM', terminalKey, jobId) == 0 then
+    return -1
+  end
+
+  local outcomeField = previousState == 'failed' and 'failedReason' or 'returnvalue'
+  redis.call('HDEL', jobKey, 'finishedOn', 'processedOn', outcomeField, 'atm', 'ats')
+
+  local paused, concurrency = unpack(redis.call('HMGET', metaKey, 'paused', 'concurrency'))
+  redis.call(pushCommand, paused and pausedKey or waitKey, jobId)
+  if not paused and (not concurrency or redis.call('LLEN', activeKey) < tonumber(concurrency)) then
+    redis.call('ZADD', markerKey, 0, '0')
+  end
+
+  local maxEvents = redis.call('HGET', metaKey, 'opts.maxLenEvents')
+  if not maxEvents then
+    maxEvents = 10000
+    redis.call('HSET', metaKey, 'opts.maxLenEvents', maxEvents)
+  end
+  redis.call('XADD', eventsKey, 'MAXLEN', '~', maxEvents, '*',
+    'event', 'waiting', 'jobId', jobId, 'prev', previousState)
+  return 1
+`;
+
 type RecoveryProducer = ReturnType<typeof createAttachmentRecoveryProducer>;
 
 let stopCurrentRecovery: (() => Promise<void>) | undefined;
@@ -47,40 +79,6 @@ function findEligibleAttachments(lastSeenId: string | undefined) {
   });
 }
 
-async function reconcileAttachmentDownload(
-  queue: RecoveryProducer['queue'],
-  { attachmentId, intervalMs, retryBy }: { attachmentId: string; intervalMs: number; retryBy: number },
-) {
-  const jobId = getAttachmentDownloadJobId(attachmentId);
-  const job = await queue.getJob(jobId);
-  if (!job) {
-    await enqueueAttachmentDownload(attachmentId, queue);
-    return 'enqueued';
-  }
-
-  if (!job.finishedOn || job.finishedOn > Date.now() - intervalMs) return;
-
-  const state = await job.getState();
-  if (state !== 'completed' && state !== 'failed') return;
-  if (performance.now() >= retryBy) return;
-
-  try {
-    await job.retry(state, { resetAttemptsMade: true, resetAttemptsStarted: true });
-    return 'retried';
-  } catch (error) {
-    // BullMQ exposes the two reprocess conflicts as plain Errors.
-    if (
-      !(error instanceof Error) ||
-      (error.message !== `Missing key for job ${jobId}. reprocessJob` &&
-        error.message !== `Job ${jobId} is not in the ${state} state. reprocessJob`)
-    ) {
-      throw error;
-    }
-
-    if (await job.getState() === state) throw error;
-  }
-}
-
 async function reconcileWithLease(
   { queue, redis }: RecoveryProducer,
   attachmentId: string,
@@ -89,12 +87,47 @@ async function reconcileWithLease(
   const leaseKey = queue.toKey(`recovery-lease:${attachmentId}`);
   const ownerToken = randomUUID();
   const leaseMs = Math.max(intervalMs, MIN_LEASE_MS);
-  // Reserve time for BullMQ's script call and ioredis's NOSCRIPT fallback.
-  const retryBy = performance.now() + leaseMs - 2 * REDIS_COMMAND_TIMEOUT_MS;
   if (await redis.set(leaseKey, ownerToken, 'PX', leaseMs, 'NX') !== 'OK') return;
 
   try {
-    return await reconcileAttachmentDownload(queue, { attachmentId, intervalMs, retryBy });
+    const jobId = getAttachmentDownloadJobId(attachmentId);
+    const job = await queue.getJob(jobId);
+    if (!job) {
+      await enqueueAttachmentDownload(attachmentId, queue);
+      return 'enqueued';
+    }
+
+    const { finishedOn } = job;
+    if (!finishedOn || finishedOn > Date.now() - intervalMs) return;
+
+    const state = await job.getState();
+    if (state !== 'completed' && state !== 'failed') return;
+
+    const keys = [
+      leaseKey,
+      queue.toKey(jobId),
+      queue.keys[state],
+      queue.keys.wait,
+      queue.keys.paused,
+      queue.keys.active,
+      queue.keys.marker,
+      queue.keys.meta,
+      queue.keys.events,
+    ];
+    const result = await redis.eval(
+      RETRY_TERMINAL_ATTACHMENT,
+      keys.length,
+      ...keys,
+      ownerToken,
+      String(finishedOn),
+      jobId,
+      state,
+      job.opts.lifo ? 'RPUSH' : 'LPUSH',
+    );
+    if (result === 1) return 'retried';
+    if (result === 0) return;
+    if (result === -1 && await job.getState() !== state) return;
+    throw new Error('Unexpected attachment recovery retry result');
   } finally {
     await redis.eval(RELEASE_RECOVERY_LEASE, 1, leaseKey, ownerToken);
   }
