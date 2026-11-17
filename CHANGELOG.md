@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.0] - 2026-11-17
+
+### Added
+
+- run attachment recovery during worker lifecycle
+
+### Fixed
+
+- reconcile missing attachment downloads
+- serialize attachment recovery cooldown checks
+- bound attachment recovery redis commands
+- fence attachment retry transitions in Redis
+- label attachment recovery operation failures
+
+### Changed
+
+- specify attachment download recovery
+- plan attachment download recovery
+- serialize attachment recovery checks
+- bound attachment recovery redis calls
+- set attachment recovery lease limits
+- fence attachment retry transitions
+- Merge remote-tracking branch 'origin/main'
+
+
 ## [0.4.1] - 2026-11-16
 
 ### Fixed
