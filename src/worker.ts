@@ -10,10 +10,12 @@ import { closeSyncWorkers, ensureSyncWorkersForPartitions } from '@/lib/queue/wo
 import { searchWorker } from '@/lib/queue/workers/search';
 import { summaryWorker } from '@/lib/queue/workers/summary';
 import { attachmentDownloadWorker } from '@/lib/queue/workers/attachment-download';
+import { startAttachmentDownloadRecovery } from '@/lib/queue/attachment-download-recovery';
 import { gmailSyncManager } from '@/lib/gmail/sync-manager';
 import type { EmailAccount } from '@prisma/client';
 
 const WORKER_PARTITION = process.env.WORKER_PARTITION || 'default';
+const MAX_TIMEOUT_MS = 2_147_483_647;
 const IMAP_STARTUP_CONCURRENCY = (() => {
   const value = Number(process.env.IMAP_STARTUP_CONCURRENCY);
   return Number.isInteger(value) && value > 0 ? value : 10;
@@ -86,13 +88,15 @@ async function bootstrap() {
     }
   }, 30000);
 
-  // 4. Workers are already imported and running from queue/workers/*
-  console.log('BullMQ workers started.');
+  // 4. Graceful shutdown handler
+  let shuttingDown = false;
+  const shutdown = async (signal: NodeJS.Signals) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
 
-  // 5. Graceful shutdown handler
-  const shutdown = async () => {
-    console.log('SIGTERM received. Shutting down worker...');
+    console.log(`${signal} received. Shutting down worker...`);
     clearInterval(heartbeat);
+    await stopAttachmentDownloadRecovery();
     await closeSyncWorkers();
     await searchWorker.close();
     await summaryWorker.close();
@@ -105,6 +109,18 @@ async function bootstrap() {
 
   process.on('SIGTERM', shutdown);
   process.on('SIGINT', shutdown);
+
+  const configuredIntervalMs = Number(process.env.ATTACHMENT_RECOVERY_INTERVAL_MS);
+  // Node schedules delays above its maximum as 1 ms.
+  const recoveryIntervalMs = Number.isInteger(configuredIntervalMs)
+    && configuredIntervalMs > 0
+    && configuredIntervalMs <= MAX_TIMEOUT_MS
+    ? configuredIntervalMs
+    : undefined;
+  const stopAttachmentDownloadRecovery = startAttachmentDownloadRecovery(recoveryIntervalMs);
+
+  // Workers are already imported and running from queue/workers/*.
+  console.log('BullMQ workers started.');
 }
 
 bootstrap().catch(console.error);

@@ -7,7 +7,7 @@ import {
 } from '@/lib/queue/client';
 
 const PAGE_SIZE = 100;
-const DEFAULT_RECOVERY_INTERVAL_MS = 5 * 60 * 1000;
+const DEFAULT_RECOVERY_INTERVAL_MS = 300_000;
 const MIN_LEASE_MS = 30_000;
 const REDIS_COMMAND_TIMEOUT_MS = 10_000;
 const RELEASE_RECOVERY_LEASE = `
@@ -133,10 +133,11 @@ async function reconcileWithLease(
   }
 }
 
-export function startAttachmentDownloadRecovery(): () => Promise<void> {
+export function startAttachmentDownloadRecovery(
+  intervalMs = DEFAULT_RECOVERY_INTERVAL_MS,
+): () => Promise<void> {
   if (stopCurrentRecovery) return stopCurrentRecovery;
 
-  const intervalMs = DEFAULT_RECOVERY_INTERVAL_MS;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
