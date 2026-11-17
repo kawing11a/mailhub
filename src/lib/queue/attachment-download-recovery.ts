@@ -51,6 +51,12 @@ const RETRY_TERMINAL_ATTACHMENT = `
 
 type RecoveryProducer = ReturnType<typeof createAttachmentRecoveryProducer>;
 
+class RecoveryOperationError extends Error {
+  constructor(readonly operation: 'retry-terminal' | 'release-lease', cause: unknown) {
+    super('Attachment download recovery operation failed', { cause });
+  }
+}
+
 let stopCurrentRecovery: (() => Promise<void>) | undefined;
 
 function findEligibleAttachments(lastSeenId: string | undefined) {
@@ -114,22 +120,30 @@ async function reconcileWithLease(
       queue.keys.meta,
       queue.keys.events,
     ];
-    const result = await redis.eval(
-      RETRY_TERMINAL_ATTACHMENT,
-      keys.length,
-      ...keys,
-      ownerToken,
-      String(finishedOn),
-      jobId,
-      state,
-      job.opts.lifo ? 'RPUSH' : 'LPUSH',
-    );
-    if (result === 1) return 'retried';
-    if (result === 0) return;
-    if (result === -1 && await job.getState() !== state) return;
-    throw new Error('Unexpected attachment recovery retry result');
+    try {
+      const result = await redis.eval(
+        RETRY_TERMINAL_ATTACHMENT,
+        keys.length,
+        ...keys,
+        ownerToken,
+        String(finishedOn),
+        jobId,
+        state,
+        job.opts.lifo ? 'RPUSH' : 'LPUSH',
+      );
+      if (result === 1) return 'retried';
+      if (result === 0) return;
+      if (result === -1 && await job.getState() !== state) return;
+      throw new Error('Unexpected attachment recovery retry result');
+    } catch (cause) {
+      throw new RecoveryOperationError('retry-terminal', cause);
+    }
   } finally {
-    await redis.eval(RELEASE_RECOVERY_LEASE, 1, leaseKey, ownerToken);
+    try {
+      await redis.eval(RELEASE_RECOVERY_LEASE, 1, leaseKey, ownerToken);
+    } catch (cause) {
+      throw new RecoveryOperationError('release-lease', cause);
+    }
   }
 }
 
@@ -175,12 +189,15 @@ export function startAttachmentDownloadRecovery(
         });
       }
     } catch (error) {
+      const operation = error instanceof RecoveryOperationError ? error.operation : undefined;
+      const cause: unknown = error instanceof RecoveryOperationError ? error.cause : error;
       console.error('Attachment download recovery scan failed', {
         ...counts,
         elapsedMs: Date.now() - startedAt,
-        errorName: error instanceof Error ? error.name : 'UnknownError',
-        errorCode: error instanceof Error && 'code' in error && typeof error.code === 'string'
-          ? error.code
+        operation,
+        errorName: cause instanceof Error ? cause.name : 'UnknownError',
+        errorCode: cause instanceof Error && 'code' in cause && typeof cause.code === 'string'
+          ? cause.code
           : undefined,
       });
     } finally {
