@@ -16,6 +16,7 @@
 - Reconcile both failed and completed jobs, resetting attempt counters before retrying terminal jobs.
 - Serialize per-attachment cooldown checks across workers with a Redis lease, compare-token release, and expiry equal to the longer of the scan interval or 30000 milliseconds.
 - Use a per-pass recovery queue connection with offline queueing and unfulfilled-command replay disabled. Set its 10000 millisecond command timeout shorter than the lease.
+- Make terminal retry atomic with a Redis script that verifies the lease token and observed `finishedOn` before moving the job, while preserving BullMQ queue markers and events.
 - Do not add a schema migration or a new queue job type.
 - Do not add or run tests unless the user asks for tests or verification.
 
@@ -37,6 +38,7 @@
 - [ ] Re-read job state after a retry race. Ignore the race only when the job disappeared or changed out of the terminal state. Propagate Redis and unexpected errors so the pass logs its failure.
 - [ ] Hold a per-attachment Redis lease across job inspection and terminal retry. Set its expiry to `Math.max(intervalMs, 30000)`. Release it with a compare-token operation; skip the row when another process holds it.
 - [ ] Use the same per-pass producer connection for lease and BullMQ operations. Disable offline queueing and replay, set `commandTimeout: 10000`, and close the producer after each pass.
+- [ ] Retry terminal jobs with one atomic Redis script that checks lease ownership, observed `finishedOn`, and terminal queue membership before reproducing BullMQ's state transition, markers, and waiting event.
 - [ ] Keep only one pass active per process. Schedule the next pass after the current pass settles, and stop pagination when shutdown begins.
 - [ ] Read the design spec and ensure this task covers each recovery state, eligibility rule, pagination requirement, and accepted tradeoff.
 
