@@ -44,12 +44,35 @@ export const attachmentDownloadQueue = new Queue('attachment-download', {
   },
 });
 
+export function createAttachmentRecoveryProducer(commandTimeoutMs: number) {
+  const redis = new Redis(redisUrl, {
+    lazyConnect: true,
+    enableReadyCheck: false,
+    enableOfflineQueue: false,
+    autoResendUnfulfilledCommands: false,
+    retryStrategy: () => null,
+    connectTimeout: commandTimeoutMs,
+    commandTimeout: commandTimeoutMs,
+    socketTimeout: commandTimeoutMs,
+  });
+  const queue = new Queue(attachmentDownloadQueue.name, {
+    ...attachmentDownloadQueue.opts,
+    connection: redis,
+    defaultJobOptions: attachmentDownloadQueue.defaultJobOptions,
+    skipMetasUpdate: true,
+  });
+  return { queue, redis };
+}
+
 export function getAttachmentDownloadJobId(attachmentId: string): string {
   return `attachment-${attachmentId}`;
 }
 
-export async function enqueueAttachmentDownload(attachmentId: string): Promise<void> {
-  await attachmentDownloadQueue.add(
+export async function enqueueAttachmentDownload(
+  attachmentId: string,
+  queue = attachmentDownloadQueue,
+): Promise<void> {
+  await queue.add(
     'download-attachment',
     { attachmentId },
     { jobId: getAttachmentDownloadJobId(attachmentId) }
