@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { access, mkdir, writeFile } from 'fs/promises';
+import { mkdir, stat, writeFile } from 'fs/promises';
 import * as path from 'path';
 interface ReceivedAttachmentReferenceInput {
   ordinal: number;
@@ -60,12 +60,15 @@ export interface ReconciledReceivedAttachmentMetadata {
   existing: boolean;
 }
 
-export async function storedAttachmentFileExists(storagePath: string | null): Promise<boolean> {
+export async function storedAttachmentFileExists(
+  storagePath: string | null,
+  expectedSize?: number | null
+): Promise<boolean> {
   if (!storagePath) return false;
 
   try {
-    await access(storagePath);
-    return true;
+    const file = await stat(storagePath);
+    return file.isFile() && (expectedSize == null || file.size === expectedSize);
   } catch {
     return false;
   }

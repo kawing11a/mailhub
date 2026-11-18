@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db/prisma';
+import { storedAttachmentFileExists } from '@/lib/email/attachment-storage';
 import {
   createAttachmentRecoveryProducer,
   enqueueAttachmentDownload,
@@ -59,11 +60,11 @@ class RecoveryOperationError extends Error {
 
 let stopCurrentRecovery: (() => Promise<void>) | undefined;
 
-function findEligibleAttachments(lastSeenId: string | undefined) {
+function findEligibleAttachments(lastSeenId: string | undefined, hasStoragePath = false) {
   return prisma.attachment.findMany({
     where: {
       ...(lastSeenId !== undefined && { id: { gt: lastSeenId } }),
-      storagePath: null,
+      storagePath: hasStoragePath ? { not: null } : null,
       email: { folder: { notIn: ['SENT', 'DRAFTS'] } },
       OR: [
         {
@@ -79,7 +80,7 @@ function findEligibleAttachments(lastSeenId: string | undefined) {
         },
       ],
     },
-    select: { id: true },
+    select: { id: true, storagePath: true, sizeBytes: true },
     orderBy: { id: 'asc' },
     take: PAGE_SIZE,
   });
@@ -154,10 +155,11 @@ export function startAttachmentDownloadRecovery(
 
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let storedAttachmentScanCursor: string | undefined;
 
   async function runPass(): Promise<void> {
     const startedAt = Date.now();
-    const counts = { scanned: 0, enqueued: 0, retried: 0 };
+    const counts = { scanned: 0, checkedStored: 0, enqueued: 0, retried: 0 };
     let lastSeenId: string | undefined;
 
     try {
@@ -177,6 +179,19 @@ export function startAttachmentDownloadRecovery(
 
           if (attachments.length < PAGE_SIZE) break;
         }
+
+        const storedAttachments = await findEligibleAttachments(storedAttachmentScanCursor, true);
+        for (const attachment of storedAttachments) {
+          if (stopped) break;
+          storedAttachmentScanCursor = attachment.id;
+          counts.checkedStored++;
+          if (!(await storedAttachmentFileExists(attachment.storagePath, attachment.sizeBytes))) {
+            counts.scanned++;
+            const action = await reconcileWithLease(producer, attachment.id, intervalMs);
+            if (action) counts[action]++;
+          }
+        }
+        if (storedAttachments.length < PAGE_SIZE) storedAttachmentScanCursor = undefined;
       } finally {
         producer.redis.disconnect();
         await producer.queue.close();

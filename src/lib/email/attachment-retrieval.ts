@@ -20,6 +20,16 @@ export interface RetrievedAttachment {
   content: Buffer;
 }
 
+interface AttachmentSourceSnapshot {
+  accountId: string;
+  providerMessageId: string | null;
+  uid: bigint | null;
+  folder: string;
+  imapPart: string | null;
+  gmailAttachmentId: string | null;
+  ordinal: number | null;
+}
+
 export class AttachmentNotFoundError extends Error {
   constructor(message = 'Attachment not found') {
     super(message);
@@ -62,7 +72,11 @@ const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
 
 export async function getReceivedAttachment(
   emailId: string,
-  attachmentId: string
+  attachmentId: string,
+  options: {
+    skipStoredFile?: boolean;
+    expectedSource?: AttachmentSourceSnapshot;
+  } = {}
 ): Promise<RetrievedAttachment> {
   const email = (await prisma.email.findFirst({
     where: {
@@ -100,9 +114,28 @@ export async function getReceivedAttachment(
     throw new AttachmentNotFoundError();
   }
 
-  if (attachment.storagePath) {
+  if (options.expectedSource && (
+    email.accountId !== options.expectedSource.accountId ||
+    email.providerMessageId !== options.expectedSource.providerMessageId ||
+    email.uid !== options.expectedSource.uid ||
+    email.folder !== options.expectedSource.folder ||
+    attachment.imapPart !== options.expectedSource.imapPart ||
+    attachment.gmailAttachmentId !== options.expectedSource.gmailAttachmentId ||
+    attachment.ordinal !== options.expectedSource.ordinal
+  )) {
+    throw new Error('Attachment source changed before retrieval');
+  }
+
+  if (attachment.storagePath && !options.skipStoredFile) {
     try {
-      return await readStoredAttachment(attachment);
+      return await readStoredAttachment(
+        attachment,
+        Boolean(
+          attachment.imapPart ||
+            attachment.gmailAttachmentId ||
+            (email.providerMessageId && attachment.ordinal !== null)
+        )
+      );
     } catch (error) {
       // Older versions could persist the storage path before the file was
       // successfully written. If the file is gone, continue with the
@@ -127,8 +160,9 @@ export async function getReceivedAttachment(
 export async function readStoredAttachment(
   attachment: Pick<
     LoadedAttachment,
-    'filename' | 'contentType' | 'storagePath'
-  >
+    'filename' | 'contentType' | 'storagePath' | 'sizeBytes'
+  >,
+  verifySize = false
 ): Promise<RetrievedAttachment> {
   if (!attachment.storagePath) {
     throw new AttachmentNotFoundError();
@@ -138,10 +172,14 @@ export async function readStoredAttachment(
   try {
     content = await readFile(attachment.storagePath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (['ENOENT', 'ENOTDIR', 'EISDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) {
       throw new AttachmentNotFoundError();
     }
     throw error;
+  }
+
+  if (verifySize && attachment.sizeBytes !== null && content.length !== attachment.sizeBytes) {
+    throw new AttachmentNotFoundError('Stored attachment is incomplete');
   }
 
   return {

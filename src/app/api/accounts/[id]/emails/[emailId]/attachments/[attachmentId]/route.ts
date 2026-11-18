@@ -7,6 +7,7 @@ import {
   AttachmentProviderError,
   getReceivedAttachment,
   readStoredAttachment,
+  type RetrievedAttachment,
 } from '@/lib/email/attachment-retrieval';
 
 interface RouteParams {
@@ -53,9 +54,24 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 
   try {
-    const retrieved = attachment.storagePath
-      ? await readStoredAttachment(attachment)
-      : await getReceivedAttachment(email.id, attachment.id);
+    let retrieved: RetrievedAttachment;
+    if (attachment.storagePath) {
+      try {
+        const hasProviderReference = Boolean(
+          attachment.imapPart ||
+            attachment.gmailAttachmentId ||
+            (attachment.ordinal !== null && attachment.ordinal !== undefined)
+        );
+        retrieved = hasProviderReference
+          ? await readStoredAttachment(attachment, true)
+          : await readStoredAttachment(attachment);
+      } catch (error) {
+        if (!(error instanceof AttachmentNotFoundError)) throw error;
+        retrieved = await getReceivedAttachment(email.id, attachment.id);
+      }
+    } else {
+      retrieved = await getReceivedAttachment(email.id, attachment.id);
+    }
 
     const response = new NextResponse(new Uint8Array(retrieved.content));
     response.headers.set(
