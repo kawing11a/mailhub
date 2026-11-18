@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1] - 2026-11-18
+
+### Fixed
+
+- verify attachment storage before committing paths
+
+
 ## [0.5.0] - 2026-11-17
 
 ### Added
