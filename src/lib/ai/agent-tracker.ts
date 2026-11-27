@@ -52,13 +52,21 @@ function getKey(runId: string): string {
 export async function initAgentRun(
   runId: string,
   labelName: string,
-  config?: { timeRangeHours?: number; limit?: number }
+  config?: {
+    timeRangeHours?: number;
+    fromDate?: string;
+    toDate?: string;
+    fromDateLabel?: string;
+    toDateLabel?: string;
+    limit?: number;
+  }
 ): Promise<AgentRunState> {
   const now = new Date().toISOString();
-  const timeText =
-    config?.timeRangeHours && config.timeRangeHours > 0
+  const timeText = config?.fromDate && config.toDate
+    ? `${config.fromDateLabel ?? config.fromDate} to ${config.toDateLabel ?? config.toDate}`
+    : config?.timeRangeHours && config.timeRangeHours > 0
       ? `Last ${config.timeRangeHours}h`
-      : 'All time';
+      : 'Last 24h';
   const limitText = config?.limit && config.limit > 0 ? `Max ${config.limit}` : 'All';
 
   const initialLog: AgentLogEntry = {

@@ -5,6 +5,10 @@ import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useSummaryStore } from '@/stores/summaryStore';
 import {
+  DEFAULT_SUMMARY_TIME_RANGE_HOURS,
+  SUMMARY_TIME_RANGES_HOURS,
+} from '@/lib/ai/summary-options';
+import {
   Sparkles,
   X,
   Minus,
@@ -40,6 +44,26 @@ interface LabelItem {
 }
 
 const EMPTY_LABELS: LabelItem[] = [];
+
+function toLocalDateInputValue(date: Date): string {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function getDateDaysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return toLocalDateInputValue(date);
+}
+
+function getLocalDateBoundary(dateValue: string, isEndDate: boolean): string {
+  const date = new Date(`${dateValue}T00:00:00`);
+  if (isEndDate) {
+    date.setDate(date.getDate() + 1);
+    date.setMilliseconds(-1);
+  }
+  return date.toISOString();
+}
 
 interface WebhookItem {
   id: string;
@@ -124,7 +148,9 @@ export function SummarizeLabelModal({
   const targetLabelId = propsInitialLabelId || store.activeLabelId || '';
 
   const [selectedLabelId, setSelectedLabelId] = useState<string>(targetLabelId);
-  const [timeRangeHours, setTimeRangeHours] = useState<number>(0);
+  const [timeRangeHours, setTimeRangeHours] = useState<number | 'custom'>(DEFAULT_SUMMARY_TIME_RANGE_HOURS);
+  const [fromDate, setFromDate] = useState<string>(() => getDateDaysAgo(6));
+  const [toDate, setToDate] = useState<string>(() => toLocalDateInputValue(new Date()));
   const [limit, setLimit] = useState<number>(0);
   const [selectedWebhookIds, setSelectedWebhookIds] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
@@ -271,6 +297,11 @@ export function SummarizeLabelModal({
       return;
     }
 
+    if (timeRangeHours === 'custom' && (!fromDate || !toDate || fromDate > toDate)) {
+      toast.error('Choose a valid date range');
+      return;
+    }
+
     const currentLabel = labels.find((l) => l.id === selectedLabelId);
 
     try {
@@ -279,7 +310,14 @@ export function SummarizeLabelModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           labelId: selectedLabelId,
-          timeRangeHours,
+          ...(timeRangeHours === 'custom'
+            ? {
+                fromDate: getLocalDateBoundary(fromDate, false),
+                toDate: getLocalDateBoundary(toDate, true),
+                fromDateLabel: fromDate,
+                toDateLabel: toDate,
+              }
+            : { timeRangeHours }),
           limit,
           webhookIds: selectedWebhookIds,
         }),
@@ -443,13 +481,15 @@ export function SummarizeLabelModal({
                   </label>
                   <select
                     value={timeRangeHours}
-                    onChange={(e) => setTimeRangeHours(Number(e.target.value))}
+                    onChange={(e) => setTimeRangeHours(e.target.value === 'custom' ? 'custom' : Number(e.target.value))}
                     className="w-full text-sm border-gray-300 rounded-xl p-3 border font-medium text-gray-800 bg-gray-50/50 hover:bg-white transition-all"
                   >
-                    <option value={0}>All Time (Recommended)</option>
-                    <option value={24}>Last 24 Hours</option>
-                    <option value={168}>Last 7 Days</option>
-                    <option value={720}>Last 30 Days</option>
+                    {SUMMARY_TIME_RANGES_HOURS.map((hours) => (
+                      <option key={hours} value={hours}>
+                        {hours === 24 ? 'Last 24 Hours' : hours === 168 ? 'Last 7 Days' : 'Last 30 Days'}
+                      </option>
+                    ))}
+                    <option value="custom">Custom range</option>
                   </select>
                 </div>
 
@@ -470,6 +510,37 @@ export function SummarizeLabelModal({
                   </select>
                 </div>
               </div>
+
+              {timeRangeHours === 'custom' && (
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                      From date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      max={toDate}
+                      value={fromDate}
+                      onChange={(e) => setFromDate(e.target.value)}
+                      className="w-full text-sm border-gray-300 rounded-xl p-3 border font-medium text-gray-800 bg-gray-50/50 hover:bg-white transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                      To date
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      min={fromDate}
+                      value={toDate}
+                      onChange={(e) => setToDate(e.target.value)}
+                      className="w-full text-sm border-gray-300 rounded-xl p-3 border font-medium text-gray-800 bg-gray-50/50 hover:bg-white transition-all"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Webhook Destinations */}
               <div>

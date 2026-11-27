@@ -10,6 +10,7 @@ interface UIState {
   density: string;
   readingPane: string;
   timeFormat: string;
+  calendarTimeZone: string;
   showAvatars: boolean;
   setSearchOpen: (open: boolean) => void;
   setComposeOpen: (open: boolean) => void;
@@ -19,6 +20,7 @@ interface UIState {
   setDensity: (density: string) => void;
   setReadingPane: (pane: string) => void;
   setTimeFormat: (format: string) => void;
+  setCalendarTimeZone: (timeZone: string) => void;
   setShowAvatars: (show: boolean) => void;
 }
 
@@ -34,6 +36,7 @@ export const useUIStore = create<UIState>()(
       density: 'density-comfortable',
       readingPane: 'right',
       timeFormat: '12h',
+      calendarTimeZone: '',
       showAvatars: true,
       setSearchOpen: (open) => set({ isSearchOpen: open }),
       setComposeOpen: (open) => set({ isComposeOpen: open }),
@@ -43,6 +46,7 @@ export const useUIStore = create<UIState>()(
       setDensity: (density) => set({ density }),
       setReadingPane: (pane) => set({ readingPane: pane }),
       setTimeFormat: (format) => set({ timeFormat: format }),
+      setCalendarTimeZone: (timeZone) => set({ calendarTimeZone: timeZone }),
       setShowAvatars: (show) => set({ showAvatars: show }),
     }),
     {
@@ -52,6 +56,7 @@ export const useUIStore = create<UIState>()(
         density: state.density,
         readingPane: state.readingPane,
         timeFormat: state.timeFormat,
+        calendarTimeZone: state.calendarTimeZone,
         showAvatars: state.showAvatars,
       }),
     }

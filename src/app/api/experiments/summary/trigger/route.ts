@@ -9,6 +9,13 @@ import {
 import { summaryQueue } from '@/lib/queue/client';
 import { executeSummaryRun } from '@/lib/queue/workers/summary';
 import { accountAccessWhere } from '@/lib/accounts/access';
+import { normalizeSummaryTimeRangeHours } from '@/lib/ai/summary-options';
+
+function parseDateBoundary(value: unknown): Date | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 export async function POST(req: NextRequest) {
   const auth = await authenticate(req);
@@ -18,10 +25,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { labelId, timeRangeHours = 24, limit = 25, webhookIds = [] } = body;
+    const {
+      labelId,
+      timeRangeHours = 24,
+      fromDate,
+      toDate,
+      fromDateLabel,
+      toDateLabel,
+      limit = 25,
+      webhookIds = [],
+    } = body;
 
     if (!labelId) {
       return apiError('labelId is required', 400);
+    }
+
+    const hasCustomDateRange = fromDate !== undefined || toDate !== undefined;
+    const customStartDate = hasCustomDateRange ? parseDateBoundary(fromDate) : null;
+    const customEndDate = hasCustomDateRange ? parseDateBoundary(toDate) : null;
+    if (hasCustomDateRange && (!customStartDate || !customEndDate || customStartDate > customEndDate)) {
+      return apiError('A valid fromDate and toDate are required', 400);
     }
 
     const label = await prisma.label.findFirst({
@@ -52,12 +75,16 @@ export async function POST(req: NextRequest) {
     });
 
     const parsedLimit = Number(limit);
-    const parsedTimeRangeHours = Number(timeRangeHours);
+    const parsedTimeRangeHours = hasCustomDateRange
+      ? undefined
+      : normalizeSummaryTimeRangeHours(timeRangeHours);
 
     // Initialize real-time agent tracker in Redis
     const { initAgentRun } = await import('@/lib/ai/agent-tracker');
     await initAgentRun(summaryRun.id, label.name, {
-      timeRangeHours: isNaN(parsedTimeRangeHours) ? 0 : parsedTimeRangeHours,
+      timeRangeHours: parsedTimeRangeHours,
+      fromDate: typeof fromDateLabel === 'string' ? fromDateLabel : undefined,
+      toDate: typeof toDateLabel === 'string' ? toDateLabel : undefined,
       limit: isNaN(parsedLimit) ? 0 : parsedLimit,
     });
 
@@ -71,7 +98,11 @@ export async function POST(req: NextRequest) {
       userId: auth.userId,
       labelId: label.id,
       webhookIds: uniqueWebhookIds,
-      timeRangeHours: isNaN(parsedTimeRangeHours) ? 0 : parsedTimeRangeHours,
+      timeRangeHours: parsedTimeRangeHours,
+      fromDate: customStartDate?.toISOString(),
+      toDate: customEndDate?.toISOString(),
+      fromDateLabel: typeof fromDateLabel === 'string' ? fromDateLabel : undefined,
+      toDateLabel: typeof toDateLabel === 'string' ? toDateLabel : undefined,
       limit: isNaN(parsedLimit) ? 0 : parsedLimit,
     };
 

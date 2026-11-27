@@ -1,9 +1,31 @@
 'use client';
 
-import { IcsEvent, parseIcs, parseMeetingFromEmail } from '@/lib/calendar/ics-parser';
+import { type IcsEvent, parseIcs, parseMeetingFromEmail } from '@/lib/calendar/ics-parser';
+import { useUIStore } from '@/stores/uiStore';
 import { CalendarEventTimetable } from './CalendarEventTimetable';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Loader2 } from 'lucide-react';
+import moment from 'moment-timezone';
+
+const timeZoneOptions = moment.tz.names().map((id) => {
+  const parts = id.replace(/_/g, ' ').split('/');
+  const city = parts.pop();
+  return { id, label: parts.length ? `${city} (${parts.join('/')})` : id };
+}).sort((a, b) => a.label.localeCompare(b.label, 'en'));
+
+function getDeviceTimeZone() {
+  const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return detected && moment.tz.zone(detected) ? detected : 'UTC';
+}
+
+function subscribeToDeviceTimeZone(onChange: () => void) {
+  window.addEventListener('focus', onChange);
+  document.addEventListener('visibilitychange', onChange);
+  return () => {
+    window.removeEventListener('focus', onChange);
+    document.removeEventListener('visibilitychange', onChange);
+  };
+}
 
 interface CalendarEventSectionProps {
   attachments?: Array<{
@@ -29,6 +51,10 @@ export function CalendarEventSection({
 }: CalendarEventSectionProps) {
   const [events, setEvents] = useState<IcsEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const preferredTimeZone = useUIStore((state) => state.calendarTimeZone);
+  const setCalendarTimeZone = useUIStore((state) => state.setCalendarTimeZone);
+  const deviceTimeZone = useSyncExternalStore(subscribeToDeviceTimeZone, getDeviceTimeZone, () => 'UTC');
+  const manualTimeZone = preferredTimeZone && moment.tz.zone(preferredTimeZone) ? preferredTimeZone : '';
 
   useEffect(() => {
     let isCancelled = false;
@@ -117,8 +143,21 @@ export function CalendarEventSection({
 
   return (
     <div className="px-6 py-2 border-b border-gray-100 flex-shrink-0 bg-gray-50/30">
+      <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-600">
+        <span>Calendar time zone</span>
+        <select
+          className="min-w-0 max-w-full rounded-md border border-gray-200 bg-white px-2 py-1 text-sm text-gray-800"
+          value={manualTimeZone}
+          onChange={(event) => setCalendarTimeZone(event.target.value)}
+        >
+          <option value="">Follow device ({deviceTimeZone})</option>
+          {timeZoneOptions.map(({ id, label }) => (
+            <option key={id} value={id}>{label}</option>
+          ))}
+        </select>
+      </label>
       {events.map((ev, idx) => (
-        <CalendarEventTimetable key={idx} event={ev} />
+        <CalendarEventTimetable key={idx} event={ev} timeZone={manualTimeZone || deviceTimeZone} />
       ))}
     </div>
   );

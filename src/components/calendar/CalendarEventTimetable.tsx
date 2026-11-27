@@ -1,213 +1,120 @@
 'use client';
 
-import { IcsEvent } from '@/lib/calendar/ics-parser';
+import type { IcsEvent } from '@/lib/calendar/ics-parser';
+import { formatTimetable } from '@/lib/calendar/timetable';
 import { Clock, MapPin, ChevronDown, ChevronUp, Video } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-const TORONTO_TIME_ZONE = 'America/Toronto';
-
-function getTorontoClockParts(date: Date) {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TORONTO_TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-
-  return {
-    hour: Number(parts.find((part) => part.type === 'hour')?.value ?? 0),
-    minute: Number(parts.find((part) => part.type === 'minute')?.value ?? 0),
-  };
-}
-
-function formatTorontoHour(hour: number): string {
-  const displayHour = hour % 12 || 12;
-  return `${displayHour} ${hour < 12 ? 'AM' : 'PM'}`;
-}
+const HOUR_HEIGHT = 54;
 
 interface CalendarEventTimetableProps {
   event: IcsEvent;
+  timeZone: string;
 }
 
-export function CalendarEventTimetable({ event }: CalendarEventTimetableProps) {
+export function CalendarEventTimetable({ event, timeZone }: CalendarEventTimetableProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-
-  // Format date header: "Wednesday, July 29, 2026 3:00 PM-3:30 PM"
-  const formattedDate = useMemo(() => {
-    try {
-      const dayStr = new Intl.DateTimeFormat('en-US', {
-        timeZone: TORONTO_TIME_ZONE,
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      }).format(event.startDate);
-      const timeFormatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: TORONTO_TIME_ZONE,
-        hour: 'numeric',
-        minute: '2-digit',
-      });
-      const startStr = timeFormatter.format(event.startDate);
-      const endStr = timeFormatter.format(event.endDate);
-      return `${dayStr} ${startStr}-${endStr} (Toronto time)`;
-    } catch {
-      return 'Calendar Event';
-    }
-  }, [event.startDate, event.endDate]);
-
-  // Timetable grid layout calculation
-  const { hours, startHour, topOffset, blockHeight } = useMemo(() => {
-    const startTime = getTorontoClockParts(event.startDate);
-    const endTime = getTorontoClockParts(event.endDate);
-    const startH = startTime.hour;
-    const endH = endTime.hour;
-
-    // Display range: 1 hour before start hour, up to 1-2 hours after end hour
-    const startHour = Math.max(0, startH - 1);
-    const endHour = Math.min(23, Math.max(endH + 1, startHour + 2));
-
-    const hoursArr: number[] = [];
-    for (let h = startHour; h <= endHour; h++) {
-      hoursArr.push(h);
-    }
-
-    const HOUR_HEIGHT = 54; // px height per hour in timetable
-
-    const startMinutesFromBase = (startH - startHour) * 60 + startTime.minute;
-    const topPx = (startMinutesFromBase / 60) * HOUR_HEIGHT;
-
-    const durationMinutes = Math.max(15, (event.endDate.getTime() - event.startDate.getTime()) / (1000 * 60));
-    const heightPx = (durationMinutes / 60) * HOUR_HEIGHT;
-
-    return {
-      hours: hoursArr,
-      startHour,
-      topOffset: topPx,
-      blockHeight: heightPx,
-    };
-  }, [event.startDate, event.endDate]);
-
-  const HOUR_HEIGHT = 54;
-  const gridTotalHeight = hours.length * HOUR_HEIGHT;
+  const { label, grid } = useMemo(() => formatTimetable(event, timeZone), [event, timeZone]);
 
   return (
     <div className="my-3 border border-gray-200 rounded-lg bg-white shadow-xs overflow-hidden">
-      {/* Header Bar */}
-      <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3 text-sm">
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-gray-700 font-normal min-w-0">
-          <div className="flex items-center space-x-2 text-gray-800 font-medium">
-            <Clock className="w-4 h-4 text-gray-500 flex-shrink-0" />
-            <span className="truncate">{formattedDate}</span>
+      <div className="bg-gray-50/80 px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-3 text-sm">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-gray-700 min-w-0">
+          <div className="flex items-start gap-2 text-gray-800 font-medium">
+            <Clock className="mt-0.5 size-4 text-gray-500 shrink-0" />
+            <span className="wrap-anywhere">{label}</span>
           </div>
+          {!grid && <span className="font-semibold text-gray-900">{event.summary}</span>}
 
           {event.location && (
-            <div className="flex items-center space-x-1.5 text-gray-600 truncate">
-              <MapPin className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 text-gray-600 truncate">
+              <MapPin className="size-4 text-gray-400 shrink-0" />
               <span className="truncate">{event.location}</span>
             </div>
           )}
         </div>
 
-        <div className="flex items-center space-x-2 flex-shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {event.meetingUrl && (
             <a
               href={event.meetingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center px-2.5 py-1 text-xs font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded hover:bg-sky-100 transition-colors"
+              className="inline-flex items-center gap-1 rounded border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100"
             >
-              <Video className="w-3.5 h-3.5 mr-1" />
+              <Video className="size-3.5" />
               Join Meeting
             </a>
           )}
-          <button
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200/60 rounded transition-colors"
-            title={isExpanded ? 'Collapse calendar view' : 'Expand calendar view'}
-          >
-            {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
+          {grid && (
+            <button
+              type="button"
+              aria-expanded={isExpanded}
+              onClick={() => setIsExpanded((expanded) => !expanded)}
+              className="rounded p-1 text-gray-500 transition-colors hover:bg-gray-200/60 hover:text-gray-700"
+              title={isExpanded ? 'Collapse calendar view' : 'Expand calendar view'}
+            >
+              {isExpanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Expanded Timetable View */}
-      {isExpanded && (
+      {isExpanded && grid && (
         <div className="p-4 bg-white">
-          <div className="border border-gray-200 rounded overflow-hidden flex bg-white relative">
-            {/* Left Hour Scale */}
-            <div className="w-14 sm:w-16 border-r border-gray-200 bg-gray-50/40 select-none flex-shrink-0 relative">
-              {hours.map((h) => {
-                const labelStr = formatTorontoHour(h);
-                return (
-                  <div
-                    key={h}
-                    className="absolute right-2.5 text-[11px] font-medium text-gray-500 -mt-2"
-                    style={{ top: `${(h - startHour) * HOUR_HEIGHT}px` }}
-                  >
-                    {labelStr}
-                  </div>
-                );
-              })}
-              {/* Extra height spacer */}
-              <div style={{ height: `${gridTotalHeight}px` }} />
+          <div
+            className="relative flex overflow-hidden rounded border border-gray-200"
+            style={{ height: grid.height * HOUR_HEIGHT }}
+          >
+            <div className="relative w-14 shrink-0 select-none border-r border-gray-200 bg-gray-50/40 sm:w-16">
+              {grid.ticks.map((tick, index) => (
+                <div
+                  key={index}
+                  className="absolute right-2.5 text-right text-[11px] font-medium text-gray-500"
+                  style={{ top: index * HOUR_HEIGHT }}
+                >
+                  <span>{tick.label}</span>
+                  {tick.offset && <span className="block text-[10px]">{tick.offset}</span>}
+                </div>
+              ))}
             </div>
 
-            {/* Timetable Grid Area */}
-            <div className="flex-1 relative overflow-hidden bg-white" style={{ height: `${gridTotalHeight}px` }}>
-              {/* Grid Lines */}
-              {hours.map((h, i) => {
-                const topPx = i * HOUR_HEIGHT;
-                const halfTopPx = topPx + HOUR_HEIGHT / 2;
+            <div className="relative flex-1 overflow-hidden bg-white">
+              {grid.ticks.map((_, index) => {
+                const top = index * HOUR_HEIGHT;
+                const half = top + HOUR_HEIGHT / 2;
                 return (
-                  <div key={h}>
-                    {/* Hour line (solid) */}
-                    <div
-                      className="absolute left-0 right-0 border-b border-gray-200"
-                      style={{ top: `${topPx}px` }}
-                    />
-                    {/* Half-hour line (dotted) */}
-                    {i < hours.length - 1 && (
+                  <div key={index}>
+                    <div className="absolute inset-x-0 border-b border-gray-200" style={{ top }} />
+                    {half < grid.height * HOUR_HEIGHT && (
                       <div
-                        className="absolute left-0 right-0 border-b border-dashed border-gray-200"
-                        style={{ top: `${halfTopPx}px` }}
+                        className="absolute inset-x-0 border-b border-dashed border-gray-200"
+                        style={{ top: half }}
                       />
                     )}
                   </div>
                 );
               })}
 
-              {/* Event Card (Matching image design) */}
               <div
-                className="absolute left-1 right-1 sm:left-2 sm:right-2 rounded border border-dashed border-sky-400 bg-sky-100/90 text-sky-950 flex shadow-2xs overflow-hidden transition-all hover:bg-sky-100"
+                className="absolute inset-x-1 flex overflow-hidden rounded border border-dashed border-sky-400 bg-sky-100/90 text-sky-950 shadow-2xs hover:bg-sky-100 sm:inset-x-2"
                 style={{
-                  top: `${topOffset}px`,
-                  height: `${blockHeight}px`,
+                  top: grid.start * HOUR_HEIGHT,
+                  height: grid.duration * HOUR_HEIGHT,
                   minHeight: '32px',
                 }}
               >
-                {/* Left accent bar with diagonal blue stripes */}
                 <div
-                  className="w-2.5 h-full flex-shrink-0 rounded-l border-r border-sky-400/40"
+                  className="h-full w-2.5 shrink-0 rounded-l border-r border-sky-400/40"
                   style={{
                     background: 'repeating-linear-gradient(45deg, #0284c7, #0284c7 4px, #38bdf8 4px, #38bdf8 8px)',
                   }}
                 />
 
-                {/* Content Inside Event Card */}
-                <div className="p-1.5 sm:p-2 flex-1 min-w-0 overflow-hidden text-xs leading-snug font-sans select-text">
-                  <div className="font-semibold text-sky-950 inline">
-                    {event.summary}
-                  </div>
-                  {event.location && (
-                    <span className="text-sky-900 font-normal">
-                      ; {event.location}
-                    </span>
-                  )}
-                  {event.organizerName && (
-                    <span className="text-sky-900 font-normal">
-                      ; {event.organizerName}
-                    </span>
-                  )}
+                <div className="min-w-0 flex-1 select-text overflow-hidden p-1.5 text-xs leading-snug sm:p-2">
+                  <span className="font-semibold">{event.summary}</span>
+                  {event.location && <span className="text-sky-900">; {event.location}</span>}
+                  {event.organizerName && <span className="text-sky-900">; {event.organizerName}</span>}
                 </div>
               </div>
             </div>

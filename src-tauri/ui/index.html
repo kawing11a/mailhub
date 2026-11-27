@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Connect to MailHub</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark" aria-hidden="true">M</div>
+      <p class="eyebrow">MAILHUB DESKTOP</p>
+      <h1>Connect your server</h1>
+      <p class="intro">Use the MailHub server where your email accounts and settings are already managed.</p>
+
+      <form id="connection-form">
+        <label for="server-url">Server address</label>
+        <input
+          id="server-url"
+          name="server-url"
+          type="url"
+          placeholder="https://mail.example.com"
+          autocomplete="url"
+          autocapitalize="none"
+          spellcheck="false"
+          required
+        />
+        <p class="hint">Enter the server's HTTPS origin. For local development, HTTP on localhost is supported.</p>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <button id="connect-button" type="submit">Open MailHub</button>
+      </form>
+
+      <p class="footnote">Your sign-in stays in this desktop app. It is stored separately from your browser.</p>
+    </main>
+    <script src="./connection.js"></script>
+  </body>
+</html>

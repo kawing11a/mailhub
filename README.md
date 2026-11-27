@@ -202,7 +202,27 @@ npm run dev
 
 Open [https://localhost:3000](https://localhost:3000).
 
-### 6. Run a Worker (optional)
+### 6. Run the Tauri desktop client
+
+The desktop client is a Rust and Tauri 2 app. It loads the existing MailHub UI and API from a server you deploy separately. It does not bundle or start the Next.js backend.
+
+Install the [Tauri prerequisites for your platform](https://v2.tauri.app/start/prerequisites/), then run the MailHub server as described above. In another terminal, start the desktop client:
+
+```bash
+npm run tauri:dev
+```
+
+On first launch, enter the server's HTTPS origin, such as `https://mail.example.com`. The client saves that origin in the operating system's app configuration directory and reuses it on later launches. Use **MailHub → Server settings** to change it, **Reload MailHub** to reload the remote UI, or **Sign in or manage accounts in browser** to open the server in your default browser.
+
+Build a desktop installer with:
+
+```bash
+npm run tauri:build
+```
+
+The same client build can connect to different MailHub deployments. Each user's login cookie stays in the desktop WebView and is separate from their browser session. For Google or Microsoft account authorization, sign in to the same MailHub server in the default browser first. The client sends provider authorization to that browser, where the existing server callback can use the browser's MailHub session. Google does not allow OAuth inside an app-controlled embedded browser.
+
+### 7. Run a Worker (optional)
 
 Workers sync email accounts in the background:
 
@@ -234,7 +254,7 @@ Rules:
 - Only set the ranges your deployment actually uses; avoid broad link-local or metadata ranges.
 - This exception applies to IMAP/SMTP host resolution only, not OAuth/HTTP requests.
 
-### 7. Run Tests
+### 8. Run Tests
 
 To execute unit and API endpoint tests:
 

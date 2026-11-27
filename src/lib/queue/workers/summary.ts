@@ -4,6 +4,7 @@ import Redis from 'ioredis';
 import { prisma } from '@/lib/db/prisma';
 import { meilisearch } from '@/lib/search/meilisearch';
 import { generateEmailBatchSummary, generateFallbackEmailBatchDigest, EmailForSummary } from '@/lib/ai/summary-service';
+import { normalizeSummaryTimeRangeHours } from '@/lib/ai/summary-options';
 import { AiUnavailableError } from '@/lib/ai/llm-client';
 import { getSystemPreferences } from '@/lib/settings/system-preferences';
 import { dispatchWebhookNotification, WebhookDispatchResult } from '@/lib/notifications';
@@ -29,12 +30,28 @@ export interface SummaryJobPayload {
   userId: string;
   labelId: string;
   webhookIds?: string[];
-  timeRangeHours?: number; // e.g., 24, 168 (7 days), or 0 for unlimited
+  timeRangeHours?: number; // e.g., 24, 168 (7 days), or 720 (30 days)
+  fromDate?: string;
+  toDate?: string;
+  fromDateLabel?: string;
+  toDateLabel?: string;
   limit?: number;          // max email count, default 25
 }
 
 export async function executeSummaryRun(payload: SummaryJobPayload): Promise<void> {
-  const { summaryRunId, organizationId, labelId, webhookIds, timeRangeHours, limit = 25 } = payload;
+  const {
+    summaryRunId,
+    organizationId,
+    labelId,
+    webhookIds,
+    timeRangeHours,
+    fromDate,
+    toDate,
+    fromDateLabel,
+    toDateLabel,
+    limit = 25,
+  } = payload;
+  const selectedTimeRangeHours = normalizeSummaryTimeRangeHours(timeRangeHours);
 
   // Atomically claim the job by transitioning status from QUEUED -> SUMMARIZING
   const claimResult = await prisma.emailSummaryRun.updateMany({
@@ -103,9 +120,9 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     const labelName = label ? label.name : 'Selected Label';
 
     // 4. Query assigned accounts for this label
-    const timeFilter = timeRangeHours && timeRangeHours > 0
-      ? { gte: new Date(Date.now() - timeRangeHours * 60 * 60 * 1000) }
-      : undefined;
+    const timeFilter = fromDate && toDate
+      ? { gte: new Date(fromDate), lte: new Date(toDate) }
+      : { gte: new Date(Date.now() - selectedTimeRangeHours * 60 * 60 * 1000) };
 
     const assignedAccounts = await prisma.accountLabel.findMany({
       where: { labelId },
@@ -113,7 +130,9 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
     });
     const assignedAccountIds = assignedAccounts.map((a) => a.accountId);
 
-    const timeFilterDesc = timeRangeHours && timeRangeHours > 0 ? `Past ${timeRangeHours}h` : 'All time';
+    const timeFilterDesc = fromDate && toDate
+      ? `${fromDateLabel ?? fromDate} to ${toDateLabel ?? toDate}`
+      : `Past ${selectedTimeRangeHours}h`;
     const limitDesc = limit && limit > 0 ? `Max ${limit} emails` : 'Unlimited';
 
     await updateAgentStep(
@@ -132,39 +151,48 @@ export async function executeSummaryRun(payload: SummaryJobPayload): Promise<voi
       }
     );
 
-    // 5. Attempt Meilisearch query first for fast recency-ranked email retrieval
+    // 5. Use Meilisearch for limited runs and PostgreSQL for unlimited runs.
     await updateAgentStep(summaryRunId, {
       id: 'step-search',
       step: 'SEARCHING_EMAILS',
-      title: 'Querying search engine for matching emails',
-      detail: 'Executing hybrid vector search with label and time filters in Meilisearch...',
+      title: limit && limit > 0
+        ? 'Querying search engine for matching emails'
+        : 'Retrieving all matching emails',
+      detail: limit && limit > 0
+        ? 'Executing hybrid vector search with label and time filters in Meilisearch...'
+        : 'Retrieving all matching emails within the selected time range from PostgreSQL...',
       status: 'running',
     });
 
     let emailIdsFromMeilisearch: string[] = [];
-    try {
-      const filterParts: string[] = [`organizationId = "${organizationId}"`];
+    if (limit && limit > 0) {
+      try {
+        const filterParts: string[] = [`organizationId = "${organizationId}"`];
 
-      const labelAccountFilters: string[] = [`labelIds = "${labelId}"`];
-      if (assignedAccountIds.length > 0) {
-        labelAccountFilters.push(`accountId IN [${assignedAccountIds.map((id) => `"${id}"`).join(', ')}]`);
+        const labelAccountFilters: string[] = [`labelIds = "${labelId}"`];
+        if (assignedAccountIds.length > 0) {
+          labelAccountFilters.push(`accountId IN [${assignedAccountIds.map((id) => `"${id}"`).join(', ')}]`);
+        }
+        filterParts.push(`(${labelAccountFilters.join(' OR ')})`);
+
+        if (fromDate && toDate) {
+          filterParts.push(`receivedAt >= ${new Date(fromDate).getTime()}`);
+          filterParts.push(`receivedAt <= ${new Date(toDate).getTime()}`);
+        } else {
+          const minTimestamp = Date.now() - selectedTimeRangeHours * 60 * 60 * 1000;
+          filterParts.push(`receivedAt >= ${minTimestamp}`);
+        }
+
+        const searchRes = await meilisearch.index<{ id: string }>('emails').search('', {
+          filter: filterParts.join(' AND '),
+          sort: ['receivedAt:desc'],
+          limit,
+        });
+
+        emailIdsFromMeilisearch = (searchRes.hits || []).map((hit) => hit.id);
+      } catch (searchError) {
+        console.warn('Meilisearch email query failed, falling back to PostgreSQL query:', searchError);
       }
-      filterParts.push(`(${labelAccountFilters.join(' OR ')})`);
-
-      if (timeRangeHours && timeRangeHours > 0) {
-        const minTimestamp = Date.now() - timeRangeHours * 60 * 60 * 1000;
-        filterParts.push(`receivedAt >= ${minTimestamp}`);
-      }
-
-      const searchRes = await meilisearch.index<{ id: string }>('emails').search('', {
-        filter: filterParts.join(' AND '),
-        sort: ['receivedAt:desc'],
-        limit: limit && limit > 0 ? limit : 100,
-      });
-
-      emailIdsFromMeilisearch = (searchRes.hits || []).map((hit) => hit.id);
-    } catch (searchError) {
-      console.warn('Meilisearch email query failed, falling back to PostgreSQL query:', searchError);
     }
 
     let rawEmails: Array<{

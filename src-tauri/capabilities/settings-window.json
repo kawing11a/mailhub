@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings-window",
+  "description": "Lets the bundled server settings page connect to MailHub.",
+  "windows": ["settings"],
+  "permissions": [
+    "allow-get-server-connection",
+    "allow-connect-to-server",
+    "core:window:allow-hide"
+  ]
+}
