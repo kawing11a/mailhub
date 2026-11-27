@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2] - 2026-11-27
+
+### Changed
+
+- define recovery interval interface
+- Update calendar time zones, summaries, and desktop client
+
+
 ## [0.5.1] - 2026-11-18
 
 ### Fixed
