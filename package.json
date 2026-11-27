@@ -32,7 +32,7 @@
     "@tiptap/extension-link": "^3.31.2",
     "@tiptap/extension-placeholder": "^3.31.2",
     "@tiptap/pm": "^3.31.2",
-    "@tiptap/react": "^3.31.2",
+    "@tiptap/react": "^3.33.1",
     "@tiptap/starter-kit": "^3.31.2",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.1",
