@@ -41,7 +41,7 @@
     "dotenv": "^16.4.7",
     "geist": "^1.7.2",
     "ical.js": "2.2.1",
-    "imapflow": "^1.4.2",
+    "imapflow": "^2.12.2",
     "ioredis": "^5.11.1",
     "jose": "^6.2.3",
     "jsonwebtoken": "^9.0.3",
